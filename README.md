@@ -7,6 +7,7 @@ image generator.
 Status and the per-component checklist: [DOCS/milestones.md](DOCS/milestones.md).
 Contributor setup: [DOCS/CONTRIBUTING.md](DOCS/CONTRIBUTING.md).
 Operations and troubleshooting: [DOCS/RUNBOOK.md](DOCS/RUNBOOK.md).
+Architecture codemaps: [DOCS/CODEMAPS/](DOCS/CODEMAPS/architecture.md).
 
 ## Requirements
 
