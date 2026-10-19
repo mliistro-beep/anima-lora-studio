@@ -1,0 +1,16 @@
+[[datasets]]
+resolution = 768
+[[datasets.subsets]]
+num_repeats = 10
+image_dir = "/home/user/datasets/my_style/"
+caption_extension = ".txt"
+caption_dropout_rate = 0.1
+
+
+[general]
+resolution = 768
+enable_bucket = true
+bucket_no_upscale = false
+bucket_reso_steps = 64
+min_bucket_reso = 256
+max_bucket_reso = 4096

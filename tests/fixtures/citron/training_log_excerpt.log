@@ -1,0 +1,33 @@
+Command: accelerate launch --config_file app_configs/accelerate_gpu.yaml --num_cpu_threads_per_process 1 --gpu_ids 0 /home/user/citron-anima-lora-trainer-ui/sd-scripts/anima_train_network.py --config_file /home/user/citron-anima-lora-trainer-ui/configs/my_style_lora_test1_training_2026-10-18_215400.toml --dataset_config /home/user/citron-anima-lora-trainer-ui/configs/my_style_lora_test1_dataset_2026-10-18_215400.toml
+Started: 2026-10-18T21:56:29.929667
+
+
+steps:   0%|          | 0/6000 [00:00<?, ?it/s]
+epoch 1/10
+
+2026-10-18 21:58:17 INFO     epoch is incremented. current_epoch: 0, epoch: 1                                                                                                  dataset.py:465
+2026-10-18 21:58:17 INFO     epoch is incremented. current_epoch: 0, epoch: 1                                                                                                  dataset.py:465
+2026-10-18 21:58:17 INFO     epoch is incremented. current_epoch: 0, epoch: 1                                                                                                  dataset.py:465
+2026-10-18 21:58:17 INFO     epoch is incremented. current_epoch: 0, epoch: 1                                                                                                  dataset.py:465
+2026-10-18 21:58:17 INFO     epoch is incremented. current_epoch: 0, epoch: 1                                                                                                  dataset.py:465
+2026-10-18 21:58:17 INFO     epoch is incremented. current_epoch: 0, epoch: 1                                                                                                  dataset.py:465
+2026-10-18 21:58:17 INFO     epoch is incremented. current_epoch: 0, epoch: 1                                                                                                  dataset.py:465
+2026-10-18 21:58:17 INFO     epoch is incremented. current_epoch: 0, epoch: 1                                                                                                  dataset.py:465
+
+steps:   0%|          | 1/6000 [00:19<32:34:49, 19.55s/it]
+steps:   0%|          | 1/6000 [00:19<32:34:50, 19.55s/it, avr_loss=0.112]
+steps:   0%|          | 2/6000 [00:21<18:11:17, 10.92s/it, avr_loss=0.112]
+steps:   0%|          | 2/6000 [00:21<18:11:17, 10.92s/it, avr_loss=0.122]
+steps:   0%|          | 3/6000 [00:24<13:23:15,  8.04s/it, avr_loss=0.122]
+steps:   0%|          | 3/6000 [00:24<13:23:15,  8.04s/it, avr_loss=0.112]
+steps:  10%|█         | 600/6000 [22:53<3:26:03,  2.29s/it, avr_loss=0.115]
+steps:  10%|█         | 600/6000 [22:53<3:26:03,  2.29s/it, avr_loss=0.115]
+saving checkpoint: /home/user/LoRA/Anima/my_style_lora_test1/my_style_lora_test1-000001.safetensors
+
+epoch 2/10
+
+2026-10-18 22:20:59 INFO     epoch is incremented. current_epoch: 0, epoch: 2                                                                                                  dataset.py:465
+saving checkpoint: /home/user/LoRA/Anima/my_style_lora_test1/my_style_lora_test1.safetensors
+2026-10-19 01:34:58 INFO     model saved.                                                                                                                               train_network.py:1863
+
+steps: 100%|██████████| 6000/6000 [3:36:54<00:00,  2.17s/it, avr_loss=0.108]
