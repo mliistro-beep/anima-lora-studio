@@ -133,3 +133,45 @@ def test_required_for_configure_is_empty_when_filled():
     settings = TrainingSettings(image_directory="/data/img", output_directory="/data/out")
 
     assert settings.missing_required_fields() == ()
+
+
+@pytest.mark.parametrize(
+    "name", ["../../evil", "a/b", "a\\b", "..", ".", "bad\x00name", "with space"]
+)
+def test_project_name_rejects_path_like_values(name):
+    with pytest.raises(ValidationError):
+        TrainingSettings(project_name=name)
+
+
+@pytest.mark.parametrize("name", ["my_lora", "my_style_lora_test1", "v1.2-final"])
+def test_project_name_accepts_safe_values(name):
+    assert TrainingSettings(project_name=name).project_name == name
+
+
+@pytest.mark.parametrize("gpu", [True, None, 1.5, "0; rm", "CPU (no CUDA detected)", ""])
+def test_gpu_index_rejects_non_numeric_values(gpu):
+    with pytest.raises(ValidationError):
+        TrainingSettings(gpu_index=gpu)
+
+
+@pytest.mark.parametrize(("gpu", "expected"), [(0, "0"), ("1", "1"), ("0,1", "0,1")])
+def test_gpu_index_accepts_indices(gpu, expected):
+    assert TrainingSettings(gpu_index=gpu).gpu_index == expected
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("learning_rate", float("inf")),
+        ("max_grad_norm", float("nan")),
+        ("max_grad_norm", -1.0),
+        ("noise_offset", -0.1),
+        ("multires_noise_discount", 1.5),
+        ("discrete_flow_shift", 0.0),
+        ("network_dim", True),
+        ("seed", False),
+    ],
+)
+def test_numeric_fields_reject_non_finite_negative_and_bool(field, value):
+    with pytest.raises(ValidationError):
+        TrainingSettings(**{field: value})

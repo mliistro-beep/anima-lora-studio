@@ -7,6 +7,7 @@ then through nvidia-smi, then Citron's own fallback of ["0", "1"].
 import json
 import subprocess
 from collections.abc import Callable
+from pathlib import Path
 from typing import Any
 
 from anima_trainer.models.paths import CitronPaths
@@ -46,11 +47,14 @@ def parse_nvidia_smi(stdout: str) -> tuple[str, ...] | None:
 
 
 def detect_gpus(paths: CitronPaths, run: Runner = subprocess.run) -> tuple[str, ...]:
+    # Run from the Citron root like sd-scripts does, but only if it exists: a missing cwd
+    # makes subprocess fail before the program even starts.
+    torch_cwd = paths.root if paths.root.is_dir() else None
     torch_command = (str(paths.venv_python), "-c", TORCH_PROBE)
-    via_torch = _probe(run, torch_command, TORCH_TIMEOUT_S, parse_torch_output, paths)
+    via_torch = _probe(run, torch_command, TORCH_TIMEOUT_S, parse_torch_output, torch_cwd)
     if via_torch:
         return via_torch
-    via_smi = _probe(run, NVIDIA_SMI_COMMAND, NVIDIA_SMI_TIMEOUT_S, parse_nvidia_smi, paths)
+    via_smi = _probe(run, NVIDIA_SMI_COMMAND, NVIDIA_SMI_TIMEOUT_S, parse_nvidia_smi, None)
     return via_smi or FALLBACK_CHOICES
 
 
@@ -59,12 +63,10 @@ def _probe(
     command: tuple[str, ...],
     timeout_s: int,
     parse: Callable[[str], tuple[str, ...] | None],
-    paths: CitronPaths,
+    cwd: Path | None,
 ) -> tuple[str, ...] | None:
     try:
-        result = run(
-            list(command), capture_output=True, text=True, timeout=timeout_s, cwd=paths.root
-        )
+        result = run(list(command), capture_output=True, text=True, timeout=timeout_s, cwd=cwd)
     except (OSError, subprocess.SubprocessError):
         return None
     return parse(result.stdout) if result.returncode == 0 else None

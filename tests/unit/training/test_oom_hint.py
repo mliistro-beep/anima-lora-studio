@@ -73,3 +73,12 @@ def test_read_kernel_log_returns_none_when_not_permitted(monkeypatch):
     monkeypatch.setattr(subprocess, "run", fake_run)
 
     assert read_kernel_log() is None
+
+
+def test_crash_by_sigkill_as_reported_by_qprocess_suggests_system_oom():
+    # QProcess reports a signal death as crashed=True with the signal number as exit code.
+    assert oom_hint(9, (), None, crashed=True) == SYSTEM_OOM_HINT
+
+
+def test_normal_exit_code_nine_is_not_a_signal():
+    assert oom_hint(9, (), None, crashed=False) is None

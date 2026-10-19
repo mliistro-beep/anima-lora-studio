@@ -1,4 +1,6 @@
+import socket
 import threading
+import time
 from dataclasses import dataclass, field
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
@@ -10,6 +12,10 @@ class FileServerState:
     payload: bytes = b""
     honor_range: bool = True
     status_override: int | None = None
+    broken_status_line: bool = False
+    # Throttling: seconds to sleep after each block of `block_size` bytes.
+    block_delay_s: float = 0.0
+    block_size: int = 1024
     requests: list[dict[str, str]] = field(default_factory=list)
 
 
@@ -20,6 +26,9 @@ def _handler_for(state: FileServerState):
 
         def do_GET(self):
             state.requests.append(dict(self.headers))
+            if state.broken_status_line:
+                self.wfile.write(b"NOT-HTTP garbage\r\n\r\n")
+                return
             if state.status_override:
                 self.send_error(state.status_override)
                 return
@@ -36,7 +45,19 @@ def _handler_for(state: FileServerState):
                 self.send_header("Content-Range", f"bytes {start}-{end}/{len(state.payload)}")
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
-            self.wfile.write(body)
+            self._write(body)
+
+        def _write(self, body):
+            if not state.block_delay_s:
+                self.wfile.write(body)
+                return
+            for start in range(0, len(body), state.block_size):
+                try:
+                    self.wfile.write(body[start : start + state.block_size])
+                    self.wfile.flush()
+                except (BrokenPipeError, ConnectionResetError):
+                    return
+                time.sleep(state.block_delay_s)
 
         def _range_start(self):
             header = self.headers.get("Range")
@@ -57,3 +78,12 @@ def file_server():
     yield state, f"{base_url}/model.safetensors"
     server.shutdown()
     server.server_close()
+
+
+@pytest.fixture
+def closed_port_url():
+    """A URL on a local port that was just released, so nothing is listening there."""
+    with socket.socket() as sock:
+        sock.bind(("127.0.0.1", 0))
+        port = sock.getsockname()[1]
+    return f"http://127.0.0.1:{port}/none"

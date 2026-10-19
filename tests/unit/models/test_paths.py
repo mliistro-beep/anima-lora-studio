@@ -65,3 +65,21 @@ def test_missing_required_models_empty_when_present(tmp_path):
         model.write_bytes(b"")
 
     assert paths.missing_required_models() == ()
+
+
+def test_required_models_lists_labels_and_paths():
+    paths = CitronPaths(ROOT)
+
+    assert paths.required_models() == (("Qwen3", paths.qwen3_model), ("VAE", paths.vae_model))
+
+
+def test_resolve_keeps_absolute_paths():
+    assert CitronPaths(ROOT).resolve("/data/images") == Path("/data/images")
+
+
+def test_resolve_makes_relative_paths_relative_to_citron_root():
+    assert CitronPaths(ROOT).resolve("datasets/me") == ROOT / "datasets/me"
+
+
+def test_resolve_expands_home():
+    assert CitronPaths(ROOT).resolve("~/x") == Path.home() / "x"

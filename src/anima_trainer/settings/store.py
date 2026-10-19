@@ -6,6 +6,7 @@ an unreadable file falls back to defaults, an invalid value falls back to that f
 
 import json
 import os
+import stat
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
@@ -16,6 +17,7 @@ from pydantic import ValidationError
 from anima_trainer.settings.schema import TrainingSettings
 
 JSON_INDENT = 2
+DEFAULT_FILE_MODE = 0o666
 
 
 @dataclass(frozen=True)
@@ -50,14 +52,31 @@ def _validate_per_field(raw: dict[str, Any]) -> LoadResult:
 
 
 def save_settings(path: Path, settings: TrainingSettings) -> None:
-    """Write config.json atomically, formatted exactly like Citron's json.dump(indent=2)."""
+    """Write config.json atomically, formatted exactly like Citron's json.dump(indent=2).
+
+    The temporary file is fsynced before the rename and given the permissions the old
+    file had (or the umask default), since mkstemp always creates it as 0600.
+    """
     path.parent.mkdir(parents=True, exist_ok=True)
     payload = json.dumps(settings.model_dump(), indent=JSON_INDENT)
+    mode = _target_mode(path)
     fd, tmp_name = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.", suffix=".tmp")
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as handle:
             handle.write(payload)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.chmod(tmp_name, mode)
         os.replace(tmp_name, path)
     except BaseException:
         Path(tmp_name).unlink(missing_ok=True)
         raise
+
+
+def _target_mode(path: Path) -> int:
+    try:
+        return stat.S_IMODE(path.stat().st_mode)
+    except FileNotFoundError:
+        umask = os.umask(0)
+        os.umask(umask)
+        return DEFAULT_FILE_MODE & ~umask

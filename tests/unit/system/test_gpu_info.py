@@ -83,3 +83,17 @@ def test_detect_returns_citron_fallback_when_nothing_works():
 
     assert detect_gpus(PATHS, run=run) == FALLBACK_CHOICES
     assert FALLBACK_CHOICES == ("0", "1")
+
+
+def test_missing_citron_root_does_not_break_nvidia_smi(tmp_path):
+    paths = CitronPaths(tmp_path / "does-not-exist", platform="posix")
+    seen_cwds = []
+
+    def run(cmd, **kwargs):
+        seen_cwds.append(kwargs.get("cwd"))
+        if Path(cmd[0]).name == "python":
+            raise FileNotFoundError(cmd[0])
+        return subprocess.CompletedProcess(cmd, 0, stdout="0, RTX 3060", stderr="")
+
+    assert detect_gpus(paths, run=run) == ("0: RTX 3060",)
+    assert seen_cwds == [None, None]

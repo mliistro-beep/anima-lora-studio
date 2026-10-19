@@ -1,4 +1,5 @@
 import json
+import os
 
 from anima_trainer.settings.schema import TrainingSettings
 from anima_trainer.settings.store import load_settings, save_settings
@@ -93,3 +94,23 @@ def test_save_does_not_leave_temporary_files(tmp_path):
     save_settings(path, TrainingSettings())
 
     assert [p.name for p in tmp_path.iterdir()] == ["config.json"]
+
+
+def test_save_keeps_existing_file_permissions(tmp_path):
+    path = tmp_path / "config.json"
+    path.write_text("{}")
+    path.chmod(0o644)
+
+    save_settings(path, TrainingSettings())
+
+    assert path.stat().st_mode & 0o777 == 0o644
+
+
+def test_save_new_file_uses_umask_permissions(tmp_path):
+    path = tmp_path / "config.json"
+    umask = os.umask(0o022)
+    os.umask(umask)
+
+    save_settings(path, TrainingSettings())
+
+    assert path.stat().st_mode & 0o777 == 0o666 & ~umask

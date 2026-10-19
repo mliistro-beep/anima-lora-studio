@@ -83,7 +83,44 @@ def test_already_complete_partial_file_is_finalized(file_server, tmp_path):
 
     download_file(url, target)
 
+    assert [r["Range"] for r in state.requests] == [f"bytes={len(PAYLOAD)}-"]
     assert target.read_bytes() == PAYLOAD
+
+
+def test_oversized_stale_partial_file_is_discarded_and_redownloaded(file_server, tmp_path):
+    state, url = file_server
+    state.payload = PAYLOAD
+    target = tmp_path / "model.safetensors"
+    partial_path(target).write_bytes(PAYLOAD + b"stale tail from an older, larger file")
+
+    download_file(url, target)
+
+    assert target.read_bytes() == PAYLOAD
+    assert "Range" not in state.requests[-1]
+
+
+@pytest.mark.parametrize("url", ["file:///etc/passwd", "ftp://example.com/x"])
+def test_only_http_and_https_are_allowed(url, tmp_path):
+    with pytest.raises(DownloadError, match="scheme"):
+        download_file(url, tmp_path / "m.safetensors")
+
+
+def test_filesystem_errors_become_download_errors(file_server, tmp_path):
+    state, url = file_server
+    state.payload = PAYLOAD
+    target = tmp_path / "model.safetensors"
+    target.mkdir()
+
+    with pytest.raises(DownloadError):
+        download_file(url, target)
+
+
+def test_protocol_errors_become_download_errors(file_server, tmp_path):
+    state, url = file_server
+    state.broken_status_line = True
+
+    with pytest.raises(DownloadError):
+        download_file(url, tmp_path / "model.safetensors")
 
 
 def test_http_error_raises_download_error(file_server, tmp_path):
@@ -94,9 +131,9 @@ def test_http_error_raises_download_error(file_server, tmp_path):
         download_file(url, tmp_path / "model.safetensors")
 
 
-def test_unreachable_server_raises_download_error(tmp_path):
+def test_unreachable_server_raises_download_error(closed_port_url, tmp_path):
     with pytest.raises(DownloadError):
-        download_file("http://127.0.0.1:9/none", tmp_path / "model.safetensors", timeout_s=2)
+        download_file(closed_port_url, tmp_path / "model.safetensors", timeout_s=2)
 
 
 def test_sends_user_agent(file_server, tmp_path):

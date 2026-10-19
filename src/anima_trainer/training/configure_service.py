@@ -37,6 +37,7 @@ def configure_training(
         errors = tuple(f"ERROR: {label} cannot be empty." for label in missing)
         return ConfigureResult(False, errors, settings)
 
+    settings = _with_resolved_paths(settings, paths)
     messages = _header(settings)
     try:
         report = validate_dataset(Path(settings.image_directory))
@@ -55,12 +56,12 @@ def configure_training(
         settings.gradient_accumulation_steps,
         settings.max_train_epochs,
     )
+    missing_models = paths.missing_required_models()
     messages = (
         *messages,
         *_estimate_lines(settings, report, estimate),
-        *_model_lines(settings, paths),
+        *_model_lines(settings, paths, missing_models),
     )
-    missing_models = paths.missing_required_models()
     if missing_models:
         failure = (*messages, "", f"ERROR: Missing models: {', '.join(missing_models)}")
         return ConfigureResult(False, failure, settings, dataset=report, estimate=estimate)
@@ -97,6 +98,21 @@ def _generate(
         messages = (*messages, f"WARN: Settings could not be saved to {paths.config_file}: {error}")
     messages = (*messages, "", "OK: Configuration complete, ready to train.")
     return ConfigureResult(True, messages, updated, configs, report, estimate)
+
+
+def _with_resolved_paths(settings: TrainingSettings, paths: CitronPaths) -> TrainingSettings:
+    """Make relative folders absolute against the Citron root, where sd-scripts runs.
+
+    Absolute paths are kept verbatim (including a trailing slash) so TOMLs match Citron's.
+    """
+
+    def resolved(value: str) -> str:
+        return value if Path(value).is_absolute() else str(paths.resolve(value))
+
+    return settings.with_changes(
+        image_directory=resolved(settings.image_directory),
+        output_directory=resolved(settings.output_directory),
+    )
 
 
 def _header(settings: TrainingSettings) -> tuple[str, ...]:
@@ -136,7 +152,9 @@ def _estimate_lines(
     )
 
 
-def _model_lines(settings: TrainingSettings, paths: CitronPaths) -> tuple[str, ...]:
+def _model_lines(
+    settings: TrainingSettings, paths: CitronPaths, missing: tuple[str, ...]
+) -> tuple[str, ...]:
     dit = paths.dit_model(settings.base_model)
     dit_lines = (
         (f"  OK: DiT: {dit}",)
@@ -144,7 +162,7 @@ def _model_lines(settings: TrainingSettings, paths: CitronPaths) -> tuple[str, .
         else (f"  INFO: DiT: {dit}", "      (will auto-download when training starts)")
     )
     others = tuple(
-        f"  OK: {label}: {path}" if path.exists() else f"  ERROR: {label} missing: {path}"
-        for label, path in (("Qwen3", paths.qwen3_model), ("VAE", paths.vae_model))
+        f"  ERROR: {label} missing: {path}" if label in missing else f"  OK: {label}: {path}"
+        for label, path in paths.required_models()
     )
     return ("", "Checking models...", *dit_lines, *others)

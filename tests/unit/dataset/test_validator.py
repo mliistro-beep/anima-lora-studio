@@ -64,3 +64,13 @@ def test_file_instead_of_directory_raises(tmp_path):
 
     with pytest.raises(DatasetError, match="Not a directory"):
         validate_dataset(target)
+
+
+def test_unreadable_directory_raises_dataset_error(tmp_path, monkeypatch):
+    def deny(self):
+        raise PermissionError(13, "Permission denied")
+
+    monkeypatch.setattr(type(tmp_path), "iterdir", deny)
+
+    with pytest.raises(DatasetError, match="Cannot read"):
+        validate_dataset(tmp_path)

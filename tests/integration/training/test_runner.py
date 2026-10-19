@@ -104,6 +104,9 @@ def test_crash_is_reported(qtbot, tmp_path):
 
     assert outcome.crashed
     assert not outcome.stopped
+    if sys.platform != "win32":
+        # oom_hint relies on this: QProcess reports the signal number on a signal death.
+        assert outcome.exit_code == 9
 
 
 def test_missing_program_emits_failed_to_start(qtbot, tmp_path):
@@ -122,8 +125,14 @@ def _alive(pid):
         os.kill(pid, 0)
     except ProcessLookupError:
         return False
-    with open(f"/proc/{pid}/stat") as handle:
-        return handle.read().split()[2] != "Z"
+    stat_file = Path(f"/proc/{pid}/stat")
+    # Without /proc (macOS) a zombie still answers kill(0); treat "signal delivered" as alive.
+    if not Path("/proc").is_dir():
+        return True
+    try:
+        return stat_file.read_text().split()[2] != "Z"
+    except (FileNotFoundError, ProcessLookupError):
+        return False  # reaped between the kill(0) probe and the read
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="process groups are POSIX only")
@@ -159,3 +168,65 @@ def test_start_while_running_is_rejected(qtbot, tmp_path):
 
 def test_stop_when_idle_does_nothing():
     TrainingRunner().stop()
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="process groups are POSIX only")
+def test_shutdown_stops_the_group_and_blocks_until_exit(qtbot, tmp_path):
+    runner = TrainingRunner()
+    pid_file = tmp_path / "child.pid"
+    with qtbot.waitSignal(runner.line_received, timeout=TIMEOUT_MS):
+        runner.start(_spec(tmp_path, "sleep", str(pid_file)), tmp_path / "r.log")
+    child_pid = int(pid_file.read_text())
+
+    runner.shutdown()
+
+    assert not runner.is_running()
+    deadline = time.monotonic() + 5
+    while _alive(child_pid) and time.monotonic() < deadline:
+        time.sleep(0.05)
+    assert not _alive(child_pid)
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="process groups are POSIX only")
+def test_shutdown_escalates_to_sigkill_when_sigterm_is_ignored(qtbot, tmp_path):
+    runner = TrainingRunner(kill_grace_ms=300)
+    outcomes = []
+    runner.finished.connect(outcomes.append)
+    with qtbot.waitSignal(runner.line_received, timeout=TIMEOUT_MS):
+        runner.start(_spec(tmp_path, "ignore-term"), tmp_path / "r.log")
+
+    started = time.monotonic()
+    runner.shutdown()
+
+    assert not runner.is_running()
+    assert time.monotonic() - started < 5
+    assert outcomes[0].stopped
+    assert outcomes[0].crashed
+
+
+def test_kill_timer_is_cancelled_when_the_run_ends(qtbot, tmp_path):
+    runner = TrainingRunner()
+    pid_file = tmp_path / "child.pid"
+    with qtbot.waitSignal(runner.line_received, timeout=TIMEOUT_MS):
+        runner.start(_spec(tmp_path, "sleep", str(pid_file)), tmp_path / "r.log")
+
+    with qtbot.waitSignal(runner.finished, timeout=TIMEOUT_MS):
+        runner.stop()
+
+    assert not runner.has_pending_kill()
+
+
+@pytest.mark.skipif(not Path("/dev/full").exists(), reason="needs /dev/full")
+def test_log_write_failure_warns_once_and_keeps_streaming(qtbot, tmp_path):
+    runner = TrainingRunner()
+    lines, _ = _collect(runner)
+    warnings = []
+    runner.warning.connect(warnings.append)
+    spec = _spec(tmp_path, "text", "a\\nb\\nc\\n", "0")
+
+    with qtbot.waitSignal(runner.finished, timeout=TIMEOUT_MS):
+        runner.start(spec, Path("/dev/full"))
+
+    assert lines == ["a", "b", "c"]
+    assert len(warnings) == 1
+    assert "log file" in warnings[0].lower()

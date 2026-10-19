@@ -5,6 +5,7 @@ Modes:
   text <text> <exit_code>     write text (with \\r and \\n escapes expanded), then exit
   env <name>                  print the value of an environment variable
   sleep <pid_file>            start a sleeping child (like accelerate does), write its pid, wait
+  ignore-term                 ignore SIGTERM, print "started", sleep (forces a SIGKILL)
   crash                       kill itself with SIGKILL
 """
 
@@ -12,6 +13,7 @@ import os
 import signal
 import subprocess
 import sys
+import time
 
 
 def main(argv: list[str]) -> int:
@@ -33,6 +35,11 @@ def main(argv: list[str]) -> int:
         print("started", flush=True)
         child.wait()
         return child.returncode
+    if mode == "ignore-term":
+        signal.signal(signal.SIGTERM, signal.SIG_IGN)
+        print("started", flush=True)
+        time.sleep(60)
+        return 0
     if mode == "crash":
         os.kill(os.getpid(), signal.SIGKILL)
     return 2

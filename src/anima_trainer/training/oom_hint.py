@@ -15,19 +15,25 @@ SYSTEM_OOM_HINT = (
 
 KERNEL_LOG_TAIL_LINES = 40
 KERNEL_LOG_TIMEOUT_S = 5
-SIGKILL_EXIT_CODES = frozenset({-9, 137})
+SIGKILL = 9
+# -9: subprocess-style signal death; 137: shell-style 128 + 9.
+SIGKILL_EXIT_CODES = frozenset({-SIGKILL, 128 + SIGKILL})
 GPU_OOM_MARKERS = ("CUDA out of memory", "OutOfMemoryError")
 KERNEL_OOM_MARKERS = ("Out of memory", "Killed process", "oom_reaper", "OOM")
 
 
-def oom_hint(exit_code: int, log_tail: Sequence[str], kernel_log: str | None) -> str | None:
-    if exit_code == 0:
+def oom_hint(
+    exit_code: int, log_tail: Sequence[str], kernel_log: str | None, crashed: bool = False
+) -> str | None:
+    """`crashed` is QProcess's CrashExit: exit_code then holds the signal number."""
+    if exit_code == 0 and not crashed:
         return None
     if any(marker in line for line in log_tail for marker in GPU_OOM_MARKERS):
         return GPU_OOM_HINT
     if kernel_log and _kernel_reports_oom(kernel_log):
         return SYSTEM_OOM_HINT
-    if exit_code in SIGKILL_EXIT_CODES:
+    killed = (crashed and exit_code == SIGKILL) or (not crashed and exit_code in SIGKILL_EXIT_CODES)
+    if killed:
         return SYSTEM_OOM_HINT
     return None
 

@@ -175,3 +175,28 @@ def test_saved_file_is_citron_json(citron, dataset, tmp_path):
     saved = json.loads(citron.config_file.read_text())
     assert saved["project_name"] == "proj"
     assert saved["last_train_config"].endswith("proj_training_2026-10-19_103000.toml")
+
+
+def test_relative_paths_are_resolved_against_citron_root(citron):
+    images = citron.root / "datasets" / "me"
+    images.mkdir(parents=True)
+    (images / "a.png").write_bytes(b"")
+    (images / "a.txt").write_text("c")
+    settings = TrainingSettings(
+        project_name="proj", image_directory="datasets/me", output_directory="out/proj"
+    )
+
+    result = configure_training(settings, citron, NOW)
+
+    assert result.success
+    assert result.settings.image_directory == str(images)
+    assert result.settings.output_directory == str(citron.root / "out" / "proj")
+    assert (citron.root / "out" / "proj").is_dir()
+
+
+def test_absolute_paths_are_kept_verbatim(citron, dataset, tmp_path):
+    output = str(tmp_path / "out") + "/"
+
+    result = configure_training(_settings(dataset, tmp_path, output_directory=output), citron, NOW)
+
+    assert result.settings.output_directory == output

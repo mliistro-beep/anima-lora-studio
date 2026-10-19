@@ -25,7 +25,10 @@ def validate_dataset(image_dir: Path) -> DatasetReport:
     if not image_dir.is_dir():
         raise DatasetError(f"Not a directory: {image_dir}")
 
-    files = [entry for entry in image_dir.iterdir() if entry.is_file()]
+    try:
+        files = [entry for entry in image_dir.iterdir() if entry.is_file()]
+    except OSError as error:
+        raise DatasetError(f"Cannot read {image_dir}: {error}") from error
     images = [f for f in files if f.suffix.lower() in IMAGE_EXTENSIONS]
     caption_stems = {f.stem for f in files if f.suffix.lower() == CAPTION_EXTENSION}
     missing = tuple(sorted(f.name for f in images if f.stem not in caption_stems))

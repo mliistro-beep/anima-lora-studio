@@ -63,13 +63,20 @@ class CitronPaths:
     def venv_accelerate(self) -> Path:
         return self._venv_bin("accelerate")
 
+    def resolve(self, user_path: str) -> Path:
+        """Resolve a user-entered path the way sd-scripts will (its cwd is the Citron root)."""
+        path = Path(user_path).expanduser()
+        return path if path.is_absolute() else self.root / path
+
+    def required_models(self) -> tuple[tuple[str, Path], ...]:
+        """Models that must already exist; the DiT is downloaded on demand instead."""
+        return (("Qwen3", self.qwen3_model), ("VAE", self.vae_model))
+
     def dit_model(self, base_model: str) -> Path:
         return self.models_dir / "dit" / dit_filename(base_model)
 
     def missing_required_models(self) -> tuple[str, ...]:
-        """Models that must already exist; the DiT is downloaded on demand instead."""
-        required = (("Qwen3", self.qwen3_model), ("VAE", self.vae_model))
-        return tuple(label for label, path in required if not path.exists())
+        return tuple(label for label, path in self.required_models() if not path.exists())
 
     def _venv_bin(self, name: str) -> Path:
         if self.platform == "nt":

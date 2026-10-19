@@ -16,3 +16,8 @@ from anima_trainer.system.gpu_choice import gpu_index_from_choice
 )
 def test_gpu_index_from_choice(choice, expected):
     assert gpu_index_from_choice(choice) == expected
+
+
+@pytest.mark.parametrize("choice", ["CPU (no CUDA detected)", "abc: x", ":"])
+def test_non_numeric_choice_falls_back_to_default(choice):
+    assert gpu_index_from_choice(choice) == "0"
