@@ -136,7 +136,7 @@ def test_required_for_configure_is_empty_when_filled():
 
 
 @pytest.mark.parametrize(
-    "name", ["../../evil", "a/b", "a\\b", "..", ".", "bad\x00name", "with space"]
+    "name", ["abc\n", "../../evil", "a/b", "a\\b", "..", ".", "bad\x00name", "with space"]
 )
 def test_project_name_rejects_path_like_values(name):
     with pytest.raises(ValidationError):

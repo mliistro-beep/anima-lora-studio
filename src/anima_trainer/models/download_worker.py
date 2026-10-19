@@ -84,8 +84,10 @@ class ModelDownloader(QObject):
         if self._thread is not None:
             raise RuntimeError("A download is already running")
         thread = _DownloadThread(url, destination, self._chunk_size)
-        thread.progress.connect(self.progress)
-        thread.finished.connect(self._on_thread_done)
+        # Bind each event to its own thread: events still queued from a thread that was
+        # already shut down must not reach the caller or act on a newer download.
+        thread.progress.connect(lambda done, total: self._forward_progress(thread, done, total))
+        thread.finished.connect(lambda: self._on_thread_done(thread))
         self._thread = thread
         thread.start()
 
@@ -100,11 +102,14 @@ class ModelDownloader(QObject):
             return
         thread.cancel()
         thread.wait()
-        self._on_thread_done()
+        self._on_thread_done(thread)
 
-    def _on_thread_done(self) -> None:
-        thread = self._thread
-        if thread is None:
+    def _forward_progress(self, thread: _DownloadThread, done: object, total: object) -> None:
+        if thread is self._thread:
+            self.progress.emit(done, total)
+
+    def _on_thread_done(self, thread: _DownloadThread) -> None:
+        if thread is not self._thread:
             return
         thread.wait()
         self._thread = None

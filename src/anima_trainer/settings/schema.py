@@ -45,7 +45,7 @@ def _gpu_index_to_str(value: Any) -> Any:
 
 def _check_project_name(value: str) -> str:
     # Blank is allowed here and reported by missing_required_fields(), as in Citron.
-    if value.strip() and (value in {".", ".."} or not PROJECT_NAME_PATTERN.match(value)):
+    if value.strip() and (value in {".", ".."} or not PROJECT_NAME_PATTERN.fullmatch(value)):
         raise ValueError("use only letters, digits, '.', '_' and '-'")
     return value
 

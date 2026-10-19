@@ -34,7 +34,7 @@ class RunOutcome:
     exit_code: int
     crashed: bool
     stopped: bool
-    log_path: Path
+    log_path: Path | None  # None when the log file could not be written to the end
 
 
 def log_file_path(logs_dir: Path, project_name: str, now: datetime) -> Path:
@@ -69,6 +69,7 @@ class TrainingRunner(QObject):
         self._decoder = codecs.getincrementaldecoder("utf-8")(errors="ignore")
         self._tail: deque[str] = deque(maxlen=LOG_TAIL_LINES)
         self._stopping = False
+        self._log_abandoned = False
 
     def is_running(self) -> bool:
         return self._process is not None
@@ -86,9 +87,11 @@ class TrainingRunner(QObject):
         log_path.parent.mkdir(parents=True, exist_ok=True)
         # Kept open for the whole run and closed in _cleanup(), so no context manager.
         self._log = open(log_path, "w", encoding="utf-8", errors="ignore")  # noqa: SIM115
-        self._log.write(f"Command: {spec.display()}\nStarted: {datetime.now().isoformat()}\n\n")
         self._log_path = log_path
         self._reset_stream_state()
+        # Header failures take the same path as later write errors: warn, keep running.
+        self._write_log(f"Command: {spec.display()}\nStarted: {datetime.now().isoformat()}\n\n")
+        self._flush_log()
         self._process = self._create_process(spec)
         self._process.start()
 
@@ -135,6 +138,7 @@ class TrainingRunner(QObject):
         self._decoder.reset()
         self._tail.clear()
         self._stopping = False
+        self._log_abandoned = False
 
     def _on_output(self) -> None:
         if self._process is None:
@@ -160,7 +164,8 @@ class TrainingRunner(QObject):
             self._emit_line(remainder)
         self._flush_log()
         crashed = exit_status == QProcess.ExitStatus.CrashExit
-        outcome = RunOutcome(exit_code, crashed, self._stopping, self._log_path or Path())
+        log_path = None if self._log_abandoned else self._log_path
+        outcome = RunOutcome(exit_code, crashed, self._stopping, log_path)
         self._cleanup()
         self.finished.emit(outcome)
 
@@ -205,10 +210,14 @@ class TrainingRunner(QObject):
     def _abandon_log(self, error: OSError) -> None:
         """Stop writing the log after the first failure but keep streaming to the UI."""
         log, self._log = self._log, None
+        self._log_abandoned = True
         with contextlib.suppress(OSError):
             if log is not None:
                 log.close()
-        self.warning.emit(f"Log file {self._log_path} could not be written: {error}")
+        message = f"Log file {self._log_path} could not be written: {error}"
+        # Deferred to the event loop: emitting here would let a slot stop or shut down the
+        # runner while _on_output is still iterating over the current chunk.
+        QTimer.singleShot(0, lambda: self.warning.emit(message))
 
     def _cleanup(self) -> None:
         self._kill_timer.stop()

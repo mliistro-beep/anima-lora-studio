@@ -20,6 +20,17 @@ JSON_INDENT = 2
 DEFAULT_FILE_MODE = 0o666
 
 
+def _read_process_umask() -> int:
+    # os.umask can only be read by setting it, and the umask is process-wide: do it once
+    # at import, before worker threads exist, instead of on every save.
+    umask = os.umask(0)
+    os.umask(umask)
+    return umask
+
+
+_PROCESS_UMASK = _read_process_umask()
+
+
 @dataclass(frozen=True)
 class LoadResult:
     settings: TrainingSettings
@@ -77,6 +88,4 @@ def _target_mode(path: Path) -> int:
     try:
         return stat.S_IMODE(path.stat().st_mode)
     except FileNotFoundError:
-        umask = os.umask(0)
-        os.umask(umask)
-        return DEFAULT_FILE_MODE & ~umask
+        return DEFAULT_FILE_MODE & ~_PROCESS_UMASK

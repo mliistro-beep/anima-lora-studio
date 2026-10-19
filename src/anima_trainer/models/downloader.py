@@ -87,6 +87,7 @@ def _download(url: str, destination: Path, transfer: _Transfer) -> Path:
         # The scheme is restricted to http/https in download_file().
         response_cm = urlopen(request, timeout=transfer.timeout_s)  # nosec B310
     except HTTPError as error:
+        error.close()  # releases the socket; code and headers stay readable
         if error.code != HTTP_RANGE_NOT_SATISFIABLE or not offset:
             raise
         return _handle_unsatisfiable_range(url, destination, transfer, error.headers, offset)

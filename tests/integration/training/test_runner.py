@@ -224,9 +224,22 @@ def test_log_write_failure_warns_once_and_keeps_streaming(qtbot, tmp_path):
     runner.warning.connect(warnings.append)
     spec = _spec(tmp_path, "text", "a\\nb\\nc\\n", "0")
 
-    with qtbot.waitSignal(runner.finished, timeout=TIMEOUT_MS):
+    with qtbot.waitSignal(runner.finished, timeout=TIMEOUT_MS) as blocker:
         runner.start(spec, Path("/dev/full"))
+    qtbot.waitUntil(lambda: bool(warnings), timeout=TIMEOUT_MS)
 
     assert lines == ["a", "b", "c"]
     assert len(warnings) == 1
     assert "log file" in warnings[0].lower()
+    assert blocker.args[0].log_path is None  # the log was abandoned, not saved
+
+
+def test_unopenable_log_raises_without_leaking_state(tmp_path):
+    runner = TrainingRunner()
+    blocker = tmp_path / "not-a-dir"
+    blocker.write_text("")
+
+    with pytest.raises(OSError):
+        runner.start(_spec(tmp_path, "env", "X"), blocker / "r.log")
+
+    assert not runner.is_running()

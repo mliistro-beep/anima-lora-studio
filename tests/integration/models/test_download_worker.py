@@ -96,3 +96,36 @@ def test_shutdown_stops_a_running_download_and_waits(qtbot, file_server, tmp_pat
 
 def test_shutdown_when_idle_does_nothing():
     ModelDownloader().shutdown()
+
+
+def test_stale_finished_from_previous_thread_does_not_touch_new_download(
+    qtbot, downloader, file_server, tmp_path
+):
+    state, url = file_server
+    state.payload = os.urandom(300_000)
+    state.block_delay_s = 0.01
+    downloader.start(url, tmp_path / "a.safetensors")
+    downloader.shutdown()
+
+    downloader.start(url, tmp_path / "b.safetensors")
+    qtbot.wait(200)  # lets the first thread's queued QThread.finished be delivered
+
+    assert downloader.is_running()
+
+
+def test_no_progress_is_delivered_after_the_terminal_signal(
+    qtbot, downloader, file_server, tmp_path
+):
+    state, url = file_server
+    state.payload = os.urandom(300_000)
+    state.block_delay_s = 0.001
+    events = []
+    downloader.progress.connect(lambda *_: events.append("progress"))
+    downloader.cancelled.connect(lambda: events.append("cancelled"))
+    downloader.start(url, tmp_path / "a.safetensors")
+    qtbot.waitUntil(lambda: "progress" in events, timeout=TIMEOUT_MS)
+
+    downloader.shutdown()
+    qtbot.wait(200)
+
+    assert events[-1] == "cancelled"
