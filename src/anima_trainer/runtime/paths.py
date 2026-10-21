@@ -7,7 +7,7 @@ import os
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from anima_trainer.models.catalog import dit_filename
+from anima_trainer.models.catalog import QWEN3_FILENAME, VAE_FILENAME, dit_filename
 
 # Relative on purpose, like Citron: accelerate runs with cwd = the data folder.
 ACCELERATE_CONFIG = Path("app_configs/accelerate_gpu.yaml")
@@ -40,11 +40,11 @@ class RuntimePaths:
 
     @property
     def qwen3_model(self) -> Path:
-        return self.models_dir / "text_encoder" / "qwen_3_06b_base.safetensors"
+        return self.models_dir / "text_encoder" / QWEN3_FILENAME
 
     @property
     def vae_model(self) -> Path:
-        return self.models_dir / "vae" / "qwen_image_vae.safetensors"
+        return self.models_dir / "vae" / VAE_FILENAME
 
     @property
     def train_script(self) -> Path:

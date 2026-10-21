@@ -9,6 +9,7 @@ paths.py     RuntimePaths(root, platform): config/configs/logs/models/scripts/ve
              required_models(), missing_required_models(), resolve(user_path)
 data_dir.py  default_data_dir(), load_data_dir(store, default), save_data_dir(store, dir) (OSError),
              runtime_problems(paths), open_data_dir(dir) -> OpenedRuntime(paths, settings, warnings, problems)
+accelerate_config.py ACCELERATE_GPU_YAML (Citron's file), write_accelerate_config(paths) -> Path
 
 ## settings/
 schema.py      TrainingSettings(BaseModel, frozen) 35 fields; with_changes(**) -> new; missing_required_fields()
@@ -22,7 +23,7 @@ validator.py      validate_dataset(dir) -> DatasetReport(image_count, missing_ca
 step_estimator.py estimate_steps(images, repeats, batch, accum, epochs) -> StepEstimate
 
 ## models/
-catalog.py         BASE_MODEL_URLS, dit_filename(base)
+catalog.py         BASE_MODEL_URLS, QWEN3_FILENAME, VAE_FILENAME, SUPPORT_MODEL_URLS (by file name), dit_filename(base)
 status.py          model_statuses(paths) -> tuple[ModelStatus(label, path, present, base_model)]
 downloader.py      download_file(url, dest, on_progress, is_cancelled) -> Path; DownloadError, DownloadCancelled
 download_worker.py ModelDownloader(QObject): start/cancel/shutdown; signals progress, finished, failed, cancelled

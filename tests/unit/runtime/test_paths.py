@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from anima_trainer.models.catalog import BASE_MODEL_URLS, dit_filename
+from anima_trainer.models.catalog import BASE_MODEL_URLS, SUPPORT_MODEL_URLS, dit_filename
 from anima_trainer.runtime.paths import RuntimePaths
 from anima_trainer.settings.choices import BASE_MODELS
 
@@ -84,3 +84,15 @@ def test_resolve_makes_relative_paths_relative_to_the_data_dir():
 
 def test_resolve_expands_home():
     assert RuntimePaths(ROOT).resolve("~/x") == Path.home() / "x"
+
+
+def test_every_required_model_has_a_download_url_by_file_name():
+    names = [path.name for _label, path in RuntimePaths(ROOT).required_models()]
+
+    assert set(SUPPORT_MODEL_URLS) == set(names)
+    assert all(url.startswith("https://huggingface.co/") for url in SUPPORT_MODEL_URLS.values())
+
+
+def test_support_model_urls_end_with_the_local_file_name():
+    for name, url in SUPPORT_MODEL_URLS.items():
+        assert url.rsplit("/", 1)[1] == name
