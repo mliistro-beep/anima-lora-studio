@@ -3,43 +3,49 @@
 Operating the Anima LoRA Trainer desktop app on a workstation. It is a local desktop
 app, not a service: there are no servers, health endpoints or alerting.
 
-Current state: the core and services (M0-M2) are done; the training UI (M3) is not
-built yet, so `anima-trainer` opens an empty window. See [milestones.md](milestones.md).
+Current state: the training UI (M3) is done and was verified with a real run. M4 (the
+app's own training runtime, independent of Citron) is in progress: the app already uses
+its own data folder, but the installer is not built yet, so until it is the app reports
+"Training runtime not installed" and cannot train. See [milestones.md](milestones.md).
 
 ## Install and launch
 
-1. Make sure Citron is installed and working (its own `setup_for_linux.sh`), with
-   `.venv`, `sd-scripts` and `models/anima/text_encoder` and `models/anima/vae`.
-2. Install the app:
+1. Install the app:
 
    ```bash
    python3 -m venv .venv
    .venv/bin/pip install -e .
    ```
 
-3. Start it with `.venv/bin/anima-trainer`.
+2. Start it with `.venv/bin/anima-trainer`.
+3. The training runtime (venv, sd-scripts, models) goes into the data folder shown in the
+   Settings tab. Installing it from the app (Settings, Install) is part of M4 and not
+   built yet. Citron is not needed and the app never writes into a Citron folder.
 
 ## Where things are
 
-All paths are inside the Citron root, so the app and Citron's web UI share them:
+All paths are inside the app's data folder (`<data>`, default `~/.local/share/anima-trainer`,
+or `$XDG_DATA_HOME/anima-trainer`; it can be changed in the Settings tab). Its layout is the
+same as a Citron installation, but it belongs to the app only. The chosen folder is saved
+in `~/.config/anima-trainer/anima-trainer.conf`.
 
 | What | Path |
 |------|------|
-| Saved settings | `<citron>/config.json` (same format as Citron) |
-| Generated TOML configs | `<citron>/configs/<project>_{training,dataset}_<timestamp>.toml` |
-| Training logs | `<citron>/logs/<project>_<timestamp>.log` |
-| DiT base model | `<citron>/models/anima/dit/<base-model>.safetensors` |
+| Saved settings | `<data>/config.json` (same format as Citron) |
+| Generated TOML configs | `<data>/configs/<project>_{training,dataset}_<timestamp>.toml` |
+| Training logs | `<data>/logs/<project>_<timestamp>.log` |
+| DiT base model | `<data>/models/anima/dit/<base-model>.safetensors` |
 | Partial downloads | same path with a `.part` suffix |
 | Checkpoints | the output directory set in the settings |
 
-Relative image and output folders are resolved against the Citron root, because
+Relative image and output folders are resolved against the data folder, because
 sd-scripts runs with that as its working directory.
 
 ## Common issues
 
 **"Missing models: Qwen3, VAE" when configuring.** The text encoder or VAE is not in
-`<citron>/models/anima/`. Run Citron's setup script; only the DiT is downloaded
-automatically.
+`<data>/models/anima/`. Only the DiT is downloaded automatically for now; downloading
+Qwen3 and the VAE from the app is part of M4.
 
 **DiT download interrupted or cancelled.** The data stays in `<file>.part` and the next
 download resumes from it. If the remote file changed and the `.part` is larger, it is
@@ -57,8 +63,7 @@ needs root, so the hint can be missing even after a real kernel OOM; check
 
 **A run does not stop right away.** Stop sends SIGTERM to the whole process group
 (`accelerate` and the training child), then SIGKILL after 10 seconds. The runner's
-`shutdown()` does the same and waits; it will be called on window close once the UI
-(M3) exists.
+`shutdown()` does the same and waits; it runs on window close, on Ctrl+C and on SIGTERM.
 
 **GPU still busy after a crash of the app itself.** If the app was killed hard (for
 example `kill -9`), the training child keeps running in its own session. Find and stop
@@ -73,12 +78,12 @@ then `kill <pid>`.
 **"Log file ... could not be written".** Usually a full disk. Training keeps running
 and the output stays visible in the app, but the log on disk stops at the error.
 
-**GPU list shows only "0" and "1".** Neither the Citron venv's torch nor `nvidia-smi`
-answered (wrong Citron root, driver problem). Training can still be started on GPU 0.
+**GPU list shows only "0" and "1".** Neither the training venv's torch nor `nvidia-smi`
+answered (runtime not installed, driver problem). Training can still be started on GPU 0.
 
 ## Rollback
 
 - To go back to an earlier version of the app: `git checkout <commit>` and reinstall with
   `.venv/bin/pip install -e .`.
-- To go back to Citron's own web UI: it reads the same `config.json` and `configs/`, so
-  it can be used at any time without converting anything.
+- Citron's own web UI is independent of this app and keeps working. To reuse settings
+  there, copy `<data>/config.json` into the Citron folder: the format is the same.

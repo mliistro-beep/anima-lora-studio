@@ -1,4 +1,4 @@
-<!-- Generated: 2026-10-20 | Files scanned: 50 (19 src, 31 tests) | Token estimate: ~267 -->
+<!-- Generated: 2026-10-21 | Files scanned: 97 (47 src, 50 tests) | Token estimate: ~280 -->
 # Dependencies
 
 ## Runtime (pyproject.toml)
@@ -10,9 +10,10 @@ toml>=0.10.2                   TOML writer, same lib as Citron for identical out
 pytest, pytest-qt, pytest-cov, ruff, mypy (+pydantic plugin), types-toml, bandit, pip-audit
 
 ## External, used through subprocesses (not imported)
-Citron install (<citron>): .venv (Python 3.14, torch, accelerate), sd-scripts
+Training runtime in the data folder (<data>): .venv (torch, accelerate), sd-scripts
+  (installer planned in M4; Citron is never used)
   accelerate launch ... sd-scripts/anima_train_network.py      training
-  sd-scripts/anima_minimal_inference.py                        inference (M4)
+  sd-scripts/anima_minimal_inference.py                        inference (M5)
   .venv/bin/python -c "import torch..."                        GPU list
 nvidia-smi                                                     GPU list fallback
 dmesg -T                                                       OOM hint (often not permitted)

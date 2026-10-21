@@ -1,18 +1,18 @@
-<!-- Generated: 2026-10-20 | Files scanned: 50 (19 src, 31 tests) | Token estimate: ~210 -->
+<!-- Generated: 2026-10-21 | Files scanned: 97 (47 src, 50 tests) | Token estimate: ~300 -->
 # Frontend (Qt UI)
 
-Current: main.py create_window() -> empty QMainWindow "Anima LoRA Trainer". ui/ is empty.
+main.py create_window(store, detect) -> MainWindow(session, GpuDetector, store, opened)
 
-## Planned (M3, M4; see DOCS/milestones.md)
-MainWindow
-  tabs/training_tab.py   basic settings, Configure / Start / Stop
-  tabs/advanced_tab.py   advanced settings
-  tabs/settings_tab.py   Citron root, model status, download
-  tabs/previews_tab.py   epoch x prompt grid (M4)
-  tabs/generator_tab.py  manual inference on a checkpoint (M4)
-  widgets/ path_picker, log_view, progress_panel, image_gallery
+## MainWindow (ui/main_window.py)
+  tabs/training_tab.py   basic settings form, Configure / Start / Stop, custom TOML, status, progress, log
+  tabs/advanced_tab.py   advanced settings form
+  tabs/settings_tab.py   data folder (Apply), runtime problems, model status table, DiT download/cancel
+  tabs/previews_tab.py   epoch x prompt grid (M5, not built)
+  tabs/generator_tab.py  manual inference on a checkpoint (M5, not built)
+  widgets/ path_picker, log_view (tqdm redraw collapse, max 5000 lines), progress_panel, settings_form
 
-## State flow (planned)
-widgets edit -> TrainingSettings.with_changes() (new object each time)
-TrainingRunner / ModelDownloader signals -> progress_panel, log_view
-window close -> TrainingRunner.shutdown(), ModelDownloader.shutdown()
+## State flow
+form values -> TrainingSettings.with_changes() (new object each time) -> TrainingSession.configure
+TrainingSession signals -> progress_panel, log_view, tab button states (SessionState)
+Settings tab Apply -> open_data_dir -> session.set_runtime -> forms reloaded, save_data_dir
+window close / aboutToQuit / SIGINT / SIGTERM -> MainWindow.shutdown() (session + GPU detector)

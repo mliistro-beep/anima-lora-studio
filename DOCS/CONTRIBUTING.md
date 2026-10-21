@@ -9,16 +9,20 @@ Project rules come from [CLAUDE.md](../CLAUDE.md); progress is tracked in
 Prerequisites:
 
 - Python 3.12 or newer (the project is developed on 3.14)
-- A Citron installation for anything that runs real training or inference. Unit and
-  integration tests do not need it: they use fixtures and a fake `accelerate`.
+- For real training or inference, the training runtime in the app's data folder (see
+  [RUNBOOK.md](RUNBOOK.md)). Unit and integration tests do not need it: they use fixtures
+  and a fake `accelerate`. Never point the app at a Citron installation: it would write
+  `config.json`, `configs/` and `logs/` there.
 
 ```bash
 python3 -m venv .venv
 .venv/bin/pip install -e ".[dev]"
 ```
 
-The app's venv holds only the GUI and dev tools. Training runs in the Citron venv
-(torch, accelerate, sd-scripts), started as a separate process.
+The app's venv holds only the GUI and dev tools. Training runs in the training venv of
+the data folder (torch, accelerate, sd-scripts), started as a separate process. To try the
+real app without touching your own settings, start it with `XDG_CONFIG_HOME` and
+`XDG_DATA_HOME` pointed at scratch folders.
 
 <!-- AUTO-GENERATED: commands (source: pyproject.toml) -->
 ## Commands

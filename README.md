@@ -1,8 +1,9 @@
 # Anima LoRA Trainer (desktop)
 
-Desktop (PySide6) version of Citron's Anima LoRA Trainer UI. It reuses an existing
-Citron installation (venv, sd-scripts, models) and adds epoch previews and a simple
-image generator.
+Desktop (PySide6) version of Citron's Anima LoRA Trainer UI, with the same settings and
+identical TOML configs. It does not need Citron: it keeps its own training runtime (venv,
+sd-scripts, models) in its data folder, and will add epoch previews and a simple image
+generator.
 
 Status and the per-component checklist: [DOCS/milestones.md](DOCS/milestones.md).
 Contributor setup: [DOCS/CONTRIBUTING.md](DOCS/CONTRIBUTING.md).
@@ -12,9 +13,8 @@ Architecture codemaps: [DOCS/CODEMAPS/](DOCS/CODEMAPS/architecture.md).
 ## Requirements
 
 - Python 3.12 or newer (developed on 3.14)
-- An existing Citron installation, for example `~/citron-anima-lora-trainer-ui`, with its
-  `.venv`, `sd-scripts` and models under `models/anima/`
-- An NVIDIA GPU for training (Citron's defaults target about 6 GB of VRAM)
+- An internet connection for the first install of the training runtime and models
+- An NVIDIA GPU for training (the default settings use about 6 GB of VRAM)
 
 ## Development
 
