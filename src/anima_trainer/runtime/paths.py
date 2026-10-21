@@ -63,6 +63,10 @@ class RuntimePaths:
         return self.root / ACCELERATE_CONFIG
 
     @property
+    def venv_dir(self) -> Path:
+        return self.root / ".venv"
+
+    @property
     def venv_python(self) -> Path:
         return self._venv_bin("python")
 
@@ -87,5 +91,5 @@ class RuntimePaths:
 
     def _venv_bin(self, name: str) -> Path:
         if self.platform == "nt":
-            return self.root / ".venv" / "Scripts" / f"{name}.exe"
-        return self.root / ".venv" / "bin" / name
+            return self.venv_dir / "Scripts" / f"{name}.exe"
+        return self.venv_dir / "bin" / name

@@ -10,6 +10,10 @@ paths.py     RuntimePaths(root, platform): config/configs/logs/models/scripts/ve
 data_dir.py  default_data_dir(), load_data_dir(store, default), save_data_dir(store, dir) (OSError),
              runtime_problems(paths), open_data_dir(dir) -> OpenedRuntime(paths, settings, warnings, problems)
 accelerate_config.py ACCELERATE_GPU_YAML (Citron's file), write_accelerate_config(paths) -> Path
+python_finder.py find_python(which, run) -> PythonInterpreter(path, version)|None (>=3.10, venv+ensurepip)
+install_plan.py  plan_install(paths, python, git) -> InstallPlan(steps, problems, ready); InstallStep(key, title,
+                 command, working_dir, marker, action); SD_SCRIPTS_COMMIT pinned; markers in <data>/.install:
+                 sd_scripts_marker, requirements_marker, verified_marker
 
 ## settings/
 schema.py      TrainingSettings(BaseModel, frozen) 35 fields; with_changes(**) -> new; missing_required_fields()

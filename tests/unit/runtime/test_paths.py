@@ -21,6 +21,7 @@ def test_layout_matches_a_citron_installation():
     assert paths.inference_script == ROOT / "sd-scripts/anima_minimal_inference.py"
     assert paths.accelerate_config == Path("app_configs/accelerate_gpu.yaml")
     assert paths.accelerate_config_file == ROOT / "app_configs/accelerate_gpu.yaml"
+    assert paths.venv_dir == ROOT / ".venv"
 
 
 @pytest.mark.parametrize("base_model", BASE_MODELS)

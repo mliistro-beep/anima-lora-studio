@@ -12,6 +12,7 @@ No database. All state is files inside the app's data folder (<data>, default
 | Dataset config | <data>/configs/<proj>_dataset_<ts>.toml | toml_builder.write_configs | TOML |
 | Training log | <data>/logs/<proj>_<ts>.log | training/runner.py | "Command:", "Started:", blank, raw lines |
 | DiT model | <data>/models/anima/dit/<base>.safetensors | models/downloader.py | via .part, renamed when complete |
+| Install state | <data>/.install/{sd-scripts,requirements,verified}.commit | installer (M4) | pinned sd-scripts commit, one line |
 | Checkpoints | <output_dir>/<proj>-NNNNNN.safetensors, <proj>.safetensors | sd-scripts | read by log_parser (CheckpointSaved) |
 | Samples (M5) | <output_dir>/sample/*.png | sd-scripts | planned gallery source |
 
