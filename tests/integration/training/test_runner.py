@@ -1,4 +1,3 @@
-import os
 import sys
 import time
 from pathlib import Path
@@ -9,6 +8,7 @@ import pytest
 from anima_trainer.training.command_builder import LaunchSpec
 from anima_trainer.training.log_parser import CheckpointSaved, EpochStarted, StepProgress
 from anima_trainer.training.runner import TrainingRunner
+from tests.process_helpers import is_alive
 
 pytestmark = pytest.mark.integration
 
@@ -120,21 +120,6 @@ def test_missing_program_emits_failed_to_start(qtbot, tmp_path):
     assert not runner.is_running()
 
 
-def _alive(pid):
-    try:
-        os.kill(pid, 0)
-    except ProcessLookupError:
-        return False
-    stat_file = Path(f"/proc/{pid}/stat")
-    # Without /proc (macOS) a zombie still answers kill(0); treat "signal delivered" as alive.
-    if not Path("/proc").is_dir():
-        return True
-    try:
-        return stat_file.read_text().split()[2] != "Z"
-    except (FileNotFoundError, ProcessLookupError):
-        return False  # reaped between the kill(0) probe and the read
-
-
 @pytest.mark.skipif(sys.platform == "win32", reason="process groups are POSIX only")
 def test_stop_terminates_the_whole_process_group(qtbot, tmp_path):
     runner = TrainingRunner()
@@ -148,9 +133,9 @@ def test_stop_terminates_the_whole_process_group(qtbot, tmp_path):
 
     assert blocker.args[0].stopped
     deadline = time.monotonic() + 5
-    while _alive(child_pid) and time.monotonic() < deadline:
+    while is_alive(child_pid) and time.monotonic() < deadline:
         time.sleep(0.05)
-    assert not _alive(child_pid)
+    assert not is_alive(child_pid)
 
 
 def test_start_while_running_is_rejected(qtbot, tmp_path):
@@ -182,9 +167,9 @@ def test_shutdown_stops_the_group_and_blocks_until_exit(qtbot, tmp_path):
 
     assert not runner.is_running()
     deadline = time.monotonic() + 5
-    while _alive(child_pid) and time.monotonic() < deadline:
+    while is_alive(child_pid) and time.monotonic() < deadline:
         time.sleep(0.05)
-    assert not _alive(child_pid)
+    assert not is_alive(child_pid)
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="process groups are POSIX only")
