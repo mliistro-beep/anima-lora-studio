@@ -54,7 +54,7 @@ class TrainingTab(QWidget):
         return self.custom_config.path()
 
     def set_state(self, state: SessionState, ready: bool) -> None:
-        """`ready` is False when the Citron install cannot train (see the Settings tab)."""
+        """`ready` is False when the training runtime cannot train (see the Settings tab)."""
         idle = state is SessionState.IDLE
         self.configure_button.setEnabled(idle and ready)
         self.start_button.setEnabled(idle and ready)

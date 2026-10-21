@@ -1,4 +1,7 @@
-"""Filesystem layout of an existing Citron installation (venv, sd-scripts, models)."""
+"""Filesystem layout of the app's data folder (venv, sd-scripts, models, configs, logs).
+
+Same layout as a Citron installation, so generated TOMLs and logs look exactly like Citron's.
+"""
 
 import os
 from dataclasses import dataclass, field
@@ -6,12 +9,12 @@ from pathlib import Path
 
 from anima_trainer.models.catalog import dit_filename
 
-# Relative on purpose: Citron passes it as-is and runs accelerate with cwd = Citron root.
+# Relative on purpose, like Citron: accelerate runs with cwd = the data folder.
 ACCELERATE_CONFIG = Path("app_configs/accelerate_gpu.yaml")
 
 
 @dataclass(frozen=True)
-class CitronPaths:
+class RuntimePaths:
     root: Path
     platform: str = field(default=os.name)
 
@@ -56,6 +59,10 @@ class CitronPaths:
         return ACCELERATE_CONFIG
 
     @property
+    def accelerate_config_file(self) -> Path:
+        return self.root / ACCELERATE_CONFIG
+
+    @property
     def venv_python(self) -> Path:
         return self._venv_bin("python")
 
@@ -64,7 +71,7 @@ class CitronPaths:
         return self._venv_bin("accelerate")
 
     def resolve(self, user_path: str) -> Path:
-        """Resolve a user-entered path the way sd-scripts will (its cwd is the Citron root)."""
+        """Resolve a user-entered path the way sd-scripts will (its cwd is the data folder)."""
         path = Path(user_path).expanduser()
         return path if path.is_absolute() else self.root / path
 

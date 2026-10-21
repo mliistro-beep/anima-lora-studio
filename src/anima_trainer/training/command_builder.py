@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from types import MappingProxyType
 
-from anima_trainer.models.paths import CitronPaths
+from anima_trainer.runtime.paths import RuntimePaths
 
 
 @dataclass(frozen=True)
@@ -21,13 +21,13 @@ class LaunchSpec:
 
 
 def build_training_launch(
-    paths: CitronPaths,
+    paths: RuntimePaths,
     training_config: Path,
     dataset_config: Path,
     gpu_index: str,
     cpu_threads: int,
 ) -> LaunchSpec:
-    """Same arguments and environment as Citron's start_training(), using the Citron venv."""
+    """Same arguments and environment as Citron's start_training(), using the training venv."""
     arguments = (
         "launch",
         "--config_file", str(paths.accelerate_config),

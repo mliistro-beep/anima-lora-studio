@@ -3,7 +3,7 @@ from datetime import datetime
 
 import pytest
 
-from anima_trainer.models.paths import CitronPaths
+from anima_trainer.runtime.paths import RuntimePaths
 from anima_trainer.settings.schema import TrainingSettings
 from anima_trainer.settings.store import load_settings
 from anima_trainer.training.configure_service import MAX_LISTED_MISSING, configure_training
@@ -13,7 +13,7 @@ NOW = datetime(2026, 10, 19, 10, 30, 0)
 
 @pytest.fixture
 def citron(tmp_path):
-    paths = CitronPaths(tmp_path / "citron")
+    paths = RuntimePaths(tmp_path / "citron")
     for model in (paths.qwen3_model, paths.vae_model):
         model.parent.mkdir(parents=True, exist_ok=True)
         model.write_bytes(b"")
@@ -132,7 +132,7 @@ def test_present_dit_is_reported_ok(citron, dataset, tmp_path):
 
 
 def test_missing_text_encoder_or_vae_fails(tmp_path, dataset):
-    paths = CitronPaths(tmp_path / "bare")
+    paths = RuntimePaths(tmp_path / "bare")
 
     result = configure_training(_settings(dataset, tmp_path), paths, NOW)
 
@@ -177,7 +177,7 @@ def test_saved_file_is_citron_json(citron, dataset, tmp_path):
     assert saved["last_train_config"].endswith("proj_training_2026-10-19_103000.toml")
 
 
-def test_relative_paths_are_resolved_against_citron_root(citron):
+def test_relative_paths_are_resolved_against_the_data_dir(citron):
     images = citron.root / "datasets" / "me"
     images.mkdir(parents=True)
     (images / "a.png").write_bytes(b"")

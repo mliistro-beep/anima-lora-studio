@@ -9,7 +9,7 @@ from datetime import datetime
 from pathlib import Path
 
 from anima_trainer.models.catalog import BASE_MODEL_URLS
-from anima_trainer.models.paths import CitronPaths
+from anima_trainer.runtime.paths import RuntimePaths
 from anima_trainer.settings.schema import TrainingSettings
 from anima_trainer.training.command_builder import LaunchSpec, build_training_launch
 from anima_trainer.training.runner import log_file_path
@@ -40,7 +40,7 @@ class DitDownload:
     destination: Path
 
 
-def dit_download(paths: CitronPaths, base_model: str) -> DitDownload | None:
+def dit_download(paths: RuntimePaths, base_model: str) -> DitDownload | None:
     """What to download before training, or None when the DiT is already there."""
     destination = paths.dit_model(base_model)
     url = BASE_MODEL_URLS.get(base_model)
@@ -50,7 +50,7 @@ def dit_download(paths: CitronPaths, base_model: str) -> DitDownload | None:
 
 
 def plan_start(
-    saved: TrainingSettings, paths: CitronPaths, request: StartRequest, now: datetime
+    saved: TrainingSettings, paths: RuntimePaths, request: StartRequest, now: datetime
 ) -> StartPlan:
     """What to launch for `request`, or the Citron error messages explaining why not."""
     custom = request.custom_config.strip()
@@ -63,7 +63,7 @@ def plan_start(
         script = paths.train_script
         return StartPlan((f"ERROR: Training script not found: {script}. Run setup first.",))
 
-    # Passed verbatim: accelerate runs from the Citron root, like Citron's own command.
+    # Passed verbatim: accelerate runs from the data folder, like Citron's own command.
     spec = build_training_launch(
         paths, Path(train_config), Path(dataset_config), request.gpu_index, request.cpu_threads
     )
@@ -72,7 +72,7 @@ def plan_start(
     return StartPlan(messages, spec, log_path)
 
 
-def _config_error(paths: CitronPaths, train_config: str, dataset_config: str) -> str | None:
+def _config_error(paths: RuntimePaths, train_config: str, dataset_config: str) -> str | None:
     if not train_config:
         return "No training config found. Run 'Configure Training' first, or provide a config path."
     if not paths.resolve(train_config).exists():

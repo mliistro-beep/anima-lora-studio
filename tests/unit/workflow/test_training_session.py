@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from anima_trainer.models.paths import CitronPaths
+from anima_trainer.runtime.paths import RuntimePaths
 from anima_trainer.settings.schema import TrainingSettings
 from anima_trainer.settings.store import load_settings
 from anima_trainer.training.log_parser import EpochStarted, StepProgress
@@ -19,7 +19,7 @@ NOW = datetime(2026, 10, 20, 9, 0, 0)
 
 @pytest.fixture
 def citron(tmp_path):
-    paths = CitronPaths(tmp_path / "citron")
+    paths = RuntimePaths(tmp_path / "citron")
     for file in (paths.train_script, paths.qwen3_model, paths.vae_model):
         file.parent.mkdir(parents=True, exist_ok=True)
         file.write_bytes(b"")
@@ -275,14 +275,14 @@ def test_busy_session_refuses_new_work(parts, dataset, tmp_path, citron):
     with pytest.raises(RuntimeError):
         parts["session"].download_model("anima-preview")
     with pytest.raises(RuntimeError):
-        parts["session"].set_citron(citron, TrainingSettings())
+        parts["session"].set_runtime(citron, TrainingSettings())
 
 
 def test_set_citron_replaces_paths_and_settings(parts, tmp_path):
-    other = CitronPaths(tmp_path / "other")
+    other = RuntimePaths(tmp_path / "other")
     settings = TrainingSettings(project_name="other")
 
-    parts["session"].set_citron(other, settings)
+    parts["session"].set_runtime(other, settings)
 
     assert parts["session"].paths == other
     assert parts["session"].settings == settings

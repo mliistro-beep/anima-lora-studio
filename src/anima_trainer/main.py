@@ -9,11 +9,7 @@ from PySide6.QtCore import QSettings, QTimer
 from PySide6.QtWidgets import QApplication
 
 from anima_trainer.models.download_worker import ModelDownloader
-from anima_trainer.settings.citron_root import (
-    DEFAULT_ROOT_CANDIDATES,
-    load_citron_root,
-    open_citron_root,
-)
+from anima_trainer.runtime.data_dir import default_data_dir, load_data_dir, open_data_dir
 from anima_trainer.system.gpu_info import detect_gpus
 from anima_trainer.system.gpu_worker import Detect, GpuDetector
 from anima_trainer.training.runner import TrainingRunner
@@ -34,9 +30,7 @@ __all__ = ["APP_NAME", "create_window", "install_quit_signals", "main"]
 
 
 def create_window(store: QSettings, detect: Detect = detect_gpus) -> MainWindow:
-    # Without a saved or found root, show the usual location so Settings can correct it.
-    root = load_citron_root(store) or DEFAULT_ROOT_CANDIDATES[0]
-    opened = open_citron_root(root)
+    opened = open_data_dir(load_data_dir(store, default_data_dir()))
     session = TrainingSession(opened.paths, opened.settings, TrainingRunner(), ModelDownloader())
     return MainWindow(session, GpuDetector(detect), store, opened)
 

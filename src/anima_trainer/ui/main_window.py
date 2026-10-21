@@ -9,7 +9,7 @@ from PySide6.QtGui import QCloseEvent
 from PySide6.QtWidgets import QMainWindow, QMessageBox, QTabWidget, QWidget
 
 from anima_trainer.models.status import model_statuses
-from anima_trainer.settings.citron_root import OpenedCitron, open_citron_root, save_citron_root
+from anima_trainer.runtime.data_dir import OpenedRuntime, open_data_dir, save_data_dir
 from anima_trainer.settings.field_specs import describe_validation_error
 from anima_trainer.settings.schema import TrainingSettings
 from anima_trainer.system.gpu_worker import GpuDetector
@@ -30,8 +30,8 @@ class MainWindow(QMainWindow):
         session: TrainingSession,
         detector: GpuDetector,
         store: QSettings,
-        opened: OpenedCitron,
-        open_root: Callable[[Path], OpenedCitron] = open_citron_root,
+        opened: OpenedRuntime,
+        open_root: Callable[[Path], OpenedRuntime] = open_data_dir,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
@@ -53,7 +53,7 @@ class MainWindow(QMainWindow):
         self.tabs.addTab(self.settings_tab, "Settings")
         self.setCentralWidget(self.tabs)
         self._connect()
-        self._show_citron(opened)
+        self._show_runtime(opened)
         self._detector.start(opened.paths)
 
     def closeEvent(self, event: QCloseEvent) -> None:  # noqa: N802 - Qt override
@@ -103,7 +103,7 @@ class MainWindow(QMainWindow):
         self._detector.detected.connect(self._on_gpus_detected)
         self._detector.warning.connect(lambda message: tab.status.append_line(f"WARN: {message}"))
 
-    def _show_citron(self, opened: OpenedCitron) -> None:
+    def _show_runtime(self, opened: OpenedRuntime) -> None:
         self._problems = opened.problems
         self._root_exists = opened.paths.root.is_dir()
         for form in (self.training_tab.form, self.advanced_tab.form):
@@ -147,16 +147,16 @@ class MainWindow(QMainWindow):
 
     def _apply_root(self, text: str) -> None:
         if not text.strip():
-            self.settings_tab.set_problems(("Choose the Citron folder first.",))
+            self.settings_tab.set_problems(("Choose the data folder first.",))
             return
         opened = self._open_root(Path(text.strip()))
-        self.session.set_citron(opened.paths, opened.settings)
-        self._show_citron(opened)
+        self.session.set_runtime(opened.paths, opened.settings)
+        self._show_runtime(opened)
         self._detector.start(opened.paths)
         if not opened.paths.root.is_dir():
             return
         try:
-            save_citron_root(self._store, opened.paths.root)
+            save_data_dir(self._store, opened.paths.root)
         except OSError as error:
             self.training_tab.status.append_line(f"WARN: {error}")
 

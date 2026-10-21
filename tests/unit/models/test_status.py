@@ -1,23 +1,23 @@
-from anima_trainer.models.paths import CitronPaths
 from anima_trainer.models.status import model_statuses
+from anima_trainer.runtime.paths import RuntimePaths
 from anima_trainer.settings.choices import BASE_MODELS
 
 
 def test_lists_required_models_then_every_base_model(tmp_path):
-    statuses = model_statuses(CitronPaths(tmp_path))
+    statuses = model_statuses(RuntimePaths(tmp_path))
 
     assert [s.label for s in statuses] == ["Qwen3", "VAE", *(f"DiT {m}" for m in BASE_MODELS)]
     assert not any(s.present for s in statuses)
 
 
 def test_only_dit_models_are_downloadable(tmp_path):
-    statuses = model_statuses(CitronPaths(tmp_path))
+    statuses = model_statuses(RuntimePaths(tmp_path))
 
     assert [s.base_model for s in statuses] == [None, None, *BASE_MODELS]
 
 
 def test_existing_files_are_present(tmp_path):
-    paths = CitronPaths(tmp_path)
+    paths = RuntimePaths(tmp_path)
     paths.vae_model.parent.mkdir(parents=True)
     paths.vae_model.write_bytes(b"")
 

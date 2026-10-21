@@ -10,7 +10,7 @@ from PySide6.QtCore import QSettings
 from PySide6.QtWidgets import QMessageBox
 
 from anima_trainer.models.download_worker import ModelDownloader
-from anima_trainer.settings.citron_root import open_citron_root
+from anima_trainer.runtime.data_dir import open_data_dir
 from anima_trainer.settings.schema import TrainingSettings
 from anima_trainer.settings.store import save_settings
 from anima_trainer.system.gpu_worker import GpuDetector
@@ -31,10 +31,11 @@ REQUEST = StartRequest(gpu_index="0", cpu_threads=1, base_model="anima-base-v1.0
 
 
 def _citron(tmp_path, *fake_args):
-    """A Citron root whose venv `accelerate` runs fake_accelerate.py with fake_args."""
-    paths = open_citron_root(tmp_path / "citron").paths
+    """A data folder whose venv `accelerate` runs fake_accelerate.py with fake_args."""
+    paths = open_data_dir(tmp_path / "data").paths
     for file in (
         paths.train_script,
+        paths.accelerate_config_file,
         paths.qwen3_model,
         paths.vae_model,
         paths.dit_model("anima-base-v1.0"),
@@ -79,9 +80,7 @@ def test_closing_the_window_kills_the_training_child(qtbot, tmp_path, monkeypatc
         paths, settings, TrainingRunner(), ModelDownloader(), clock=lambda: datetime(2026, 1, 1)
     )
     store = QSettings(str(tmp_path / "app.ini"), QSettings.Format.IniFormat)
-    window = MainWindow(
-        session, GpuDetector(lambda _p: ("0",)), store, open_citron_root(paths.root)
-    )
+    window = MainWindow(session, GpuDetector(lambda _p: ("0",)), store, open_data_dir(paths.root))
     qtbot.addWidget(window)
     window.training_tab.configure_button.click()
     window.training_tab.start_button.click()

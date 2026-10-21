@@ -1,6 +1,6 @@
 """GPU discovery for the GPU dropdown.
 
-The GUI venv does not ship torch, so devices are listed through the Citron venv's Python,
+The GUI venv does not ship torch, so devices are listed through the training venv's Python,
 then through nvidia-smi, then Citron's own fallback of ["0", "1"].
 """
 
@@ -10,7 +10,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from anima_trainer.models.paths import CitronPaths
+from anima_trainer.runtime.paths import RuntimePaths
 
 NO_CUDA_CHOICE = "CPU (no CUDA detected)"
 FALLBACK_CHOICES = ("0", "1")
@@ -46,8 +46,8 @@ def parse_nvidia_smi(stdout: str) -> tuple[str, ...] | None:
     return choices or None
 
 
-def detect_gpus(paths: CitronPaths, run: Runner = subprocess.run) -> tuple[str, ...]:
-    # Run from the Citron root like sd-scripts does, but only if it exists: a missing cwd
+def detect_gpus(paths: RuntimePaths, run: Runner = subprocess.run) -> tuple[str, ...]:
+    # Run from the data folder like sd-scripts does, but only if it exists: a missing cwd
     # makes subprocess fail before the program even starts.
     torch_cwd = paths.root if paths.root.is_dir() else None
     torch_command = (str(paths.venv_python), "-c", TORCH_PROBE)

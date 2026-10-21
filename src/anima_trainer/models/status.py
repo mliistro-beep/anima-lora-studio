@@ -1,9 +1,9 @@
-"""Which model files of a Citron install are present, for the Settings tab."""
+"""Which model files of the data folder are present, for the Settings tab."""
 
 from dataclasses import dataclass
 from pathlib import Path
 
-from anima_trainer.models.paths import CitronPaths
+from anima_trainer.runtime.paths import RuntimePaths
 from anima_trainer.settings.choices import BASE_MODELS
 
 
@@ -15,7 +15,7 @@ class ModelStatus:
     base_model: str | None  # set for DiT models, which can be downloaded
 
 
-def model_statuses(paths: CitronPaths) -> tuple[ModelStatus, ...]:
+def model_statuses(paths: RuntimePaths) -> tuple[ModelStatus, ...]:
     required = tuple(
         ModelStatus(label, path, path.exists(), None) for label, path in paths.required_models()
     )

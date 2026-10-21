@@ -10,7 +10,7 @@ from typing import Any
 
 import toml
 
-from anima_trainer.models.paths import CitronPaths
+from anima_trainer.runtime.paths import RuntimePaths
 from anima_trainer.settings.schema import TrainingSettings
 
 FILE_TIMESTAMP_FORMAT = "%Y-%m-%d_%H%M%S"
@@ -25,7 +25,7 @@ class GeneratedConfigs:
 
 
 def build_training_config(
-    settings: TrainingSettings, paths: CitronPaths, today: date
+    settings: TrainingSettings, paths: RuntimePaths, today: date
 ) -> dict[str, Any]:
     s = settings
     return {
@@ -107,9 +107,9 @@ def config_file_name(project_name: str, kind: str, now: datetime) -> str:
 
 
 def write_configs(
-    settings: TrainingSettings, paths: CitronPaths, now: datetime
+    settings: TrainingSettings, paths: RuntimePaths, now: datetime
 ) -> GeneratedConfigs:
-    """Write both TOML files into the Citron configs dir and create the output dir."""
+    """Write both TOML files into the configs dir of the data folder and create the output dir."""
     Path(settings.output_directory).mkdir(parents=True, exist_ok=True)
     paths.configs_dir.mkdir(parents=True, exist_ok=True)
     training = paths.configs_dir / config_file_name(settings.project_name, "training", now)

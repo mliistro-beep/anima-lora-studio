@@ -1,4 +1,4 @@
-"""Settings tab: the Citron folder to use and the state of its model files."""
+"""Settings tab: the app's data folder and the state of its model files."""
 
 from PySide6.QtCore import Signal
 from PySide6.QtWidgets import (
@@ -20,8 +20,8 @@ from anima_trainer.ui.widgets.progress_panel import download_text
 from anima_trainer.workflow.training_session import SessionState
 
 ROOT_HELP = (
-    "Folder of an installed Citron's Anima LoRA Trainer (with its .venv, sd-scripts and "
-    "models). Its config.json, configs and logs are shared with Citron."
+    "Folder where the app keeps its training runtime (.venv, sd-scripts), the models, "
+    "config.json, the generated configs and the training logs."
 )
 MODEL_COLUMNS = ("Model", "Status", "Path", "")
 PATH_COLUMN, ACTION_COLUMN = 2, 3
@@ -38,7 +38,7 @@ class SettingsTab(QWidget):
         self._present: frozenset[str] = frozenset()  # base models already downloaded
         self._idle = True
         self._can_download = False
-        self.root_picker = PathPicker("Citron folder", "folder")
+        self.root_picker = PathPicker("Data folder", "folder")
         self.apply_button = QPushButton("Apply")
         self.apply_button.clicked.connect(lambda: self.root_applied.emit(self.root_picker.path()))
         self.problems_label = QLabel()
@@ -66,7 +66,7 @@ class SettingsTab(QWidget):
         if problems:
             self.problems_label.setText("\n".join(f"ERROR: {p}" for p in problems))
         else:
-            self.problems_label.setText("OK: Citron installation found.")
+            self.problems_label.setText("OK: Training runtime installed.")
 
     def set_models(self, statuses: tuple[ModelStatus, ...]) -> None:
         self.models_table.setRowCount(len(statuses))
@@ -86,7 +86,7 @@ class SettingsTab(QWidget):
         self._update_buttons()
 
     def set_state(self, state: SessionState, can_download: bool) -> None:
-        """`can_download` is False when the Citron folder does not exist."""
+        """`can_download` is False when the data folder does not exist."""
         self._idle = state is SessionState.IDLE
         self._can_download = can_download
         self.root_picker.setEnabled(self._idle)
@@ -111,7 +111,7 @@ class SettingsTab(QWidget):
             button.setEnabled(allowed and base_model not in self._present)
 
     def _root_group(self) -> QGroupBox:
-        group = QGroupBox("Citron installation")
+        group = QGroupBox("Training runtime")
         layout = QVBoxLayout(group)
         help_label = QLabel(ROOT_HELP)
         help_label.setWordWrap(True)

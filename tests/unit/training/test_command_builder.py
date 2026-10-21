@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from anima_trainer.models.paths import CitronPaths
+from anima_trainer.runtime.paths import RuntimePaths
 from anima_trainer.training.command_builder import build_training_launch
 
 ROOT = Path("/home/user/citron-anima-lora-trainer-ui")
@@ -12,7 +12,7 @@ DATASET_TOML = ROOT / "configs/x_dataset.toml"
 
 def _launch(gpu_index="0", cpu_threads=1):
     return build_training_launch(
-        CitronPaths(ROOT, platform="posix"), TRAIN_TOML, DATASET_TOML, gpu_index, cpu_threads
+        RuntimePaths(ROOT, platform="posix"), TRAIN_TOML, DATASET_TOML, gpu_index, cpu_threads
     )
 
 
@@ -36,7 +36,7 @@ def test_arguments_match_citron_command():
     )
 
 
-def test_runs_from_citron_root_with_gpu_environment():
+def test_runs_from_the_data_dir_with_gpu_environment():
     launch = _launch(gpu_index="1")
 
     assert launch.working_dir == ROOT
@@ -57,7 +57,7 @@ def test_env_is_read_only():
 
 def test_display_is_shell_quoted():
     launch = build_training_launch(
-        CitronPaths(Path("/opt/my citron"), platform="posix"), TRAIN_TOML, DATASET_TOML, "0", 1
+        RuntimePaths(Path("/opt/my citron"), platform="posix"), TRAIN_TOML, DATASET_TOML, "0", 1
     )
 
     assert launch.display().startswith("'/opt/my citron/.venv/bin/accelerate' launch ")

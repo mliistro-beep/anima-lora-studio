@@ -12,7 +12,7 @@ from typing import Protocol
 
 from PySide6.QtCore import QObject, Signal, SignalInstance
 
-from anima_trainer.models.paths import CitronPaths
+from anima_trainer.runtime.paths import RuntimePaths
 from anima_trainer.settings.schema import TrainingSettings
 from anima_trainer.training.command_builder import LaunchSpec
 from anima_trainer.training.configure_service import ConfigureResult, configure_training
@@ -75,7 +75,7 @@ class TrainingSession(QObject):
 
     def __init__(
         self,
-        paths: CitronPaths,
+        paths: RuntimePaths,
         settings: TrainingSettings,
         runner: Runner,
         downloader: Downloader,
@@ -100,14 +100,14 @@ class TrainingSession(QObject):
         return self._state
 
     @property
-    def paths(self) -> CitronPaths:
+    def paths(self) -> RuntimePaths:
         return self._paths
 
     @property
     def settings(self) -> TrainingSettings:
         return self._settings
 
-    def set_citron(self, paths: CitronPaths, settings: TrainingSettings) -> None:
+    def set_runtime(self, paths: RuntimePaths, settings: TrainingSettings) -> None:
         self._require_idle()
         self._paths = paths
         self._settings = settings

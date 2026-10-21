@@ -2,7 +2,7 @@ import threading
 
 import pytest
 
-from anima_trainer.models.paths import CitronPaths
+from anima_trainer.runtime.paths import RuntimePaths
 from anima_trainer.system.gpu_info import FALLBACK_CHOICES
 from anima_trainer.system.gpu_worker import GpuDetector
 
@@ -20,7 +20,7 @@ def test_reports_detected_gpus_from_a_background_thread(qtbot, tmp_path):
     detector = GpuDetector(detect)
 
     with qtbot.waitSignal(detector.detected, timeout=TIMEOUT_MS) as blocker:
-        detector.start(CitronPaths(tmp_path / "citron"))
+        detector.start(RuntimePaths(tmp_path / "citron"))
 
     assert blocker.args == [("0: GPU in citron",)]
     assert seen_threads[0] is not threading.main_thread()
@@ -34,7 +34,7 @@ def test_unexpected_error_falls_back_to_citron_choices(qtbot, tmp_path):
     detector = GpuDetector(detect)
 
     with qtbot.waitSignal(detector.detected, timeout=TIMEOUT_MS) as blocker:
-        detector.start(CitronPaths(tmp_path))
+        detector.start(RuntimePaths(tmp_path))
 
     assert blocker.args == [FALLBACK_CHOICES]
 
@@ -50,9 +50,9 @@ def test_only_the_latest_detection_is_reported(qtbot, tmp_path):
     detector = GpuDetector(detect)
     results = []
     detector.detected.connect(results.append)
-    detector.start(CitronPaths(tmp_path / "first"))
+    detector.start(RuntimePaths(tmp_path / "first"))
     with qtbot.waitSignal(detector.detected, timeout=TIMEOUT_MS):
-        detector.start(CitronPaths(tmp_path / "second"))
+        detector.start(RuntimePaths(tmp_path / "second"))
 
     release_first.set()
     qtbot.waitUntil(lambda: not detector.is_running(), timeout=TIMEOUT_MS)
@@ -67,7 +67,7 @@ def test_detection_error_is_logged_and_reported(qtbot, tmp_path, caplog):
     detector = GpuDetector(detect)
 
     with qtbot.waitSignal(detector.warning, timeout=TIMEOUT_MS) as blocker:
-        detector.start(CitronPaths(tmp_path))
+        detector.start(RuntimePaths(tmp_path))
 
     assert "boom" in blocker.args[0]
     assert "boom" in caplog.text
@@ -82,7 +82,7 @@ def test_shutdown_waits_for_running_detection(qtbot, tmp_path):
         return ("0",)
 
     detector = GpuDetector(detect)
-    detector.start(CitronPaths(tmp_path))
+    detector.start(RuntimePaths(tmp_path))
 
     detector.shutdown()
 

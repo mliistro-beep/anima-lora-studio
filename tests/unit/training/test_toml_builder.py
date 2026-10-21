@@ -3,7 +3,7 @@ from pathlib import Path
 
 import toml
 
-from anima_trainer.models.paths import CitronPaths
+from anima_trainer.runtime.paths import RuntimePaths
 from anima_trainer.settings.store import load_settings
 from anima_trainer.training.toml_builder import (
     build_dataset_config,
@@ -23,7 +23,7 @@ def _golden_settings(citron_fixtures):
 
 def test_training_toml_is_identical_to_citron_output(citron_fixtures):
     config = build_training_config(
-        _golden_settings(citron_fixtures), CitronPaths(CITRON_ROOT), GOLDEN_TIME.date()
+        _golden_settings(citron_fixtures), RuntimePaths(CITRON_ROOT), GOLDEN_TIME.date()
     )
 
     assert render_toml(config) == (citron_fixtures / "golden_training.toml").read_text()
@@ -38,14 +38,14 @@ def test_dataset_toml_is_identical_to_citron_output(citron_fixtures):
 def test_training_config_uses_selected_base_model(citron_fixtures):
     settings = _golden_settings(citron_fixtures).with_changes(base_model="anima-preview")
 
-    config = build_training_config(settings, CitronPaths(CITRON_ROOT), GOLDEN_TIME.date())
+    config = build_training_config(settings, RuntimePaths(CITRON_ROOT), GOLDEN_TIME.date())
 
     assert config["pretrained_model_name_or_path"].endswith("dit/anima-preview.safetensors")
 
 
 def test_build_returns_independent_dicts(citron_fixtures):
     settings = _golden_settings(citron_fixtures)
-    paths = CitronPaths(CITRON_ROOT)
+    paths = RuntimePaths(CITRON_ROOT)
 
     first = build_training_config(settings, paths, GOLDEN_TIME.date())
     first["optimizer_args"].append("mutated")
@@ -64,7 +64,7 @@ def test_config_file_name_matches_citron_pattern():
 def test_write_configs_creates_both_files_and_output_dir(tmp_path, citron_fixtures):
     output_dir = tmp_path / "out" / "lora"
     settings = _golden_settings(citron_fixtures).with_changes(output_directory=str(output_dir))
-    paths = CitronPaths(tmp_path / "citron")
+    paths = RuntimePaths(tmp_path / "citron")
 
     generated = write_configs(settings, paths, GOLDEN_TIME)
 

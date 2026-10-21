@@ -10,7 +10,7 @@ from pathlib import Path
 
 from anima_trainer.dataset.step_estimator import StepEstimate, estimate_steps
 from anima_trainer.dataset.validator import DatasetError, DatasetReport, validate_dataset
-from anima_trainer.models.paths import CitronPaths
+from anima_trainer.runtime.paths import RuntimePaths
 from anima_trainer.settings.schema import TrainingSettings
 from anima_trainer.settings.store import save_settings
 from anima_trainer.training.toml_builder import GeneratedConfigs, write_configs
@@ -30,7 +30,7 @@ class ConfigureResult:
 
 
 def configure_training(
-    settings: TrainingSettings, paths: CitronPaths, now: datetime
+    settings: TrainingSettings, paths: RuntimePaths, now: datetime
 ) -> ConfigureResult:
     missing = settings.missing_required_fields()
     if missing:
@@ -71,7 +71,7 @@ def configure_training(
 
 def _generate(
     settings: TrainingSettings,
-    paths: CitronPaths,
+    paths: RuntimePaths,
     now: datetime,
     messages: tuple[str, ...],
     report: DatasetReport,
@@ -100,8 +100,8 @@ def _generate(
     return ConfigureResult(True, messages, updated, configs, report, estimate)
 
 
-def _with_resolved_paths(settings: TrainingSettings, paths: CitronPaths) -> TrainingSettings:
-    """Make relative folders absolute against the Citron root, where sd-scripts runs.
+def _with_resolved_paths(settings: TrainingSettings, paths: RuntimePaths) -> TrainingSettings:
+    """Make relative folders absolute against the data folder, where sd-scripts runs.
 
     Absolute paths are kept verbatim (including a trailing slash) so TOMLs match Citron's.
     """
@@ -153,7 +153,7 @@ def _estimate_lines(
 
 
 def _model_lines(
-    settings: TrainingSettings, paths: CitronPaths, missing: tuple[str, ...]
+    settings: TrainingSettings, paths: RuntimePaths, missing: tuple[str, ...]
 ) -> tuple[str, ...]:
     dit = paths.dit_model(settings.base_model)
     dit_lines = (

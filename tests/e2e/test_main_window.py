@@ -6,7 +6,7 @@ import pytest
 from PySide6.QtCore import QSettings
 from PySide6.QtWidgets import QMessageBox
 
-from anima_trainer.settings.citron_root import load_citron_root, open_citron_root
+from anima_trainer.runtime.data_dir import load_data_dir, open_data_dir
 from anima_trainer.settings.store import load_settings
 from anima_trainer.system.gpu_worker import GpuDetector
 from anima_trainer.training.log_parser import EpochStarted
@@ -21,12 +21,13 @@ TIMEOUT_MS = 5000
 GPUS = ("0: NVIDIA A", "1: NVIDIA B")
 
 
-def _make_citron(root, dataset, config=None):
-    opened = open_citron_root(root)
+def _make_runtime(root, dataset, config=None):
+    opened = open_data_dir(root)
     paths = opened.paths
     for file in (
         paths.train_script,
         paths.venv_accelerate,
+        paths.accelerate_config_file,
         paths.qwen3_model,
         paths.vae_model,
         paths.dit_model("anima-base-v1.0"),
@@ -59,7 +60,7 @@ def dataset(tmp_path):
 def make_window(qtbot, tmp_path):
     def build(root, detect=lambda _paths: GPUS):
         store = QSettings(str(tmp_path / "app.ini"), QSettings.Format.IniFormat)
-        opened = open_citron_root(root)
+        opened = open_data_dir(root)
         runner, downloader = FakeRunner(), FakeDownloader()
         session = TrainingSession(
             opened.paths,
@@ -78,10 +79,10 @@ def make_window(qtbot, tmp_path):
     return build
 
 
-def test_window_has_citron_tabs_and_saved_values(make_window, tmp_path, dataset):
-    _make_citron(tmp_path / "citron", dataset)
+def test_window_has_the_three_tabs_and_saved_values(make_window, tmp_path, dataset):
+    _make_runtime(tmp_path / "data", dataset)
 
-    window, *_ = make_window(tmp_path / "citron")
+    window, *_ = make_window(tmp_path / "data")
 
     titles = [window.tabs.tabText(i) for i in range(window.tabs.count())]
     assert titles == ["Training", "Advanced Settings", "Settings"]
@@ -91,24 +92,24 @@ def test_window_has_citron_tabs_and_saved_values(make_window, tmp_path, dataset)
 
 
 def test_detected_gpus_select_the_saved_index(make_window, tmp_path, dataset):
-    _make_citron(tmp_path / "citron", dataset)
+    _make_runtime(tmp_path / "data", dataset)
 
-    window, *_ = make_window(tmp_path / "citron")
+    window, *_ = make_window(tmp_path / "data")
 
     assert window.training_tab.form.field_widget("gpu_index").currentText() == "1: NVIDIA B"
 
 
-def test_missing_root_opens_settings_and_blocks_training(make_window, tmp_path):
+def test_missing_data_dir_opens_settings_and_blocks_training(make_window, tmp_path):
     window, *_ = make_window(tmp_path / "missing")
 
     assert window.tabs.currentWidget() is window.settings_tab
     assert not window.training_tab.configure_button.isEnabled()
     assert not window.training_tab.start_button.isEnabled()
-    assert "does not exist" in window.settings_tab.problems_label.text()
+    assert "not installed" in window.settings_tab.problems_label.text()
 
 
 def test_configure_writes_tomls_and_saves_form_values(make_window, tmp_path, dataset):
-    paths = _make_citron(tmp_path / "citron", dataset)
+    paths = _make_runtime(tmp_path / "data", dataset)
     window, *_ = make_window(paths.root)
     window.training_tab.form.field_widget("network_dim").setValue(8)
 
@@ -121,7 +122,7 @@ def test_configure_writes_tomls_and_saves_form_values(make_window, tmp_path, dat
 
 
 def test_invalid_form_value_is_reported_without_configuring(make_window, tmp_path, dataset):
-    paths = _make_citron(tmp_path / "citron", dataset)
+    paths = _make_runtime(tmp_path / "data", dataset)
     window, *_ = make_window(paths.root)
     window.training_tab.form.field_widget("learning_rate").setText("abc")
 
@@ -132,7 +133,7 @@ def test_invalid_form_value_is_reported_without_configuring(make_window, tmp_pat
 
 
 def _configured_window(make_window, tmp_path, dataset):
-    paths = _make_citron(tmp_path / "citron", dataset)
+    paths = _make_runtime(tmp_path / "data", dataset)
     window, runner, downloader, store = make_window(paths.root)
     window.training_tab.configure_button.click()
     return window, runner, downloader, paths
@@ -172,21 +173,21 @@ def test_stop_button_stops_the_run(make_window, tmp_path, dataset):
     assert window.session.state is SessionState.STOPPING
 
 
-def test_apply_root_saves_it_and_reloads_settings(make_window, tmp_path, dataset):
-    _make_citron(tmp_path / "citron", dataset)
-    other = _make_citron(tmp_path / "other", dataset, {"project_name": "other_proj"})
-    window, _, _, store = make_window(tmp_path / "citron")
+def test_apply_data_dir_saves_it_and_reloads_settings(make_window, tmp_path, dataset):
+    _make_runtime(tmp_path / "data", dataset)
+    other = _make_runtime(tmp_path / "other", dataset, {"project_name": "other_proj"})
+    window, _, _, store = make_window(tmp_path / "data")
 
     window.settings_tab.root_picker.set_path(str(other.root))
     window.settings_tab.apply_button.click()
 
-    assert load_citron_root(store, candidates=()) == other.root
+    assert load_data_dir(store, default=Path("unused")) == other.root
     assert window.session.paths == other
     assert window.training_tab.form.values()["project_name"] == "other_proj"
 
 
 def test_download_button_downloads_missing_dit(make_window, tmp_path, dataset):
-    paths = _make_citron(tmp_path / "citron", dataset)
+    paths = _make_runtime(tmp_path / "data", dataset)
     window, _, downloader, _ = make_window(paths.root)
 
     window.settings_tab.download_buttons["anima-preview"].click()
@@ -198,9 +199,9 @@ def test_download_button_downloads_missing_dit(make_window, tmp_path, dataset):
 
 
 def test_present_dit_cannot_be_downloaded_again(make_window, tmp_path, dataset):
-    _make_citron(tmp_path / "citron", dataset)
+    _make_runtime(tmp_path / "data", dataset)
 
-    window, *_ = make_window(tmp_path / "citron")
+    window, *_ = make_window(tmp_path / "data")
 
     assert not window.settings_tab.download_buttons["anima-base-v1.0"].isEnabled()
 
@@ -226,8 +227,8 @@ def test_close_while_training_shuts_down_when_confirmed(
 
 
 def test_close_when_idle_does_not_ask(make_window, tmp_path, dataset, monkeypatch):
-    _make_citron(tmp_path / "citron", dataset)
-    window, runner, _, _ = make_window(tmp_path / "citron")
+    _make_runtime(tmp_path / "data", dataset)
+    window, runner, _, _ = make_window(tmp_path / "data")
 
     def fail(*args, **kwargs):
         raise AssertionError("should not ask")
@@ -249,8 +250,8 @@ def test_start_ignores_invalid_fields_it_does_not_use(make_window, tmp_path, dat
 
 
 def test_progress_panel_is_reset_when_a_download_ends(make_window, tmp_path, dataset):
-    _make_citron(tmp_path / "citron", dataset)
-    window, _, downloader, _ = make_window(tmp_path / "citron")
+    _make_runtime(tmp_path / "data", dataset)
+    window, _, downloader, _ = make_window(tmp_path / "data")
     window.settings_tab.download_buttons["anima-preview"].click()
     downloader.progress.emit(10, None)
 
@@ -261,26 +262,26 @@ def test_progress_panel_is_reset_when_a_download_ends(make_window, tmp_path, dat
     assert panel.bar.maximum() > 0
 
 
-def test_downloads_are_disabled_without_a_citron_folder(make_window, tmp_path):
+def test_downloads_are_disabled_without_a_data_folder(make_window, tmp_path):
     window, *_ = make_window(tmp_path / "missing")
 
     assert not any(button.isEnabled() for button in window.settings_tab.download_buttons.values())
 
 
 def test_gpu_detection_failure_is_shown(make_window, tmp_path, dataset):
-    _make_citron(tmp_path / "citron", dataset)
+    _make_runtime(tmp_path / "data", dataset)
 
     def broken(_paths):
         raise ValueError("no torch")
 
-    window, *_ = make_window(tmp_path / "citron", detect=broken)
+    window, *_ = make_window(tmp_path / "data", detect=broken)
 
     assert "WARN: GPU detection failed" in window.training_tab.status.text()
 
 
 def test_shutdown_runs_once(make_window, tmp_path, dataset):
-    _make_citron(tmp_path / "citron", dataset)
-    window, runner, downloader, _ = make_window(tmp_path / "citron")
+    _make_runtime(tmp_path / "data", dataset)
+    window, runner, downloader, _ = make_window(tmp_path / "data")
 
     window.shutdown()
     window.shutdown()

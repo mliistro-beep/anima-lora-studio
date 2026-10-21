@@ -5,16 +5,16 @@ from collections.abc import Callable
 
 from PySide6.QtCore import QObject, QThread, Signal
 
-from anima_trainer.models.paths import CitronPaths
+from anima_trainer.runtime.paths import RuntimePaths
 from anima_trainer.system.gpu_info import FALLBACK_CHOICES, detect_gpus
 
-Detect = Callable[[CitronPaths], tuple[str, ...]]
+Detect = Callable[[RuntimePaths], tuple[str, ...]]
 
 _LOG = logging.getLogger(__name__)
 
 
 class _DetectThread(QThread):
-    def __init__(self, paths: CitronPaths, detect: Detect) -> None:
+    def __init__(self, paths: RuntimePaths, detect: Detect) -> None:
         super().__init__()
         self._paths = paths
         self._detect = detect
@@ -49,7 +49,7 @@ class GpuDetector(QObject):
     def is_running(self) -> bool:
         return bool(self._threads)
 
-    def start(self, paths: CitronPaths) -> None:
+    def start(self, paths: RuntimePaths) -> None:
         thread = _DetectThread(paths, self._detect)
         thread.finished.connect(lambda: self._on_done(thread))
         self._latest = thread

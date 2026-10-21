@@ -3,7 +3,7 @@ from datetime import datetime
 import pytest
 
 from anima_trainer.models.catalog import BASE_MODEL_URLS
-from anima_trainer.models.paths import CitronPaths
+from anima_trainer.runtime.paths import RuntimePaths
 from anima_trainer.settings.schema import TrainingSettings
 from anima_trainer.training.start_service import StartRequest, dit_download, plan_start
 
@@ -12,7 +12,7 @@ NOW = datetime(2026, 10, 20, 9, 15, 0)
 
 @pytest.fixture
 def citron(tmp_path):
-    paths = CitronPaths(tmp_path / "citron")
+    paths = RuntimePaths(tmp_path / "citron")
     paths.train_script.parent.mkdir(parents=True)
     paths.train_script.write_text("")
     return paths
@@ -66,7 +66,7 @@ def test_custom_config_overrides_the_last_training_config(citron, configured, tm
     assert configured.last_train_config not in plan.spec.arguments
 
 
-def test_relative_custom_config_is_checked_against_the_citron_root(citron, configured):
+def test_relative_custom_config_is_checked_against_the_data_dir(citron, configured):
     (citron.root / "mine.toml").write_text("")
 
     plan = plan_start(configured, citron, _request(custom_config="mine.toml"), NOW)

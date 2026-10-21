@@ -1,7 +1,7 @@
 import subprocess
 from pathlib import Path
 
-from anima_trainer.models.paths import CitronPaths
+from anima_trainer.runtime.paths import RuntimePaths
 from anima_trainer.system.gpu_info import (
     FALLBACK_CHOICES,
     NO_CUDA_CHOICE,
@@ -10,7 +10,7 @@ from anima_trainer.system.gpu_info import (
     parse_torch_output,
 )
 
-PATHS = CitronPaths(Path("/opt/citron"), platform="posix")
+PATHS = RuntimePaths(Path("/opt/citron"), platform="posix")
 
 
 def _runner(outputs):
@@ -85,8 +85,8 @@ def test_detect_returns_citron_fallback_when_nothing_works():
     assert FALLBACK_CHOICES == ("0", "1")
 
 
-def test_missing_citron_root_does_not_break_nvidia_smi(tmp_path):
-    paths = CitronPaths(tmp_path / "does-not-exist", platform="posix")
+def test_missing_data_dir_does_not_break_nvidia_smi(tmp_path):
+    paths = RuntimePaths(tmp_path / "does-not-exist", platform="posix")
     seen_cwds = []
 
     def run(cmd, **kwargs):
