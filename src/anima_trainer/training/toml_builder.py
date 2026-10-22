@@ -25,10 +25,14 @@ class GeneratedConfigs:
 
 
 def build_training_config(
-    settings: TrainingSettings, paths: RuntimePaths, today: date
+    settings: TrainingSettings,
+    paths: RuntimePaths,
+    today: date,
+    single_process_loader: bool = False,
 ) -> dict[str, Any]:
+    """Citron's training config; single_process_loader adds the Python 3.14 workaround."""
     s = settings
-    return {
+    config = {
         "pretrained_model_name_or_path": str(paths.dit_model(s.base_model)),
         "qwen3": str(paths.qwen3_model),
         "vae": str(paths.vae_model),
@@ -69,6 +73,9 @@ def build_training_config(
         "multires_noise_discount": s.multires_noise_discount,
         "training_comment": f"Anima LoRA - {today.isoformat()}",
     }
+    if single_process_loader:
+        return {**config, "max_data_loader_n_workers": 0}
+    return config
 
 
 def build_dataset_config(settings: TrainingSettings) -> dict[str, Any]:
@@ -107,7 +114,10 @@ def config_file_name(project_name: str, kind: str, now: datetime) -> str:
 
 
 def write_configs(
-    settings: TrainingSettings, paths: RuntimePaths, now: datetime
+    settings: TrainingSettings,
+    paths: RuntimePaths,
+    now: datetime,
+    single_process_loader: bool = False,
 ) -> GeneratedConfigs:
     """Write both TOML files into the configs dir of the data folder and create the output dir."""
     Path(settings.output_directory).mkdir(parents=True, exist_ok=True)
@@ -115,7 +125,8 @@ def write_configs(
     training = paths.configs_dir / config_file_name(settings.project_name, "training", now)
     dataset = paths.configs_dir / config_file_name(settings.project_name, "dataset", now)
     training.write_text(
-        render_toml(build_training_config(settings, paths, now.date())), encoding="utf-8"
+        render_toml(build_training_config(settings, paths, now.date(), single_process_loader)),
+        encoding="utf-8",
     )
     dataset.write_text(render_toml(build_dataset_config(settings)), encoding="utf-8")
     return GeneratedConfigs(training, dataset)

@@ -1,7 +1,9 @@
 import json
+import os
 from datetime import datetime
 
 import pytest
+import toml
 
 from anima_trainer.runtime.paths import RuntimePaths
 from anima_trainer.settings.schema import TrainingSettings
@@ -200,3 +202,29 @@ def test_absolute_paths_are_kept_verbatim(citron, dataset, tmp_path):
     result = configure_training(_settings(dataset, tmp_path, output_directory=output), citron, NOW)
 
     assert result.settings.output_directory == output
+
+
+def _venv_with_version(paths, version):
+    paths.venv_dir.mkdir(parents=True, exist_ok=True)
+    (paths.venv_dir / "pyvenv.cfg").write_text(f"version = {version}\n", encoding="utf-8")
+
+
+@pytest.mark.skipif(os.name == "nt", reason="forkserver default only applies to POSIX")
+def test_python_314_venv_disables_dataloader_workers(citron, dataset, tmp_path):
+    _venv_with_version(citron, "3.14.4")
+
+    result = configure_training(_settings(dataset, tmp_path), citron, NOW)
+
+    written = toml.loads(result.configs.training.read_text())
+    assert written["max_data_loader_n_workers"] == 0
+    assert "DataLoader workers disabled" in _text(result)
+
+
+def test_older_venv_keeps_citron_toml(citron, dataset, tmp_path):
+    _venv_with_version(citron, "3.12.3")
+
+    result = configure_training(_settings(dataset, tmp_path), citron, NOW)
+
+    written = toml.loads(result.configs.training.read_text())
+    assert "max_data_loader_n_workers" not in written
+    assert "DataLoader workers disabled" not in _text(result)

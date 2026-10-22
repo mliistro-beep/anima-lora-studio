@@ -11,11 +11,16 @@ from pathlib import Path
 from anima_trainer.dataset.step_estimator import StepEstimate, estimate_steps
 from anima_trainer.dataset.validator import DatasetError, DatasetReport, validate_dataset
 from anima_trainer.runtime.paths import RuntimePaths
+from anima_trainer.runtime.venv_info import needs_single_process_loader, read_venv_version
 from anima_trainer.settings.schema import TrainingSettings
 from anima_trainer.settings.store import save_settings
 from anima_trainer.training.toml_builder import GeneratedConfigs, write_configs
 
 MAX_LISTED_MISSING = 20
+SINGLE_PROCESS_LOADER_NOTE = (
+    "  INFO: Python {version} venv: DataLoader workers disabled "
+    "(max_data_loader_n_workers = 0) to avoid 'too many fds'."
+)
 RULE = "-" * 54
 
 
@@ -78,8 +83,13 @@ def _generate(
     estimate: StepEstimate,
 ) -> ConfigureResult:
     messages = (*messages, "", "Generating TOML configs...")
+    venv_version = read_venv_version(paths.venv_dir)
+    single_process_loader = needs_single_process_loader(venv_version)
+    if single_process_loader:
+        version_text = ".".join(map(str, venv_version))
+        messages = (*messages, SINGLE_PROCESS_LOADER_NOTE.format(version=version_text))
     try:
-        configs = write_configs(settings, paths, now)
+        configs = write_configs(settings, paths, now, single_process_loader)
     except OSError as error:
         failure = (*messages, f"ERROR: Failed to generate configs: {error}")
         return ConfigureResult(False, failure, settings, dataset=report, estimate=estimate)

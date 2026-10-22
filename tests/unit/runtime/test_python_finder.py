@@ -95,3 +95,19 @@ def test_undecodable_output_does_not_stop_the_search():
     find_python(which=which, run=run)
 
     assert run.kwargs[0]["errors"] == "replace"
+
+
+def test_python_with_forkserver_default_is_only_a_fallback():
+    # Python 3.14 breaks sd-scripts' DataLoader workers ("too many fds"), so an older
+    # interpreter wins even when the generic `python3` name comes first.
+    which, run, _ = _system({"python3": (0, "3.14\n"), "python": (0, "3.13\n")})
+
+    assert find_python(which=which, run=run) == PythonInterpreter("/usr/bin/python", (3, 13))
+
+
+def test_preferred_python_stops_the_search():
+    which, run, calls = _system({"python3.12": (0, "3.12\n"), "python3": (0, "3.12\n")})
+
+    find_python(which=which, run=run)
+
+    assert len(calls) == 1

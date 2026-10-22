@@ -10,7 +10,8 @@ paths.py     RuntimePaths(root, platform): config/configs/logs/models/scripts/ve
 data_dir.py  default_data_dir(), load_data_dir(store, default), save_data_dir(store, dir) (OSError),
              runtime_problems(paths), open_data_dir(dir) -> OpenedRuntime(paths, settings, warnings, problems)
 accelerate_config.py ACCELERATE_GPU_YAML (Citron's file), write_accelerate_config(paths) -> Path
-python_finder.py find_python(which, run) -> PythonInterpreter(path, version)|None (>=3.10, venv+ensurepip)
+python_finder.py find_python(which, run) -> PythonInterpreter(path, version)|None (>=3.10, venv+ensurepip; >=3.14 only as fallback)
+venv_info.py     read_venv_version(venv_dir) -> (major, minor)|None; needs_single_process_loader(version, platform)
 install_plan.py  plan_install(paths, python, git) -> InstallPlan(steps, problems, ready); InstallStep(key, title,
                  command, working_dir, marker, action); SD_SCRIPTS_COMMIT pinned; markers in <data>/.install:
                  sd_scripts_marker, requirements_marker, verified_marker
@@ -34,7 +35,7 @@ download_worker.py ModelDownloader(QObject): start/cancel/shutdown; signals prog
 
 ## training/
 toml_builder.py      build_training_config, build_dataset_config, render_toml, config_file_name, write_configs
-configure_service.py configure_training(settings, paths, now) -> ConfigureResult
+configure_service.py configure_training(settings, paths, now) -> ConfigureResult (3.14+ venv: max_data_loader_n_workers = 0)
 start_service.py     StartRequest, dit_download(paths, base) -> DitDownload|None, plan_start(...) -> StartPlan
 command_builder.py   build_training_launch(...) -> LaunchSpec(program, arguments, env, working_dir)
 runner.py            TrainingRunner(QObject): start/stop/shutdown/log_tail; signals line_received,

@@ -76,3 +76,22 @@ def test_write_configs_creates_both_files_and_output_dir(tmp_path, citron_fixtur
     assert generated.dataset.parent == paths.configs_dir
     assert toml.loads(generated.training.read_text())["output_dir"] == str(output_dir)
     assert toml.loads(generated.dataset.read_text())["general"]["resolution"] == 768
+
+
+def test_single_process_loader_disables_dataloader_workers(citron_fixtures):
+    config = build_training_config(
+        _golden_settings(citron_fixtures),
+        RuntimePaths(CITRON_ROOT),
+        GOLDEN_TIME.date(),
+        single_process_loader=True,
+    )
+
+    assert config["max_data_loader_n_workers"] == 0
+
+
+def test_dataloader_workers_are_left_to_sd_scripts_by_default(citron_fixtures):
+    config = build_training_config(
+        _golden_settings(citron_fixtures), RuntimePaths(CITRON_ROOT), GOLDEN_TIME.date()
+    )
+
+    assert "max_data_loader_n_workers" not in config
