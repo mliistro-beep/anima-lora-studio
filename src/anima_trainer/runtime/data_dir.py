@@ -39,6 +39,15 @@ def save_data_dir(store: QSettings, data_dir: Path) -> None:
         raise OSError(f"The data folder could not be saved to {store.fileName()}")
 
 
+def data_dir_problem(data_dir: Path) -> str | None:
+    """Why `data_dir` cannot be a data folder: None for a folder or a path that can be created."""
+    # The nearest part that exists decides: the rest of the path can be created under it.
+    existing = next((part for part in (data_dir, *data_dir.parents) if part.exists()), None)
+    if existing is None or existing.is_dir():
+        return None
+    return f"Not a folder: {existing}"
+
+
 def runtime_problems(paths: RuntimePaths) -> tuple[str, ...]:
     """Why this folder cannot be used to train yet; empty when the runtime is installed."""
     if not paths.root.is_dir():

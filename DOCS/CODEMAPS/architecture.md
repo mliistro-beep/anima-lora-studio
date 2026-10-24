@@ -20,7 +20,8 @@ models/    base model catalog, model status, downloader (+ QThread worker)
 training/  TOML builder, configure/start services, accelerate command, QProcess runner, log parser,
            progress state, outcome report, OOM hint
 system/    GPU detection (+ QThread worker), dropdown parsing, process groups
-workflow/  TrainingSession: Configure / DiT download / Start / Stop state machine
+workflow/  TrainingSession: Configure / model download / Start / Stop state machine;
+           InstallSession: plan, run and log the runtime install
 ui/        MainWindow, tabs (training, advanced, settings), widgets
 preview/   (M5, empty)
 

@@ -3,6 +3,7 @@
 from dataclasses import dataclass
 from pathlib import Path
 
+from anima_trainer.models.catalog import QWEN3_FILENAME, VAE_FILENAME
 from anima_trainer.runtime.paths import RuntimePaths
 from anima_trainer.settings.choices import BASE_MODELS
 
@@ -12,13 +13,12 @@ class ModelStatus:
     label: str
     path: Path
     present: bool
-    base_model: str | None  # set for DiT models, which can be downloaded
+    download_key: str  # for model_download(): the base model name or the file name
 
 
 def model_statuses(paths: RuntimePaths) -> tuple[ModelStatus, ...]:
-    required = tuple(
-        ModelStatus(label, path, path.exists(), None) for label, path in paths.required_models()
-    )
+    support = (("Qwen3", paths.qwen3_model, QWEN3_FILENAME), ("VAE", paths.vae_model, VAE_FILENAME))
+    required = tuple(ModelStatus(label, path, path.exists(), key) for label, path, key in support)
     dits = tuple(
         ModelStatus(f"DiT {name}", paths.dit_model(name), paths.dit_model(name).exists(), name)
         for name in BASE_MODELS

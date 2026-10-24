@@ -3,6 +3,7 @@ from PySide6.QtCore import QSettings
 
 from anima_trainer.runtime.data_dir import (
     DATA_DIR_KEY,
+    data_dir_problem,
     default_data_dir,
     load_data_dir,
     open_data_dir,
@@ -113,3 +114,16 @@ def test_open_missing_data_dir_uses_defaults_and_reports_problem(tmp_path):
     assert opened.settings == TrainingSettings()
     assert opened.warnings == ()
     assert "not installed" in opened.problems[0]
+
+
+def test_a_new_or_existing_folder_can_be_a_data_folder(tmp_path):
+    assert data_dir_problem(tmp_path) is None
+    assert data_dir_problem(tmp_path / "new" / "nested") is None
+
+
+def test_a_file_or_a_path_below_a_file_cannot(tmp_path):
+    a_file = tmp_path / "a_file"
+    a_file.write_text("")
+
+    assert data_dir_problem(a_file) == f"Not a folder: {a_file}"
+    assert data_dir_problem(a_file / "sub") == f"Not a folder: {a_file}"

@@ -1,4 +1,4 @@
-<!-- Generated: 2026-10-24 | Files scanned: 110 (53 src, 57 tests) | Token estimate: ~700 -->
+<!-- Generated: 2026-10-24 | Files scanned: 117 (56 src, 61 tests) | Token estimate: ~700 -->
 # Backend (core and services)
 
 No HTTP API: "backend" = non-UI modules called by the Qt UI. Public surface only.
@@ -8,6 +8,7 @@ paths.py     RuntimePaths(root, platform): config/configs/logs/models/scripts/ve
              accelerate_config (relative) / accelerate_config_file, dit_model(base),
              required_models(), missing_required_models(), resolve(user_path)
 data_dir.py  default_data_dir(), load_data_dir(store, default), save_data_dir(store, dir) (OSError),
+             data_dir_problem(dir) -> str|None (a file, or a path below a file),
              runtime_problems(paths), open_data_dir(dir) -> OpenedRuntime(paths, settings, warnings, problems)
 accelerate_config.py ACCELERATE_GPU_YAML (Citron's file), write_accelerate_config(paths) -> Path
 python_finder.py find_python(which, run) -> PythonInterpreter(path, version)|None (>=3.10, venv+ensurepip; >=3.14 only as fallback)
@@ -31,7 +32,9 @@ step_estimator.py estimate_steps(images, repeats, batch, accum, epochs) -> StepE
 
 ## models/
 catalog.py         BASE_MODEL_URLS, QWEN3_FILENAME, VAE_FILENAME, SUPPORT_MODEL_URLS (by file name), dit_filename(base)
-status.py          model_statuses(paths) -> tuple[ModelStatus(label, path, present, base_model)]
+status.py          model_statuses(paths) -> tuple[ModelStatus(label, path, present, download_key)]
+model_downloads.py model_download(paths, key) -> ModelDownload(description, url, destination)|None
+                   (key: base model name for a DiT, file name for Qwen3 / VAE)
 downloader.py      download_file(url, dest, on_progress, is_cancelled) -> Path; DownloadError, DownloadCancelled
 download_worker.py ModelDownloader(QObject): start/cancel/shutdown; signals progress, finished, failed, cancelled
 
@@ -51,11 +54,16 @@ oom_hint.py          oom_hint(exit_code, log_tail, kernel_log, crashed) -> str|N
 gpu_info.py   detect_gpus(paths, run) -> tuple[str] (training venv torch -> nvidia-smi -> ("0","1"))
 gpu_worker.py GpuDetector(detect): start(paths)/shutdown; signals detected(choices), warning
 gpu_choice.py gpu_index_from_choice(label) -> "N"; choice_for_index(choices, saved)
-process_group.py use_own_session(process), terminate_group(process), kill_group(process) (runner + installer)
+process_group.py use_own_session(process), terminate_group(process), kill_group(process),
+                 KILL_GRACE_MS, SHUTDOWN_KILL_WAIT_MS (runner + installer)
+process_output.py split_lines(pending, data) -> (lines, rest)
 
 ## workflow/
 training_session.py TrainingSession(paths, settings, runner, downloader): configure, start, download_model,
-                    stop, shutdown, set_runtime; signals state_changed, log_line, progress_changed, ...
+                    stop, shutdown, set_runtime; signals state_changed, log_line, progress_changed, ...;
+                    download_model(key) also fetches Qwen3 / VAE
+install_session.py InstallSession(installer, plan=plan_for): start(paths) -> problems, cancel, shutdown;
+                   signals log_line, step_changed, finished(ok, message); log <data>/logs/install_<ts>.log
 
 ## Largest files
-workflow/training_session.py 245 | training/runner.py 217 | runtime/installer.py 205 | ui/main_window.py 172
+workflow/training_session.py 243 | ui/main_window.py 228 | training/runner.py 212 | runtime/installer.py 205

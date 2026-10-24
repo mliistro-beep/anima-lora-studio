@@ -12,6 +12,7 @@ from typing import Protocol
 
 from PySide6.QtCore import QObject, Signal, SignalInstance
 
+from anima_trainer.models.model_downloads import ModelDownload, model_download
 from anima_trainer.runtime.paths import RuntimePaths
 from anima_trainer.settings.schema import TrainingSettings
 from anima_trainer.training.command_builder import LaunchSpec
@@ -21,12 +22,7 @@ from anima_trainer.training.oom_hint import oom_hint, read_kernel_log
 from anima_trainer.training.outcome_report import outcome_messages, run_failed
 from anima_trainer.training.progress import ProgressState, apply_event
 from anima_trainer.training.runner import RunOutcome
-from anima_trainer.training.start_service import (
-    DitDownload,
-    StartRequest,
-    dit_download,
-    plan_start,
-)
+from anima_trainer.training.start_service import StartRequest, dit_download, plan_start
 
 
 class SessionState(Enum):
@@ -128,13 +124,15 @@ class TrainingSession(QObject):
             self._launch(request)
             return
         self._pending = request
-        self._begin_download(request.base_model, download)
+        description = f"base model '{request.base_model}'"
+        self._begin_download(ModelDownload(description, download.url, download.destination))
 
-    def download_model(self, base_model: str) -> None:
+    def download_model(self, key: str) -> None:
+        """Download a missing model by its key (base model name, or Qwen3 / VAE file name)."""
         self._require_idle()
-        download = dit_download(self._paths, base_model)
+        download = model_download(self._paths, key)
         if download is not None:
-            self._begin_download(base_model, download)
+            self._begin_download(download)
 
     def stop(self) -> None:
         if self._state is SessionState.DOWNLOADING:
@@ -161,9 +159,9 @@ class TrainingSession(QObject):
         self._downloader.failed.connect(self._on_download_failed)
         self._downloader.cancelled.connect(self._on_download_cancelled)
 
-    def _begin_download(self, base_model: str, download: DitDownload) -> None:
+    def _begin_download(self, download: ModelDownload) -> None:
         self._log(
-            f"INFO: Downloading base model '{base_model}'...",
+            f"INFO: Downloading {download.description}...",
             "   This may take a few minutes. Future runs will skip this step.",
             f"   Destination: {download.destination}",
             "",

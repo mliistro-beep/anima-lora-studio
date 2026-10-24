@@ -11,12 +11,14 @@ from PySide6.QtWidgets import QMessageBox
 
 from anima_trainer.models.download_worker import ModelDownloader
 from anima_trainer.runtime.data_dir import open_data_dir
+from anima_trainer.runtime.installer import RuntimeInstaller
 from anima_trainer.settings.schema import TrainingSettings
 from anima_trainer.settings.store import save_settings
 from anima_trainer.system.gpu_worker import GpuDetector
 from anima_trainer.training.runner import TrainingRunner
 from anima_trainer.training.start_service import StartRequest
 from anima_trainer.ui.main_window import MainWindow
+from anima_trainer.workflow.install_session import InstallSession
 from anima_trainer.workflow.training_session import SessionState, TrainingSession
 from tests.process_helpers import wait_until_dead
 
@@ -80,7 +82,9 @@ def test_closing_the_window_kills_the_training_child(qtbot, tmp_path, monkeypatc
         paths, settings, TrainingRunner(), ModelDownloader(), clock=lambda: datetime(2026, 1, 1)
     )
     store = QSettings(str(tmp_path / "app.ini"), QSettings.Format.IniFormat)
-    window = MainWindow(session, GpuDetector(lambda _p: ("0",)), store, open_data_dir(paths.root))
+    install = InstallSession(RuntimeInstaller())
+    detector = GpuDetector(lambda _p: ("0",))
+    window = MainWindow(session, detector, store, open_data_dir(paths.root), install)
     qtbot.addWidget(window)
     window.training_tab.configure_button.click()
     window.training_tab.start_button.click()

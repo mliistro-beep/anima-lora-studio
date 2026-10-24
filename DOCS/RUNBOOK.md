@@ -4,10 +4,9 @@ Operating the Anima LoRA Trainer desktop app on a workstation. It is a local des
 app, not a service: there are no servers, health endpoints or alerting.
 
 Current state: the training UI (M3) is done and was verified with a real run. M4 (the
-app's own training runtime, independent of Citron) is in progress: the app already uses
-its own data folder and the installer that runs the install steps exists, but the Settings
-tab does not start it yet (Install / Repair button), so until then the app reports
-"Training runtime not installed" and cannot train. See [milestones.md](milestones.md).
+app's own training runtime, independent of Citron) is in progress: the app uses its own
+data folder and installs the training runtime from the Settings tab. Still to do for M4:
+a fresh install followed by a real training run (the exit criterion). See [milestones.md](milestones.md).
 
 ## Install and launch
 
@@ -19,9 +18,13 @@ tab does not start it yet (Install / Repair button), so until then the app repor
    ```
 
 2. Start it with `.venv/bin/anima-trainer`.
-3. The training runtime (venv, sd-scripts, models) goes into the data folder shown in the
-   Settings tab. Installing it from the app (Settings, Install) is part of M4 and not
-   built yet. Citron is not needed and the app never writes into a Citron folder.
+3. In the Settings tab, choose the data folder (or keep the default) and press Install.
+   It needs Python 3.10+ with `venv` (on Debian/Ubuntu `python3-venv`), git and an
+   internet connection; torch and the sd-scripts requirements are several GB. The steps
+   and their output appear in the install log, also saved as
+   `<data>/logs/install_<timestamp>.log`. Then download Qwen3, the VAE and the DiT with
+   the Download buttons (the DiT is also downloaded on the first Start). Citron is not
+   needed and the app never writes into a Citron folder.
 
 ## Where things are
 
@@ -45,8 +48,13 @@ sd-scripts runs with that as its working directory.
 ## Common issues
 
 **"Missing models: Qwen3, VAE" when configuring.** The text encoder or VAE is not in
-`<data>/models/anima/`. Only the DiT is downloaded automatically for now; downloading
-Qwen3 and the VAE from the app is part of M4.
+`<data>/models/anima/`. Download it with its button in the Settings tab (only the DiT is
+downloaded automatically on Start).
+
+**Install failed or was cancelled.** Read the install log (Settings tab, or
+`<data>/logs/install_<timestamp>.log`) and press Install again: steps already done are
+skipped. "CUDA is not available" means torch cannot see the GPU: check the NVIDIA driver
+(`nvidia-smi`). "Python ... not found" or "git not found" appear before anything is written.
 
 **DiT download interrupted or cancelled.** The data stays in `<file>.part` and the next
 download resumes from it. If the remote file changed and the `.part` is larger, it is

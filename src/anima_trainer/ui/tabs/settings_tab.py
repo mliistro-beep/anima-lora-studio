@@ -1,4 +1,4 @@
-"""Settings tab: the app's data folder and the state of its model files."""
+"""Settings tab: the app's data folder, the install of its training runtime and its models."""
 
 from PySide6.QtCore import Signal
 from PySide6.QtWidgets import (
@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
 )
 
 from anima_trainer.models.status import ModelStatus
+from anima_trainer.ui.widgets.log_view import LogView
 from anima_trainer.ui.widgets.path_picker import PathPicker
 from anima_trainer.ui.widgets.progress_panel import download_text
 from anima_trainer.workflow.training_session import SessionState
@@ -23,39 +24,53 @@ ROOT_HELP = (
     "Folder where the app keeps its training runtime (.venv, sd-scripts), the models, "
     "config.json, the generated configs and the training logs."
 )
+INSTALL_HELP = (
+    "Install creates the training venv, downloads sd-scripts and its requirements (torch, "
+    "several GB) and checks the GPU. Repair redoes only what is missing or outdated."
+)
 MODEL_COLUMNS = ("Model", "Status", "Path", "")
-PATH_COLUMN, ACTION_COLUMN = 2, 3
+INSTALL_LOG_LINES = 2000
+LABEL_COLUMN, PATH_COLUMN, ACTION_COLUMN = 0, 2, 3
 
 
 class SettingsTab(QWidget):
     root_applied = Signal(str)
-    download_requested = Signal(str)  # base model name
-    cancel_requested = Signal()
+    download_requested = Signal(str)  # download key of the model
+    cancel_requested = Signal()  # cancel the model download
+    install_requested = Signal()
+    cancel_install_requested = Signal()
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.download_buttons: dict[str, QPushButton] = {}
-        self._present: frozenset[str] = frozenset()  # base models already downloaded
+        self._present: frozenset[str] = frozenset()  # download keys of the present models
         self._idle = True
         self._can_download = False
+        self._installing = False
         self.root_picker = PathPicker("Data folder", "folder")
         self.apply_button = QPushButton("Apply")
         self.apply_button.clicked.connect(lambda: self.root_applied.emit(self.root_picker.path()))
         self.problems_label = QLabel()
         self.problems_label.setWordWrap(True)
+        self.install_button = QPushButton("Install")
+        self.install_button.clicked.connect(self.install_requested.emit)
+        self.cancel_install_button = QPushButton("Cancel install")
+        self.cancel_install_button.clicked.connect(self.cancel_install_requested.emit)
+        self.install_step_label = QLabel()
+        self.install_log = LogView("Install Log", INSTALL_LOG_LINES)
         self.models_table = QTableWidget(0, len(MODEL_COLUMNS))
         self.models_table.setHorizontalHeaderLabels(list(MODEL_COLUMNS))
         self.models_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
-        self.models_table.horizontalHeader().setSectionResizeMode(
-            PATH_COLUMN, QHeaderView.ResizeMode.Stretch
-        )
+        header = self.models_table.horizontalHeader()
+        header.setSectionResizeMode(LABEL_COLUMN, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(PATH_COLUMN, QHeaderView.ResizeMode.Stretch)
         self.models_table.verticalHeader().setVisible(False)
         self.download_label = QLabel()
         self.cancel_button = QPushButton("Cancel download")
         self.cancel_button.clicked.connect(self.cancel_requested.emit)
 
         layout = QVBoxLayout(self)
-        layout.addWidget(self._root_group())
+        layout.addWidget(self._root_group(), 1)
         layout.addWidget(self._models_group(), 1)
         self.set_state(SessionState.IDLE, can_download=False)
 
@@ -67,6 +82,7 @@ class SettingsTab(QWidget):
             self.problems_label.setText("\n".join(f"ERROR: {p}" for p in problems))
         else:
             self.problems_label.setText("OK: Training runtime installed.")
+        self.install_button.setText("Install" if problems else "Repair")
 
     def set_models(self, statuses: tuple[ModelStatus, ...]) -> None:
         self.models_table.setRowCount(len(statuses))
@@ -75,40 +91,49 @@ class SettingsTab(QWidget):
             cells = (status.label, "OK" if status.present else "Missing", str(status.path))
             for column, text in enumerate(cells):
                 self.models_table.setItem(row, column, QTableWidgetItem(text))
-            if status.base_model is not None:
-                button = self._download_button(status.label, status.base_model)
-                self.models_table.setCellWidget(row, ACTION_COLUMN, button)
-                buttons[status.base_model] = button
+            button = self._download_button(status.label, status.download_key)
+            self.models_table.setCellWidget(row, ACTION_COLUMN, button)
+            buttons[status.download_key] = button
         self.download_buttons = buttons
-        self._present = frozenset(
-            s.base_model for s in statuses if s.base_model is not None and s.present
-        )
+        self._present = frozenset(s.download_key for s in statuses if s.present)
         self._update_buttons()
 
     def set_state(self, state: SessionState, can_download: bool) -> None:
         """`can_download` is False when the data folder does not exist."""
         self._idle = state is SessionState.IDLE
         self._can_download = can_download
-        self.root_picker.setEnabled(self._idle)
-        self.apply_button.setEnabled(self._idle)
         self.cancel_button.setEnabled(state is SessionState.DOWNLOADING)
         if self._idle:
             self.download_label.clear()
         self._update_buttons()
 
+    def set_installing(self, installing: bool) -> None:
+        self._installing = installing
+        if not installing:
+            self.install_step_label.clear()
+        self._update_buttons()
+
+    def show_install_step(self, text: str) -> None:
+        self.install_step_label.setText(text)
+
     def show_download(self, downloaded: int, total: int | None) -> None:
         self.download_label.setText(download_text(downloaded, total))
 
-    def _download_button(self, label: str, base_model: str) -> QPushButton:
+    def _download_button(self, label: str, key: str) -> QPushButton:
         button = QPushButton("Download")
         button.setAccessibleName(f"Download {label}")
-        button.clicked.connect(lambda: self.download_requested.emit(base_model))
+        button.clicked.connect(lambda: self.download_requested.emit(key))
         return button
 
     def _update_buttons(self) -> None:
-        allowed = self._idle and self._can_download
-        for base_model, button in self.download_buttons.items():
-            button.setEnabled(allowed and base_model not in self._present)
+        free = self._idle and not self._installing
+        self.root_picker.setEnabled(free)
+        self.apply_button.setEnabled(free)
+        self.install_button.setEnabled(free)
+        self.cancel_install_button.setEnabled(self._installing)
+        allowed = free and self._can_download
+        for key, button in self.download_buttons.items():
+            button.setEnabled(allowed and key not in self._present)
 
     def _root_group(self) -> QGroupBox:
         group = QGroupBox("Training runtime")
@@ -121,6 +146,15 @@ class SettingsTab(QWidget):
         layout.addWidget(help_label)
         layout.addLayout(row)
         layout.addWidget(self.problems_label)
+        install_help = QLabel(INSTALL_HELP)
+        install_help.setWordWrap(True)
+        install_row = QHBoxLayout()
+        install_row.addWidget(self.install_button)
+        install_row.addWidget(self.cancel_install_button)
+        install_row.addWidget(self.install_step_label, 1)
+        layout.addWidget(install_help)
+        layout.addLayout(install_row)
+        layout.addWidget(self.install_log, 1)
         return group
 
     def _models_group(self) -> QGroupBox:

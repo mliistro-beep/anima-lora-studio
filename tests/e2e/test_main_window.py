@@ -6,19 +6,23 @@ import pytest
 from PySide6.QtCore import QSettings
 from PySide6.QtWidgets import QMessageBox
 
+from anima_trainer.models.catalog import SUPPORT_MODEL_URLS, VAE_FILENAME
 from anima_trainer.runtime.data_dir import load_data_dir, open_data_dir
+from anima_trainer.runtime.install_plan import InstallPlan, InstallStep
 from anima_trainer.settings.store import load_settings
 from anima_trainer.system.gpu_worker import GpuDetector
 from anima_trainer.training.log_parser import EpochStarted
 from anima_trainer.training.runner import RunOutcome
 from anima_trainer.ui.main_window import MainWindow
+from anima_trainer.workflow.install_session import InstallSession
 from anima_trainer.workflow.training_session import SessionState, TrainingSession
-from tests.fakes import FakeDownloader, FakeRunner
+from tests.fakes import FakeDownloader, FakeInstaller, FakeRunner
 
 pytestmark = pytest.mark.e2e
 NOW = datetime(2026, 10, 20, 9, 0, 0)
 TIMEOUT_MS = 5000
 GPUS = ("0: NVIDIA A", "1: NVIDIA B")
+INSTALL_STEPS = (InstallStep("venv", "Create the training venv"),)
 
 
 def _make_runtime(root, dataset, config=None):
@@ -56,8 +60,28 @@ def dataset(tmp_path):
     return folder
 
 
+@pytest.fixture(autouse=True)
+def confirm_quit_at_teardown(monkeypatch):
+    """A real question dialog would block forever when a test ends with work running."""
+    monkeypatch.setattr(QMessageBox, "question", lambda *_a, **_k: QMessageBox.StandardButton.Yes)
+
+
 @pytest.fixture
-def make_window(qtbot, tmp_path):
+def installer():
+    return FakeInstaller()
+
+
+@pytest.fixture
+def install_plan():
+    """Mutable holder for the plan the install session gets: tests may replace it.
+
+    "paths" records the folder of every plan request.
+    """
+    return {"plan": InstallPlan(INSTALL_STEPS, ()), "paths": []}
+
+
+@pytest.fixture
+def make_window(qtbot, tmp_path, installer, install_plan):
     def build(root, detect=lambda _paths: GPUS):
         store = QSettings(str(tmp_path / "app.ini"), QSettings.Format.IniFormat)
         opened = open_data_dir(root)
@@ -71,8 +95,14 @@ def make_window(qtbot, tmp_path):
             kernel_log=lambda: None,
         )
         detector = GpuDetector(detect)
+
+        def plan(paths):
+            install_plan["paths"].append(paths)
+            return install_plan["plan"]
+
+        install = InstallSession(installer, plan=plan, clock=lambda: NOW)
         with qtbot.waitSignal(detector.detected, timeout=TIMEOUT_MS):
-            window = MainWindow(session, detector, store, opened)
+            window = MainWindow(session, detector, store, opened, install)
         qtbot.addWidget(window)
         return window, runner, downloader, store
 
@@ -287,3 +317,215 @@ def test_shutdown_runs_once(make_window, tmp_path, dataset):
     window.shutdown()
 
     assert (runner.shut_down, downloader.shut_down) == (1, 1)
+
+
+def test_download_button_downloads_a_missing_vae(make_window, tmp_path, dataset):
+    paths = _make_runtime(tmp_path / "data", dataset)
+    paths.vae_model.unlink()
+    window, _, downloader, _ = make_window(paths.root)
+    button = window.settings_tab.download_buttons[VAE_FILENAME]
+
+    button.click()
+
+    assert downloader.started == [(SUPPORT_MODEL_URLS[VAE_FILENAME], paths.vae_model)]
+    paths.vae_model.write_bytes(b"")
+    downloader.finished.emit(str(paths.vae_model))
+    assert not window.settings_tab.download_buttons[VAE_FILENAME].isEnabled()
+
+
+def test_fresh_folder_offers_install_and_runs_the_plan(make_window, tmp_path, installer):
+    window, *_ = make_window(tmp_path / "data")
+    tab = window.settings_tab
+
+    assert tab.install_button.text() == "Install"
+    assert tab.install_button.isEnabled()
+    tab.install_button.click()
+
+    assert installer.started == [INSTALL_STEPS]
+    assert not tab.install_button.isEnabled()
+    assert tab.cancel_install_button.isEnabled()
+    assert not tab.apply_button.isEnabled()
+    assert not any(button.isEnabled() for button in tab.download_buttons.values())
+    assert not window.training_tab.configure_button.isEnabled()
+    assert "Install log:" in tab.install_log.text()
+
+
+def test_install_progress_is_shown_in_the_settings_tab(make_window, tmp_path, installer):
+    window, *_ = make_window(tmp_path / "data")
+    window.settings_tab.install_button.click()
+
+    installer.step_started.emit(1, 1, INSTALL_STEPS[0])
+    installer.line_received.emit("created venv")
+
+    assert window.settings_tab.install_step_label.text() == "Step 1/1: Create the training venv"
+    assert "created venv" in window.settings_tab.install_log.text()
+
+
+def test_successful_install_enables_training_and_saves_the_folder(
+    qtbot, make_window, tmp_path, dataset, installer
+):
+    root = tmp_path / "data"
+    detected = []
+
+    def detect(paths):
+        detected.append(paths.root)
+        return GPUS
+
+    window, _, _, store = make_window(root, detect=detect)
+    window.settings_tab.install_button.click()
+    _make_runtime(root, dataset)  # what a real install leaves behind
+
+    installer.finish(True, "Installation completed.")
+
+    qtbot.waitUntil(lambda: len(detected) == 2, timeout=TIMEOUT_MS)  # torch is there now
+
+    tab = window.settings_tab
+    assert tab.problems_label.text() == "OK: Training runtime installed."
+    assert tab.install_button.text() == "Repair"
+    assert tab.install_button.isEnabled()
+    assert not tab.cancel_install_button.isEnabled()
+    assert window.training_tab.configure_button.isEnabled()
+    assert load_data_dir(store, tmp_path / "default") == root
+    assert "OK: Training runtime installed." in window.training_tab.status.text()
+
+
+def test_failed_install_keeps_training_blocked(make_window, tmp_path, installer):
+    window, *_ = make_window(tmp_path / "data")
+    window.settings_tab.install_button.click()
+
+    installer.finish(False, "Check the GPU failed (exit code 1).")
+
+    assert "ERROR: Check the GPU failed" in window.settings_tab.install_log.text()
+    # The install log created the data folder; the runtime itself is still missing.
+    assert "Training script not found" in window.settings_tab.problems_label.text()
+    assert window.settings_tab.install_button.text() == "Install"
+    assert window.settings_tab.install_button.isEnabled()
+    assert not window.training_tab.configure_button.isEnabled()
+
+
+def test_install_problems_are_shown_without_starting(
+    make_window, tmp_path, installer, install_plan
+):
+    install_plan["plan"] = InstallPlan(INSTALL_STEPS, ("git not found.",))
+    window, *_ = make_window(tmp_path / "data")
+
+    window.settings_tab.install_button.click()
+
+    assert installer.started == []
+    assert "ERROR: git not found." in window.settings_tab.install_log.text()
+    assert window.settings_tab.install_button.isEnabled()
+
+
+def test_cancel_install_reaches_the_installer(make_window, tmp_path, installer):
+    window, *_ = make_window(tmp_path / "data")
+    window.settings_tab.install_button.click()
+
+    window.settings_tab.cancel_install_button.click()
+
+    assert installer.cancels == 1
+
+
+def test_install_is_disabled_while_training(make_window, tmp_path, dataset):
+    window, *_ = _configured_window(make_window, tmp_path, dataset)
+
+    window.training_tab.start_button.click()
+
+    assert window.session.state is SessionState.TRAINING
+    assert not window.settings_tab.install_button.isEnabled()
+
+
+def test_close_while_installing_asks_and_shuts_the_install_down(
+    make_window, tmp_path, installer, monkeypatch
+):
+    window, *_ = make_window(tmp_path / "data")
+    window.settings_tab.install_button.click()
+    asked = []
+
+    def answer(*_args):
+        asked.append(1)
+        return QMessageBox.StandardButton.Yes
+
+    monkeypatch.setattr(QMessageBox, "question", answer)
+
+    assert window.close()
+    assert not window.isVisible()
+    assert asked == [1]
+    assert installer.shut_down == 1
+
+
+def test_close_while_installing_can_be_refused(make_window, tmp_path, installer, monkeypatch):
+    window, *_ = make_window(tmp_path / "data")
+    window.show()
+    window.settings_tab.install_button.click()
+    monkeypatch.setattr(QMessageBox, "question", lambda *_a, **_k: QMessageBox.StandardButton.No)
+
+    assert not window.close()
+    assert window.isVisible()
+    assert installer.shut_down == 0
+    assert window.settings_tab.cancel_install_button.isEnabled()
+
+
+def test_quit_during_install_does_not_restart_gpu_detection(make_window, tmp_path, installer):
+    detected = []
+
+    def detect(paths):
+        detected.append(paths.root)
+        return GPUS
+
+    window, *_ = make_window(tmp_path / "data", detect=detect)
+    window.settings_tab.install_button.click()
+
+    window.shutdown()  # the installer reports "cancelled" from inside shutdown()
+
+    assert installer.shut_down == 1
+    assert len(detected) == 1  # only the detection at startup
+
+
+def test_install_uses_the_folder_typed_in_the_picker(
+    make_window, tmp_path, installer, install_plan
+):
+    window, *_ = make_window(tmp_path / "data")
+    other = tmp_path / "other"
+    window.settings_tab.root_picker.set_path(str(other))
+
+    window.settings_tab.install_button.click()
+
+    assert [paths.root for paths in install_plan["paths"]] == [other]
+    assert window.session.paths.root == other
+    assert installer.started == [INSTALL_STEPS]
+
+
+def test_install_with_an_empty_folder_field_asks_for_a_folder(make_window, tmp_path, installer):
+    window, *_ = make_window(tmp_path / "data")
+    window.settings_tab.root_picker.set_path("  ")
+
+    window.settings_tab.install_button.click()
+
+    assert installer.started == []
+    assert window.session.paths.root == tmp_path / "data"
+    assert "Choose the data folder first." in window.settings_tab.problems_label.text()
+
+
+def test_install_into_a_file_is_refused_without_switching_folder(make_window, tmp_path, installer):
+    window, *_ = make_window(tmp_path / "data")
+    a_file = tmp_path / "a_file"
+    a_file.write_text("")
+    window.settings_tab.root_picker.set_path(str(a_file / "sub"))
+
+    window.settings_tab.install_button.click()
+
+    assert installer.started == []
+    assert window.session.paths.root == tmp_path / "data"
+    assert "ERROR: Not a folder:" in window.settings_tab.install_log.text()
+
+
+def test_install_end_keeps_the_earlier_status_lines(make_window, tmp_path, installer):
+    window, *_ = make_window(tmp_path / "data")
+    window.training_tab.status.set_lines(("ERROR: Learning rate: invalid",))
+    window.settings_tab.install_button.click()
+
+    installer.finish(False, "Cancelled.")
+
+    status = window.training_tab.status.text()
+    assert "ERROR: Learning rate: invalid" in status
+    assert "Training script not found" in status

@@ -1,3 +1,4 @@
+from anima_trainer.models.catalog import QWEN3_FILENAME, VAE_FILENAME
 from anima_trainer.models.status import model_statuses
 from anima_trainer.runtime.paths import RuntimePaths
 from anima_trainer.settings.choices import BASE_MODELS
@@ -10,10 +11,10 @@ def test_lists_required_models_then_every_base_model(tmp_path):
     assert not any(s.present for s in statuses)
 
 
-def test_only_dit_models_are_downloadable(tmp_path):
+def test_every_model_has_a_download_key(tmp_path):
     statuses = model_statuses(RuntimePaths(tmp_path))
 
-    assert [s.base_model for s in statuses] == [None, None, *BASE_MODELS]
+    assert [s.download_key for s in statuses] == [QWEN3_FILENAME, VAE_FILENAME, *BASE_MODELS]
 
 
 def test_existing_files_are_present(tmp_path):

@@ -14,6 +14,7 @@ Architecture codemaps: [DOCS/CODEMAPS/](DOCS/CODEMAPS/architecture.md).
 
 - Python 3.12 or newer (developed on 3.14)
 - An internet connection for the first install of the training runtime and models
+- git, used by the Install button of the Settings tab to fetch sd-scripts
 - An NVIDIA GPU for training (the default settings use about 6 GB of VRAM)
 
 ## Development

@@ -1,4 +1,5 @@
-"""Main window: the three tabs wired to the training session, GPU detection and QSettings."""
+"""Main window: the three tabs wired to the training and install sessions, GPU detection and
+QSettings."""
 
 from collections.abc import Callable
 from pathlib import Path
@@ -9,7 +10,13 @@ from PySide6.QtGui import QCloseEvent
 from PySide6.QtWidgets import QMainWindow, QMessageBox, QTabWidget, QWidget
 
 from anima_trainer.models.status import model_statuses
-from anima_trainer.runtime.data_dir import OpenedRuntime, open_data_dir, save_data_dir
+from anima_trainer.runtime.data_dir import (
+    OpenedRuntime,
+    data_dir_problem,
+    open_data_dir,
+    runtime_problems,
+    save_data_dir,
+)
 from anima_trainer.settings.field_specs import describe_validation_error
 from anima_trainer.settings.schema import TrainingSettings
 from anima_trainer.system.gpu_worker import GpuDetector
@@ -17,11 +24,12 @@ from anima_trainer.training.start_service import StartRequest
 from anima_trainer.ui.tabs.advanced_tab import AdvancedTab
 from anima_trainer.ui.tabs.settings_tab import SettingsTab
 from anima_trainer.ui.tabs.training_tab import TrainingTab
+from anima_trainer.workflow.install_session import InstallSession
 from anima_trainer.workflow.training_session import SessionState, TrainingSession
 
 APP_NAME = "Anima LoRA Trainer"
 DEFAULT_SIZE = (1200, 800)
-QUIT_QUESTION = "Training or a model download is still running. Stop it and quit?"
+QUIT_QUESTION = "Training, a model download or the install is still running. Stop it and quit?"
 
 
 class MainWindow(QMainWindow):
@@ -31,6 +39,7 @@ class MainWindow(QMainWindow):
         detector: GpuDetector,
         store: QSettings,
         opened: OpenedRuntime,
+        install: InstallSession,
         open_root: Callable[[Path], OpenedRuntime] = open_data_dir,
         parent: QWidget | None = None,
     ) -> None:
@@ -40,6 +49,8 @@ class MainWindow(QMainWindow):
         self.session = session
         self._detector = detector
         self._store = store
+        self._install = install
+        self._installing = False
         self._open_root = open_root
         self._problems = opened.problems
         self._root_exists = opened.paths.root.is_dir()
@@ -57,7 +68,7 @@ class MainWindow(QMainWindow):
         self._detector.start(opened.paths)
 
     def closeEvent(self, event: QCloseEvent) -> None:  # noqa: N802 - Qt override
-        if self.session.state is not SessionState.IDLE:
+        if self.session.state is not SessionState.IDLE or self._installing:
             answer = QMessageBox.question(
                 self,
                 APP_NAME,
@@ -74,7 +85,7 @@ class MainWindow(QMainWindow):
         event.accept()
 
     def shutdown(self) -> None:
-        """Stop training, downloads and GPU detection; safe to call more than once.
+        """Stop training, downloads, the install and GPU detection; safe to call more than once.
 
         Also connected to QApplication.aboutToQuit, so exits that skip closeEvent
         (Ctrl+C, SIGTERM, logout) do not leave the training child running on the GPU.
@@ -82,6 +93,7 @@ class MainWindow(QMainWindow):
         if self._shut_down:
             return
         self._shut_down = True
+        self._install.shutdown()
         self.session.shutdown()
         self._detector.shutdown()
 
@@ -93,6 +105,11 @@ class MainWindow(QMainWindow):
         self.settings_tab.root_applied.connect(self._apply_root)
         self.settings_tab.download_requested.connect(self.session.download_model)
         self.settings_tab.cancel_requested.connect(self.session.stop)
+        self.settings_tab.install_requested.connect(self._start_install)
+        self.settings_tab.cancel_install_requested.connect(self._install.cancel)
+        self._install.log_line.connect(self.settings_tab.install_log.append_line)
+        self._install.step_changed.connect(self.settings_tab.show_install_step)
+        self._install.finished.connect(self._on_install_finished)
         self.session.log_line.connect(tab.log.append_line)
         self.session.log_cleared.connect(tab.log.clear)
         self.session.progress_changed.connect(tab.progress.show_progress)
@@ -160,8 +177,66 @@ class MainWindow(QMainWindow):
         except OSError as error:
             self.training_tab.status.append_line(f"WARN: {error}")
 
+    def _start_install(self) -> None:
+        if self.session.state is not SessionState.IDLE or self._installing:
+            return
+        if not self._use_typed_folder():
+            return
+        # Finding Python probes a few interpreters on this thread: about a second.
+        problems = self._install.start(self.session.paths)
+        for problem in problems:
+            self.settings_tab.install_log.append_line(f"ERROR: {problem}")
+        if not problems:
+            self._set_installing(True)
+
+    def _use_typed_folder(self) -> bool:
+        """Apply the picker folder if it changed; False when it cannot hold the runtime.
+
+        Checked before applying, so a mistyped path leaves the current folder active.
+        """
+        typed = self.settings_tab.root_picker.path().strip()
+        if not typed:
+            self._apply_root(typed)  # shows "Choose the data folder first."
+            return False
+        folder = Path(typed).expanduser()
+        problem = data_dir_problem(folder)
+        if problem is not None:
+            self.settings_tab.install_log.append_line(f"ERROR: {problem}")
+            return False
+        if folder != self.session.paths.root:
+            self._apply_root(typed)
+        return True
+
+    def _on_install_finished(self, _ok: bool, _message: str) -> None:
+        """Re-check the runtime, also after a failure: a partial install changes the folder."""
+        if self._shut_down:
+            # Cancelled by shutdown(): a new GPU detection would delay the exit (torch probe).
+            return
+        paths = self.session.paths
+        self._problems = runtime_problems(paths)
+        self._root_exists = paths.root.is_dir()
+        self.settings_tab.set_problems(self._problems)
+        self._refresh_models()
+        # Appended: the status may hold validation or Configure messages worth keeping.
+        notes = tuple(f"ERROR: {problem}" for problem in self._problems)
+        for note in notes or ("OK: Training runtime installed.",):
+            self.training_tab.status.append_line(note)
+        if self._root_exists:
+            try:
+                save_data_dir(self._store, paths.root)
+            except OSError as error:
+                self.training_tab.status.append_line(f"WARN: {error}")
+        self._detector.start(paths)  # the training venv may have torch now
+        self._set_installing(False)
+
+    def _set_installing(self, installing: bool) -> None:
+        self._installing = installing
+        self.settings_tab.set_installing(installing)
+        self._apply_state(self.session.state)
+
     def _apply_state(self, state: SessionState) -> None:
-        self.training_tab.set_state(state, ready=not self._problems)
+        ready = not self._problems and not self._installing
+        self.training_tab.set_state(state, ready=ready)
         self.settings_tab.set_state(state, can_download=self._root_exists)
 
     def _refresh_models(self) -> None:

@@ -1,5 +1,6 @@
-"""Stand-ins for TrainingRunner and ModelDownloader with the same signals."""
+"""Stand-ins for TrainingRunner, ModelDownloader and RuntimeInstaller with the same signals."""
 
+from collections.abc import Iterable
 from pathlib import Path
 
 from PySide6.QtCore import QObject, Signal
@@ -57,3 +58,36 @@ class FakeDownloader(QObject):
 
     def shutdown(self) -> None:
         self.shut_down += 1
+
+
+class FakeInstaller(QObject):
+    step_started = Signal(int, int, object)
+    line_received = Signal(str)
+    finished = Signal(bool, str)
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.started: list[tuple[object, ...]] = []
+        self.cancels = 0
+        self.shut_down = 0
+        self.running = False
+
+    def start(self, steps: Iterable[object]) -> None:
+        self.started.append(tuple(steps))
+        self.running = True
+
+    def cancel(self) -> None:
+        self.cancels += 1
+
+    def shutdown(self) -> None:
+        """Like RuntimeInstaller: a running install reports its end inside shutdown()."""
+        self.shut_down += 1
+        if self.running:
+            self.finish(False, "Installation cancelled.")
+
+    def is_running(self) -> bool:
+        return self.running
+
+    def finish(self, ok: bool, message: str) -> None:
+        self.running = False
+        self.finished.emit(ok, message)

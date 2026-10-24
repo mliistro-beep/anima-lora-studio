@@ -10,10 +10,12 @@ from PySide6.QtWidgets import QApplication
 
 from anima_trainer.models.download_worker import ModelDownloader
 from anima_trainer.runtime.data_dir import default_data_dir, load_data_dir, open_data_dir
+from anima_trainer.runtime.installer import RuntimeInstaller
 from anima_trainer.system.gpu_info import detect_gpus
 from anima_trainer.system.gpu_worker import Detect, GpuDetector
 from anima_trainer.training.runner import TrainingRunner
 from anima_trainer.ui.main_window import APP_NAME, MainWindow
+from anima_trainer.workflow.install_session import InstallSession
 from anima_trainer.workflow.training_session import TrainingSession
 
 # QSettings file: ~/.config/anima-trainer/anima-trainer.conf on Linux.
@@ -32,7 +34,8 @@ __all__ = ["APP_NAME", "create_window", "install_quit_signals", "main"]
 def create_window(store: QSettings, detect: Detect = detect_gpus) -> MainWindow:
     opened = open_data_dir(load_data_dir(store, default_data_dir()))
     session = TrainingSession(opened.paths, opened.settings, TrainingRunner(), ModelDownloader())
-    return MainWindow(session, GpuDetector(detect), store, opened)
+    install = InstallSession(RuntimeInstaller())
+    return MainWindow(session, GpuDetector(detect), store, opened, install)
 
 
 def install_quit_signals(quit_app: Callable[[], None]) -> Callable[[], None]:

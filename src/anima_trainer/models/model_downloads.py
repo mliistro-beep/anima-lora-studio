@@ -1,0 +1,48 @@
+"""What the Download buttons of the Settings tab fetch, by download key.
+
+The key is the base model name for a DiT and the local file name for Qwen3 and the VAE.
+"""
+
+from dataclasses import dataclass
+from pathlib import Path
+
+from anima_trainer.models.catalog import (
+    BASE_MODEL_URLS,
+    QWEN3_FILENAME,
+    SUPPORT_MODEL_URLS,
+    VAE_FILENAME,
+)
+from anima_trainer.runtime.paths import RuntimePaths
+
+
+@dataclass(frozen=True)
+class ModelDownload:
+    description: str  # completes "Downloading ...", as in Citron's DiT message
+    url: str
+    destination: Path
+
+
+def model_download(paths: RuntimePaths, key: str) -> ModelDownload | None:
+    """The download for `key`, or None when the file is already there or the key is unknown."""
+    download = _support_download(paths, key) or _dit_download(paths, key)
+    if download is None or download.destination.exists():
+        return None
+    return download
+
+
+def _support_download(paths: RuntimePaths, key: str) -> ModelDownload | None:
+    destinations = {
+        QWEN3_FILENAME: ("Qwen3", paths.qwen3_model),
+        VAE_FILENAME: ("VAE", paths.vae_model),
+    }
+    if key not in destinations:
+        return None
+    label, destination = destinations[key]
+    return ModelDownload(label, SUPPORT_MODEL_URLS[key], destination)
+
+
+def _dit_download(paths: RuntimePaths, key: str) -> ModelDownload | None:
+    url = BASE_MODEL_URLS.get(key)
+    if url is None:
+        return None
+    return ModelDownload(f"base model '{key}'", url, paths.dit_model(key))

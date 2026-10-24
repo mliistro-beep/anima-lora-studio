@@ -3,6 +3,7 @@ from pathlib import Path
 
 import pytest
 
+from anima_trainer.models.catalog import QWEN3_FILENAME, SUPPORT_MODEL_URLS
 from anima_trainer.runtime.paths import RuntimePaths
 from anima_trainer.settings.schema import TrainingSettings
 from anima_trainer.settings.store import load_settings
@@ -340,3 +341,26 @@ def test_stop_racing_a_normal_exit_is_reported_as_completed(parts, dataset, tmp_
 
     assert "OK: Training completed successfully!" in parts["log"]
     assert parts["kernel_calls"] == []
+
+
+def test_download_model_fetches_qwen3_into_the_models_folder(parts, citron):
+    citron.qwen3_model.unlink()
+
+    parts["session"].download_model(QWEN3_FILENAME)
+
+    assert parts["downloader"].started == [(SUPPORT_MODEL_URLS[QWEN3_FILENAME], citron.qwen3_model)]
+    assert parts["log"][0] == "INFO: Downloading Qwen3..."
+    assert parts["session"].state is SessionState.DOWNLOADING
+
+
+def test_download_model_keeps_the_citron_message_for_a_dit(parts):
+    parts["session"].download_model("anima-preview")
+
+    assert parts["log"][0] == "INFO: Downloading base model 'anima-preview'..."
+
+
+def test_download_model_skips_a_present_model(parts):
+    parts["session"].download_model(QWEN3_FILENAME)  # the fixture created it
+
+    assert parts["downloader"].started == []
+    assert parts["session"].state is SessionState.IDLE
