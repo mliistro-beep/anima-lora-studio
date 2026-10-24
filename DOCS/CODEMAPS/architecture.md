@@ -12,13 +12,14 @@ src/anima_trainer/main.py  main() -> int; create_window(store, detect) -> MainWi
 console script: anima-trainer = anima_trainer.main:main
 
 ## Layers (feature packages)
-runtime/   data folder (QSettings key runtime/data_dir, default ~/.local/share/anima-trainer), RuntimePaths
+runtime/   data folder (QSettings key runtime/data_dir, default ~/.local/share/anima-trainer), RuntimePaths,
+           install plan and QProcess installer
 settings/  validated immutable TrainingSettings, config.json store, field specs for the forms
 dataset/   folder validation, step estimate
 models/    base model catalog, model status, downloader (+ QThread worker)
 training/  TOML builder, configure/start services, accelerate command, QProcess runner, log parser,
            progress state, outcome report, OOM hint
-system/    GPU detection (+ QThread worker) and dropdown parsing
+system/    GPU detection (+ QThread worker), dropdown parsing, process groups
 workflow/  TrainingSession: Configure / DiT download / Start / Stop state machine
 ui/        MainWindow, tabs (training, advanced, settings), widgets
 preview/   (M5, empty)

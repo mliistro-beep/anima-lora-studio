@@ -7,11 +7,8 @@ child and does not forward SIGTERM to it.
 
 import codecs
 import contextlib
-import os
 import re
-import signal
 from collections import deque
-from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -19,6 +16,7 @@ from typing import TextIO
 
 from PySide6.QtCore import QObject, QProcess, QProcessEnvironment, QTimer, Signal
 
+from anima_trainer.system.process_group import kill_group, terminate_group, use_own_session
 from anima_trainer.training.command_builder import LaunchSpec
 from anima_trainer.training.log_parser import parse_line
 from anima_trainer.training.toml_builder import FILE_TIMESTAMP_FORMAT
@@ -99,7 +97,7 @@ class TrainingRunner(QObject):
         if self._process is None or self._stopping:
             return
         self._stopping = True
-        self._signal_group("SIGTERM", self._process.terminate)
+        terminate_group(self._process)
         self._kill_timer.start(self._kill_grace_ms)
 
     def shutdown(self) -> None:
@@ -126,8 +124,7 @@ class TrainingRunner(QObject):
         for name, value in spec.env.items():
             environment.insert(name, value)
         process.setProcessEnvironment(environment)
-        if os.name == "posix":
-            process.setUnixProcessParameters(QProcess.UnixProcessFlag.CreateNewSession)
+        use_own_session(process)
         process.readyReadStandardOutput.connect(self._on_output)
         process.finished.connect(self._on_finished)
         process.errorOccurred.connect(self._on_error)
@@ -178,17 +175,7 @@ class TrainingRunner(QObject):
 
     def _force_kill(self) -> None:
         if self._process is not None and self._stopping:
-            self._signal_group("SIGKILL", self._process.kill)
-
-    def _signal_group(self, signal_name: str, fallback: Callable[[], None]) -> None:
-        """Signal the process group on POSIX; elsewhere fall back to QProcess terminate/kill."""
-        pid = self._process.processId() if self._process is not None else 0
-        signum = getattr(signal, signal_name, None)
-        if os.name != "posix" or pid <= 0 or signum is None:
-            fallback()
-            return
-        with contextlib.suppress(ProcessLookupError):
-            os.killpg(pid, signum)
+            kill_group(self._process)
 
     def _write_log(self, text: str) -> None:
         if self._log is None:

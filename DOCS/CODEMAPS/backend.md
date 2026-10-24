@@ -1,4 +1,4 @@
-<!-- Generated: 2026-10-21 | Files scanned: 97 (47 src, 50 tests) | Token estimate: ~700 -->
+<!-- Generated: 2026-10-24 | Files scanned: 110 (53 src, 57 tests) | Token estimate: ~700 -->
 # Backend (core and services)
 
 No HTTP API: "backend" = non-UI modules called by the Qt UI. Public surface only.
@@ -15,6 +15,8 @@ venv_info.py     read_venv_version(venv_dir) -> (major, minor)|None; needs_singl
 install_plan.py  plan_install(paths, python, git) -> InstallPlan(steps, problems, ready); InstallStep(key, title,
                  command, working_dir, marker, action); SD_SCRIPTS_COMMIT pinned; markers in <data>/.install:
                  sd_scripts_marker, requirements_marker, verified_marker
+installer.py     RuntimeInstaller(QObject): start(steps)/cancel/shutdown/is_running; signals step_started(i, n, step),
+                 line_received, finished(ok, message); writes the step marker after success, stops at first failure
 
 ## settings/
 schema.py      TrainingSettings(BaseModel, frozen) 35 fields; with_changes(**) -> new; missing_required_fields()
@@ -49,10 +51,11 @@ oom_hint.py          oom_hint(exit_code, log_tail, kernel_log, crashed) -> str|N
 gpu_info.py   detect_gpus(paths, run) -> tuple[str] (training venv torch -> nvidia-smi -> ("0","1"))
 gpu_worker.py GpuDetector(detect): start(paths)/shutdown; signals detected(choices), warning
 gpu_choice.py gpu_index_from_choice(label) -> "N"; choice_for_index(choices, saved)
+process_group.py use_own_session(process), terminate_group(process), kill_group(process) (runner + installer)
 
 ## workflow/
 training_session.py TrainingSession(paths, settings, runner, downloader): configure, start, download_model,
                     stop, shutdown, set_runtime; signals state_changed, log_line, progress_changed, ...
 
 ## Largest files
-workflow/training_session.py 245 | training/runner.py 230 | ui/main_window.py 172
+workflow/training_session.py 245 | training/runner.py 217 | runtime/installer.py 205 | ui/main_window.py 172

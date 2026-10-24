@@ -5,7 +5,8 @@ app, not a service: there are no servers, health endpoints or alerting.
 
 Current state: the training UI (M3) is done and was verified with a real run. M4 (the
 app's own training runtime, independent of Citron) is in progress: the app already uses
-its own data folder, but the installer is not built yet, so until it is the app reports
+its own data folder and the installer that runs the install steps exists, but the Settings
+tab does not start it yet (Install / Repair button), so until then the app reports
 "Training runtime not installed" and cannot train. See [milestones.md](milestones.md).
 
 ## Install and launch

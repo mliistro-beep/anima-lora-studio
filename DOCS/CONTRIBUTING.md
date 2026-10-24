@@ -42,13 +42,16 @@ real app without touching your own settings, start it with `XDG_CONFIG_HOME` and
 <!-- AUTO-GENERATED: environment (source: src/, tests/) -->
 ## Environment variables
 
-The app reads no environment variables of its own. It sets these for the training
-process it launches, and tests use one for Qt:
+The app reads no environment variables of its own; Qt reads the XDG ones for it. It sets
+the others for the processes it launches (training and install steps), and tests use one
+for Qt:
 
 | Variable | Set by | Value | Purpose |
 |----------|--------|-------|---------|
 | `CUDA_VISIBLE_DEVICES` | `training/command_builder.py` | selected GPU index | Same as Citron: limits the training to the chosen GPU |
-| `PYTHONUNBUFFERED` | `training/command_builder.py` | `1` | Streams sd-scripts output line by line |
+| `PYTHONUNBUFFERED` | `training/command_builder.py`, `runtime/installer.py` | `1` | Streams sd-scripts, pip and GPU check output line by line |
+| `XDG_DATA_HOME` | you (optional) | a folder | Read by Qt (`QStandardPaths`): parent of the default data folder `anima-trainer` |
+| `XDG_CONFIG_HOME` | you (optional) | a folder | Read by Qt (`QSettings`): where the app keeps its settings, e.g. the chosen data folder |
 | `QT_QPA_PLATFORM` | you, when running tests | `offscreen` | Lets Qt tests run without a display |
 <!-- /AUTO-GENERATED -->
 
