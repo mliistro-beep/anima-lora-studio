@@ -7,7 +7,6 @@ child and does not forward SIGTERM to it.
 
 import codecs
 import contextlib
-import re
 from collections import deque
 from dataclasses import dataclass
 from datetime import datetime
@@ -16,15 +15,19 @@ from typing import TextIO
 
 from PySide6.QtCore import QObject, QProcess, QProcessEnvironment, QTimer, Signal
 
-from anima_trainer.system.process_group import kill_group, terminate_group, use_own_session
+from anima_trainer.system.process_group import (
+    KILL_GRACE_MS,
+    SHUTDOWN_KILL_WAIT_MS,
+    kill_group,
+    terminate_group,
+    use_own_session,
+)
+from anima_trainer.system.process_output import split_lines
 from anima_trainer.training.command_builder import LaunchSpec
 from anima_trainer.training.log_parser import parse_line
 from anima_trainer.training.toml_builder import FILE_TIMESTAMP_FORMAT
 
 LOG_TAIL_LINES = 200
-KILL_GRACE_MS = 10_000
-SHUTDOWN_KILL_WAIT_MS = 5_000
-_LINE_BREAK = re.compile(r"\r\n|\r|\n")
 
 
 @dataclass(frozen=True)
@@ -37,14 +40,6 @@ class RunOutcome:
 
 def log_file_path(logs_dir: Path, project_name: str, now: datetime) -> Path:
     return logs_dir / f"{project_name}_{now.strftime(FILE_TIMESTAMP_FORMAT)}.log"
-
-
-def split_lines(pending: str, data: str) -> tuple[tuple[str, ...], str]:
-    """Split on \\n, \\r\\n and \\r (tqdm redraws); a trailing \\r waits for a possible \\n."""
-    text = pending + data
-    held = "\r" if text.endswith("\r") else ""
-    parts = _LINE_BREAK.split(text[: len(text) - len(held)])
-    return tuple(parts[:-1]), parts[-1] + held
 
 
 class TrainingRunner(QObject):

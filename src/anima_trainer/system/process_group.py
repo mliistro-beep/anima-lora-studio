@@ -12,6 +12,9 @@ import signal
 from PySide6.QtCore import QProcess
 
 _POSIX = os.name == "posix"
+# How long a stopped process may take to exit before SIGKILL, and to die after it.
+KILL_GRACE_MS = 10_000
+SHUTDOWN_KILL_WAIT_MS = 5_000
 
 
 def use_own_session(process: QProcess) -> None:

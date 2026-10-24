@@ -14,8 +14,14 @@ from collections.abc import Iterable
 from PySide6.QtCore import QObject, QProcess, QProcessEnvironment, QTimer, Signal
 
 from anima_trainer.runtime.install_plan import SD_SCRIPTS_COMMIT, InstallStep
-from anima_trainer.system.process_group import kill_group, terminate_group, use_own_session
-from anima_trainer.training.runner import KILL_GRACE_MS, SHUTDOWN_KILL_WAIT_MS, split_lines
+from anima_trainer.system.process_group import (
+    KILL_GRACE_MS,
+    SHUTDOWN_KILL_WAIT_MS,
+    kill_group,
+    terminate_group,
+    use_own_session,
+)
+from anima_trainer.system.process_output import split_lines
 
 DONE_MESSAGE = "Installation completed."
 CANCELLED_MESSAGE = "Installation cancelled."
