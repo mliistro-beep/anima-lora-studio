@@ -85,7 +85,7 @@ def _generate(
     messages = (*messages, "", "Generating TOML configs...")
     venv_version = read_venv_version(paths.venv_dir)
     single_process_loader = needs_single_process_loader(venv_version)
-    if single_process_loader:
+    if single_process_loader and venv_version is not None:
         version_text = ".".join(map(str, venv_version))
         messages = (*messages, SINGLE_PROCESS_LOADER_NOTE.format(version=version_text))
     try:
