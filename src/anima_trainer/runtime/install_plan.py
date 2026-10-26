@@ -2,11 +2,12 @@
 
 Every step can be repeated safely, so an interrupted install resumes with a new plan:
 the venv is kept and sd-scripts is fetched at a pinned commit with init/fetch/checkout.
-The checkout, the requirements and the GPU check each leave a marker in <data>/.install
-naming the commit they were done for, so a failed check or a new pinned commit redoes
-exactly what is needed. torch comes from the sd-scripts requirements, as in Citron's
-standard Linux setup; torchvision is added to the same pip run because sd-scripts imports
-it but does not list it.
+The venv (after pip), the checkout, the requirements and the GPU check each leave a marker
+in <data>/.install naming what they were done for, so a failed check or a new pinned
+commit redoes exactly what is needed; a new venv always gets the requirements again.
+The data folder itself is created by the install session (for its log) before any step.
+torch comes from the sd-scripts requirements, as in Citron's standard Linux setup;
+torchvision is added to the same pip run because sd-scripts imports it but does not list it.
 """
 
 from collections.abc import Callable
@@ -24,6 +25,8 @@ SD_SCRIPTS_COMMIT = "690ea7f96c23182352ec63def76d431c6120bd2f"
 EXTRA_PACKAGES = ("torchvision",)
 # The requirements marker names the extra packages too, so adding one reinstalls the requirements.
 REQUIREMENTS_STAMP = " ".join((SD_SCRIPTS_COMMIT, *(f"+{name}" for name in EXTRA_PACKAGES)))
+# The venv marker does not name the commit: a new pinned commit keeps the venv.
+VENV_STAMP = "ready"
 INSTALL_STATE_DIR = ".install"
 NO_GIT_MESSAGE = "git not found. Install git (on Debian/Ubuntu: sudo apt install git)."
 # Fails the step when torch cannot see a GPU, so a broken driver shows up at install time.
@@ -63,6 +66,10 @@ class InstallPlan:
         return not self.problems
 
 
+def venv_marker(paths: RuntimePaths) -> Path:
+    return paths.root / INSTALL_STATE_DIR / "venv.commit"
+
+
 def sd_scripts_marker(paths: RuntimePaths) -> Path:
     return paths.root / INSTALL_STATE_DIR / "sd-scripts.commit"
 
@@ -75,12 +82,23 @@ def verified_marker(paths: RuntimePaths) -> Path:
     return paths.root / INSTALL_STATE_DIR / "verified.commit"
 
 
+def needs_venv(paths: RuntimePaths) -> bool:
+    """True when the venv must be created, so a Python interpreter is needed."""
+    return not (paths.venv_python.exists() and _is_current(venv_marker(paths), VENV_STAMP))
+
+
+def install_pending(paths: RuntimePaths) -> bool:
+    """True while any install step is still missing or outdated."""
+    return bool(plan_install(paths, None, None).steps)
+
+
 def plan_install(
     paths: RuntimePaths, python: PythonInterpreter | None, git: str | None
 ) -> InstallPlan:
     venv = _venv_steps(paths, python)
     scripts = _sd_scripts_steps(paths, git)
-    rest = _requirements_steps(paths, refetched=bool(scripts)) + _accelerate_steps(paths)
+    redo_requirements = bool(venv) or bool(scripts)
+    rest = _requirements_steps(paths, redo_requirements) + _accelerate_steps(paths)
     steps = venv + scripts + rest
     if steps or not _is_current(verified_marker(paths)):
         steps = (*steps, _verify_step(paths))
@@ -92,33 +110,25 @@ def plan_install(
 
 
 def _venv_steps(paths: RuntimePaths, python: PythonInterpreter | None) -> tuple[InstallStep, ...]:
-    if paths.venv_python.exists():
+    if not needs_venv(paths):
         return ()
-    root = paths.root
-    create_root: tuple[InstallStep, ...] = ()
-    if not root.is_dir():
-        create_root = (
-            InstallStep(
-                "data_dir",
-                f"Create the data folder {root}",
-                action=lambda: root.mkdir(parents=True, exist_ok=True),
-            ),
-        )
     python_path = python.path if python is not None else "python3"
     venv_python = str(paths.venv_python)
     return (
-        *create_root,
+        # Also run over an existing venv: it adds pip back if ensurepip was interrupted.
         InstallStep(
             "venv",
             "Create the training venv",
             (python_path, "-m", "venv", str(paths.venv_dir)),
-            root,
+            paths.root,
         ),
         InstallStep(
             "pip",
             "Update pip in the training venv",
             (venv_python, "-m", "pip", "install", "--upgrade", "pip"),
-            root,
+            paths.root,
+            venv_marker(paths),
+            VENV_STAMP,
         ),
     )
 
@@ -158,9 +168,9 @@ def _sd_scripts_steps(paths: RuntimePaths, git: str | None) -> tuple[InstallStep
     )
 
 
-def _requirements_steps(paths: RuntimePaths, refetched: bool) -> tuple[InstallStep, ...]:
+def _requirements_steps(paths: RuntimePaths, redo: bool) -> tuple[InstallStep, ...]:
     marker = requirements_marker(paths)
-    if not refetched and _is_current(marker, REQUIREMENTS_STAMP):
+    if not redo and _is_current(marker, REQUIREMENTS_STAMP):
         return ()
     return (
         InstallStep(

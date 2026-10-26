@@ -8,7 +8,7 @@ from PySide6.QtWidgets import QMessageBox
 
 from anima_trainer.models.catalog import SUPPORT_MODEL_URLS, VAE_FILENAME
 from anima_trainer.runtime.data_dir import load_data_dir, open_data_dir
-from anima_trainer.runtime.install_plan import InstallPlan, InstallStep
+from anima_trainer.runtime.install_plan import InstallPlan, InstallStep, verified_marker
 from anima_trainer.settings.store import load_settings
 from anima_trainer.system.gpu_worker import GpuDetector
 from anima_trainer.training.log_parser import EpochStarted
@@ -17,6 +17,7 @@ from anima_trainer.ui.main_window import MainWindow
 from anima_trainer.workflow.install_session import InstallSession
 from anima_trainer.workflow.training_session import SessionState, TrainingSession
 from tests.fakes import FakeDownloader, FakeInstaller, FakeRunner
+from tests.runtime_helpers import mark_installed
 
 pytestmark = pytest.mark.e2e
 NOW = datetime(2026, 10, 20, 9, 0, 0)
@@ -38,6 +39,7 @@ def _make_runtime(root, dataset, config=None):
     ):
         file.parent.mkdir(parents=True, exist_ok=True)
         file.write_bytes(b"")
+    mark_installed(paths)
     saved = {
         "project_name": "saved_proj",
         "image_directory": str(dataset),
@@ -517,6 +519,24 @@ def test_install_into_a_file_is_refused_without_switching_folder(make_window, tm
     assert installer.started == []
     assert window.session.paths.root == tmp_path / "data"
     assert "ERROR: Not a folder:" in window.settings_tab.install_log.text()
+
+
+def test_failed_install_over_a_complete_runtime_is_not_reported_as_installed(
+    make_window, tmp_path, dataset, installer
+):
+    # The files of an earlier install are there; only the last step failed.
+    root = tmp_path / "data"
+    paths = _make_runtime(root, dataset)
+    window, *_ = make_window(root)
+    window.settings_tab.install_button.click()
+    verified_marker(paths).unlink()
+
+    installer.finish(False, "Check that torch sees the GPU failed (exit code 1).")
+
+    status = window.training_tab.status.text()
+    assert "OK: Training runtime installed." not in status
+    assert "Repair" in window.settings_tab.problems_label.text()
+    assert not window.training_tab.configure_button.isEnabled()
 
 
 def test_install_end_keeps_the_earlier_status_lines(make_window, tmp_path, installer):

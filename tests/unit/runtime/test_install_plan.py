@@ -1,24 +1,28 @@
 import pytest
 
-from anima_trainer.runtime.accelerate_config import ACCELERATE_GPU_YAML, write_accelerate_config
+from anima_trainer.runtime.accelerate_config import ACCELERATE_GPU_YAML
 from anima_trainer.runtime.install_plan import (
     GPU_CHECK,
     NO_GIT_MESSAGE,
     REQUIREMENTS_STAMP,
     SD_SCRIPTS_COMMIT,
     SD_SCRIPTS_URL,
+    VENV_STAMP,
+    install_pending,
+    needs_venv,
     plan_install,
     requirements_marker,
     sd_scripts_marker,
+    venv_marker,
     verified_marker,
 )
 from anima_trainer.runtime.paths import RuntimePaths
 from anima_trainer.runtime.python_finder import NO_PYTHON_MESSAGE, PythonInterpreter
+from tests.runtime_helpers import mark_installed
 
 PYTHON = PythonInterpreter("/usr/bin/python3.12", (3, 12))
 GIT = "/usr/bin/git"
 ALL_STEPS = [
-    "data_dir",
     "venv",
     "pip",
     "sd_scripts_init",
@@ -36,13 +40,13 @@ def _touch(path, text=""):
 
 
 def _install_everything(paths):
-    _touch(paths.venv_python)
     _touch(paths.sd_scripts_dir / ".git" / "HEAD")
-    _touch(paths.train_script)
-    _touch(sd_scripts_marker(paths), SD_SCRIPTS_COMMIT)
-    _touch(requirements_marker(paths), REQUIREMENTS_STAMP)
-    _touch(verified_marker(paths), SD_SCRIPTS_COMMIT)
-    write_accelerate_config(paths)
+    mark_installed(paths)
+
+
+def _ready_venv(paths):
+    _touch(paths.venv_python)
+    _touch(venv_marker(paths), VENV_STAMP)
 
 
 @pytest.fixture
@@ -72,15 +76,58 @@ def test_complete_install_needs_nothing(paths):
 
 
 def test_existing_venv_is_kept(paths):
-    _touch(paths.venv_python)
+    _ready_venv(paths)
 
     keys = _keys(plan_install(paths, PYTHON, GIT))
 
-    assert "venv" not in keys and "pip" not in keys and "data_dir" not in keys
+    assert "venv" not in keys and "pip" not in keys
+
+
+def test_venv_interrupted_before_pip_is_set_up_again(paths):
+    # `python -m venv` writes bin/python before ensurepip has installed pip.
+    _install_everything(paths)
+    venv_marker(paths).unlink()
+
+    keys = _keys(plan_install(paths, PYTHON, GIT))
+
+    assert keys == ["venv", "pip", "requirements", "verify"]
+
+
+def test_recreated_venv_reinstalls_the_requirements(paths):
+    _install_everything(paths)
+    paths.venv_python.unlink()
+
+    keys = _keys(plan_install(paths, PYTHON, GIT))
+
+    assert keys == ["venv", "pip", "requirements", "verify"]
+
+
+def test_pip_step_marks_the_venv_ready(paths):
+    steps = {step.key: step for step in plan_install(paths, PYTHON, GIT).steps}
+
+    assert steps["pip"].marker == venv_marker(paths)
+    assert steps["pip"].stamp == VENV_STAMP
+    assert steps["venv"].marker is None
+
+
+def test_needs_venv_until_the_venv_is_ready(paths):
+    assert needs_venv(paths)
+    _touch(paths.venv_python)
+    assert needs_venv(paths)
+    _touch(venv_marker(paths), VENV_STAMP)
+    assert not needs_venv(paths)
+
+
+def test_install_is_pending_until_every_step_is_done(paths):
+    assert install_pending(paths)
+    _install_everything(paths)
+    assert not install_pending(paths)
+    verified_marker(paths).unlink()
+    assert install_pending(paths)
 
 
 def test_interrupted_clone_resumes_without_init(paths):
-    _touch(paths.venv_python)
+    _ready_venv(paths)
     _touch(paths.sd_scripts_dir / ".git" / "HEAD")
 
     keys = _keys(plan_install(paths, PYTHON, GIT))
@@ -112,7 +159,7 @@ def test_edited_accelerate_config_is_rewritten(paths):
 
 def test_missing_python_blocks_only_when_the_venv_is_needed(paths):
     fresh = plan_install(paths, None, GIT)
-    _touch(paths.venv_python)
+    _ready_venv(paths)
     with_venv = plan_install(paths, None, GIT)
 
     assert fresh.problems == (NO_PYTHON_MESSAGE,)
@@ -176,15 +223,13 @@ def test_checkout_and_verify_leave_markers(paths):
     assert steps["verify"].stamp == SD_SCRIPTS_COMMIT
 
 
-def test_in_process_steps_create_the_folder_and_the_config(paths):
+def test_in_process_step_writes_the_accelerate_config(paths):
     steps = {step.key: step for step in plan_install(paths, PYTHON, GIT).steps}
 
-    steps["data_dir"].run_action()
     steps["accelerate_config"].run_action()
 
-    assert paths.root.is_dir()
     assert paths.accelerate_config_file.read_text(encoding="utf-8") == ACCELERATE_GPU_YAML
-    assert steps["data_dir"].command == ()
+    assert steps["accelerate_config"].command == ()
 
 
 def test_every_step_has_a_title(paths):
@@ -257,5 +302,10 @@ def test_markers_live_in_the_install_state_folder(paths):
 
     assert {
         m.parent
-        for m in (sd_scripts_marker(paths), requirements_marker(paths), verified_marker(paths))
+        for m in (
+            venv_marker(paths),
+            sd_scripts_marker(paths),
+            requirements_marker(paths),
+            verified_marker(paths),
+        )
     } == {folder}

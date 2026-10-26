@@ -21,6 +21,7 @@ from anima_trainer.ui.main_window import MainWindow
 from anima_trainer.workflow.install_session import InstallSession
 from anima_trainer.workflow.training_session import SessionState, TrainingSession
 from tests.process_helpers import wait_until_dead
+from tests.runtime_helpers import mark_installed
 
 pytestmark = [
     pytest.mark.integration,
@@ -48,6 +49,7 @@ def _citron(tmp_path, *fake_args):
     paths.venv_accelerate.parent.mkdir(parents=True, exist_ok=True)
     paths.venv_accelerate.write_text(f"#!/bin/sh\nexec {command}\n")
     paths.venv_accelerate.chmod(0o755)
+    mark_installed(paths)
     images = tmp_path / "images"
     images.mkdir()
     (images / "a.png").write_bytes(b"")

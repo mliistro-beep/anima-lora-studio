@@ -14,7 +14,7 @@ from typing import Protocol, TextIO
 
 from PySide6.QtCore import QObject, Signal, SignalInstance
 
-from anima_trainer.runtime.install_plan import InstallPlan, InstallStep, plan_install
+from anima_trainer.runtime.install_plan import InstallPlan, InstallStep, needs_venv, plan_install
 from anima_trainer.runtime.paths import RuntimePaths
 from anima_trainer.runtime.python_finder import find_python
 from anima_trainer.training.runner import log_file_path
@@ -36,8 +36,12 @@ class Installer(Protocol):
 
 
 def plan_for(paths: RuntimePaths) -> InstallPlan:
-    """The install plan with the Python and git found on this machine."""
-    return plan_install(paths, find_python(), shutil.which("git"))
+    """The install plan with the Python and git found on this machine.
+
+    Python is looked for only when the venv must be created: the probe runs on this thread.
+    """
+    python = find_python() if needs_venv(paths) else None
+    return plan_install(paths, python, shutil.which("git"))
 
 
 class InstallSession(QObject):

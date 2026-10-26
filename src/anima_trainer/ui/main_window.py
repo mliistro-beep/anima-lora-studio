@@ -14,6 +14,7 @@ from anima_trainer.runtime.data_dir import (
     OpenedRuntime,
     data_dir_problem,
     open_data_dir,
+    resolve_data_dir,
     runtime_problems,
     save_data_dir,
 )
@@ -182,7 +183,7 @@ class MainWindow(QMainWindow):
             return
         if not self._use_typed_folder():
             return
-        # Finding Python probes a few interpreters on this thread: about a second.
+        # Finding Python (only for a new venv) probes a few interpreters on this thread.
         problems = self._install.start(self.session.paths)
         for problem in problems:
             self.settings_tab.install_log.append_line(f"ERROR: {problem}")
@@ -198,7 +199,7 @@ class MainWindow(QMainWindow):
         if not typed:
             self._apply_root(typed)  # shows "Choose the data folder first."
             return False
-        folder = Path(typed).expanduser()
+        folder = resolve_data_dir(Path(typed))
         problem = data_dir_problem(folder)
         if problem is not None:
             self.settings_tab.install_log.append_line(f"ERROR: {problem}")
@@ -207,7 +208,7 @@ class MainWindow(QMainWindow):
             self._apply_root(typed)
         return True
 
-    def _on_install_finished(self, _ok: bool, _message: str) -> None:
+    def _on_install_finished(self, ok: bool, message: str) -> None:
         """Re-check the runtime, also after a failure: a partial install changes the folder."""
         if self._shut_down:
             # Cancelled by shutdown(): a new GPU detection would delay the exit (torch probe).
@@ -219,7 +220,8 @@ class MainWindow(QMainWindow):
         self._refresh_models()
         # Appended: the status may hold validation or Configure messages worth keeping.
         notes = tuple(f"ERROR: {problem}" for problem in self._problems)
-        for note in notes or ("OK: Training runtime installed.",):
+        outcome = "OK: Training runtime installed." if ok else f"ERROR: {message}"
+        for note in notes or (outcome,):
             self.training_tab.status.append_line(note)
         if self._root_exists:
             try:
