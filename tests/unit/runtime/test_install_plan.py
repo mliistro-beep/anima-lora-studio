@@ -2,7 +2,9 @@ import pytest
 
 from anima_trainer.runtime.accelerate_config import ACCELERATE_GPU_YAML, write_accelerate_config
 from anima_trainer.runtime.install_plan import (
+    GPU_CHECK,
     NO_GIT_MESSAGE,
+    REQUIREMENTS_STAMP,
     SD_SCRIPTS_COMMIT,
     SD_SCRIPTS_URL,
     plan_install,
@@ -38,7 +40,7 @@ def _install_everything(paths):
     _touch(paths.sd_scripts_dir / ".git" / "HEAD")
     _touch(paths.train_script)
     _touch(sd_scripts_marker(paths), SD_SCRIPTS_COMMIT)
-    _touch(requirements_marker(paths), SD_SCRIPTS_COMMIT)
+    _touch(requirements_marker(paths), REQUIREMENTS_STAMP)
     _touch(verified_marker(paths), SD_SCRIPTS_COMMIT)
     write_accelerate_config(paths)
 
@@ -93,6 +95,14 @@ def test_requirements_rerun_when_marker_is_for_another_commit(paths):
     assert _keys(plan_install(paths, PYTHON, GIT)) == ["requirements", "verify"]
 
 
+def test_requirements_rerun_when_installed_without_the_extra_packages(paths):
+    # Installs made before torchvision was added hold only the commit in their marker.
+    _install_everything(paths)
+    _touch(requirements_marker(paths), SD_SCRIPTS_COMMIT)
+
+    assert _keys(plan_install(paths, PYTHON, GIT)) == ["requirements", "verify"]
+
+
 def test_edited_accelerate_config_is_rewritten(paths):
     _install_everything(paths)
     paths.accelerate_config_file.write_text("mixed_precision: fp16\n")
@@ -141,9 +151,19 @@ def test_sd_scripts_is_fetched_at_the_pinned_commit(paths):
 def test_requirements_run_inside_sd_scripts_and_leave_a_marker(paths):
     step = next(s for s in plan_install(paths, PYTHON, GIT).steps if s.key == "requirements")
 
-    assert step.command[-2:] == ("-r", "requirements.txt")
+    assert step.command[-3:] == ("-r", "requirements.txt", "torchvision")
     assert step.working_dir == paths.sd_scripts_dir
     assert step.marker == requirements_marker(paths)
+    assert step.stamp == REQUIREMENTS_STAMP
+
+
+def test_requirements_stamp_names_the_commit_and_the_extra_packages():
+    assert f"{SD_SCRIPTS_COMMIT} +torchvision" == REQUIREMENTS_STAMP
+
+
+def test_gpu_check_imports_torchvision():
+    # sd-scripts imports torchvision at startup but does not list it in its requirements.
+    assert "import torch, torchvision" in GPU_CHECK
 
 
 def test_checkout_and_verify_leave_markers(paths):
@@ -152,6 +172,8 @@ def test_checkout_and_verify_leave_markers(paths):
     assert steps["sd_scripts_checkout"].marker == sd_scripts_marker(paths)
     assert steps["verify"].marker == verified_marker(paths)
     assert steps["sd_scripts_fetch"].marker is None
+    assert steps["sd_scripts_checkout"].stamp == SD_SCRIPTS_COMMIT
+    assert steps["verify"].stamp == SD_SCRIPTS_COMMIT
 
 
 def test_in_process_steps_create_the_folder_and_the_config(paths):

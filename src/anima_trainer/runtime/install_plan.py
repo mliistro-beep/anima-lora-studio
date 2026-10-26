@@ -5,7 +5,8 @@ the venv is kept and sd-scripts is fetched at a pinned commit with init/fetch/ch
 The checkout, the requirements and the GPU check each leave a marker in <data>/.install
 naming the commit they were done for, so a failed check or a new pinned commit redoes
 exactly what is needed. torch comes from the sd-scripts requirements, as in Citron's
-standard Linux setup.
+standard Linux setup; torchvision is added to the same pip run because sd-scripts imports
+it but does not list it.
 """
 
 from collections.abc import Callable
@@ -19,11 +20,15 @@ from anima_trainer.runtime.python_finder import NO_PYTHON_MESSAGE, PythonInterpr
 SD_SCRIPTS_URL = "https://github.com/kohya-ss/sd-scripts.git"
 # The commit Citron's install was verified with (real training run on 2026-10-21).
 SD_SCRIPTS_COMMIT = "690ea7f96c23182352ec63def76d431c6120bd2f"
+# Installed with the sd-scripts requirements in one pip run, so pip picks versions that match torch.
+EXTRA_PACKAGES = ("torchvision",)
+# The requirements marker names the extra packages too, so adding one reinstalls the requirements.
+REQUIREMENTS_STAMP = " ".join((SD_SCRIPTS_COMMIT, *(f"+{name}" for name in EXTRA_PACKAGES)))
 INSTALL_STATE_DIR = ".install"
 NO_GIT_MESSAGE = "git not found. Install git (on Debian/Ubuntu: sudo apt install git)."
 # Fails the step when torch cannot see a GPU, so a broken driver shows up at install time.
 GPU_CHECK = (
-    "import torch; "
+    "import torch, torchvision; "
     "print('torch', torch.__version__, 'CUDA', torch.version.cuda); "
     "ok = torch.cuda.is_available(); "
     "print('GPU:', torch.cuda.get_device_name(0) if ok else 'none'); "
@@ -37,9 +42,10 @@ class InstallStep:
     title: str
     command: tuple[str, ...] = ()  # empty for steps done in-process by `action`
     working_dir: Path | None = None
-    # The installer writes SD_SCRIPTS_COMMIT here after success (creating its folder);
-    # the step is planned again until the marker holds that commit.
+    # The installer writes `stamp` here after success (creating its folder);
+    # the step is planned again until the marker holds that stamp.
     marker: Path | None = None
+    stamp: str = SD_SCRIPTS_COMMIT
     action: Callable[[], object] | None = field(default=None, compare=False)
 
     def run_action(self) -> None:
@@ -154,15 +160,24 @@ def _sd_scripts_steps(paths: RuntimePaths, git: str | None) -> tuple[InstallStep
 
 def _requirements_steps(paths: RuntimePaths, refetched: bool) -> tuple[InstallStep, ...]:
     marker = requirements_marker(paths)
-    if not refetched and _is_current(marker):
+    if not refetched and _is_current(marker, REQUIREMENTS_STAMP):
         return ()
     return (
         InstallStep(
             "requirements",
             "Install torch and the sd-scripts requirements (several GB, can take a while)",
-            (str(paths.venv_python), "-m", "pip", "install", "-r", "requirements.txt"),
+            (
+                str(paths.venv_python),
+                "-m",
+                "pip",
+                "install",
+                "-r",
+                "requirements.txt",
+                *EXTRA_PACKAGES,
+            ),
             paths.sd_scripts_dir,
             marker,
+            REQUIREMENTS_STAMP,
         ),
     )
 
@@ -189,8 +204,8 @@ def _verify_step(paths: RuntimePaths) -> InstallStep:
     )
 
 
-def _is_current(marker: Path) -> bool:
-    return (_read(marker) or "").strip() == SD_SCRIPTS_COMMIT
+def _is_current(marker: Path, stamp: str = SD_SCRIPTS_COMMIT) -> bool:
+    return (_read(marker) or "").strip() == stamp
 
 
 def _read(path: Path) -> str | None:

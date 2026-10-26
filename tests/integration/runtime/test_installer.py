@@ -93,6 +93,23 @@ def test_marker_holds_the_pinned_commit_after_success(qtbot, tmp_path):
     assert marker.read_text(encoding="utf-8").strip() == SD_SCRIPTS_COMMIT
 
 
+def test_marker_holds_the_step_stamp_after_success(qtbot, tmp_path):
+    installer = RuntimeInstaller()
+    marker = tmp_path / ".install" / "requirements.commit"
+    step = InstallStep(
+        "requirements",
+        "Step requirements",
+        (sys.executable, "-c", "pass"),
+        tmp_path,
+        marker,
+        stamp="abc +torchvision",
+    )
+
+    _install(qtbot, installer, (step,))
+
+    assert marker.read_text(encoding="utf-8").strip() == "abc +torchvision"
+
+
 def test_failed_command_stops_the_install_without_writing_its_marker(qtbot, tmp_path):
     installer = RuntimeInstaller()
     started, lines = _collect(installer)

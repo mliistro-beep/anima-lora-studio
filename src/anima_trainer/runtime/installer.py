@@ -13,7 +13,7 @@ from collections.abc import Iterable
 
 from PySide6.QtCore import QObject, QProcess, QProcessEnvironment, QTimer, Signal
 
-from anima_trainer.runtime.install_plan import SD_SCRIPTS_COMMIT, InstallStep
+from anima_trainer.runtime.install_plan import InstallStep
 from anima_trainer.system.process_group import (
     KILL_GRACE_MS,
     SHUTDOWN_KILL_WAIT_MS,
@@ -188,7 +188,7 @@ class RuntimeInstaller(QObject):
         if step.marker is not None:
             try:
                 step.marker.parent.mkdir(parents=True, exist_ok=True)
-                step.marker.write_text(SD_SCRIPTS_COMMIT + "\n", encoding="utf-8")
+                step.marker.write_text(step.stamp + "\n", encoding="utf-8")
             except OSError as error:
                 self._finish(False, f"{step.title}: could not write {step.marker}: {error}")
                 return
