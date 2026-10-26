@@ -2,8 +2,8 @@
 
 Desktop (PySide6) version of Citron's Anima LoRA Trainer UI, with the same settings and
 identical TOML configs. It does not need Citron: it keeps its own training runtime (venv,
-sd-scripts, models) in its data folder, and will add epoch previews and a simple image
-generator.
+sd-scripts, models) in its data folder, can use model files you already have (accepted
+after a SHA-256 check), and will add epoch previews and a simple image generator.
 
 Status and the per-component checklist: [DOCS/milestones.md](DOCS/milestones.md).
 Contributor setup: [DOCS/CONTRIBUTING.md](DOCS/CONTRIBUTING.md).

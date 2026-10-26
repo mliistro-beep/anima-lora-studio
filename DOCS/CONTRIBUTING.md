@@ -51,7 +51,7 @@ for Qt:
 | `CUDA_VISIBLE_DEVICES` | `training/command_builder.py` | selected GPU index | Same as Citron: limits the training to the chosen GPU |
 | `PYTHONUNBUFFERED` | `training/command_builder.py`, `runtime/installer.py` | `1` | Streams sd-scripts, pip and GPU check output line by line |
 | `XDG_DATA_HOME` | you (optional) | a folder | Read by Qt (`QStandardPaths`): parent of the default data folder `anima-trainer` |
-| `XDG_CONFIG_HOME` | you (optional) | a folder | Read by Qt (`QSettings`): where the app keeps its settings, e.g. the chosen data folder |
+| `XDG_CONFIG_HOME` | you (optional) | a folder | Read by Qt (`QSettings`): where the app keeps its settings (the chosen data folder, the linked model files) |
 | `QT_QPA_PLATFORM` | you, when running tests | `offscreen` | Lets Qt tests run without a display |
 <!-- /AUTO-GENERATED -->
 
@@ -59,7 +59,8 @@ for Qt:
 
 - Layout: `tests/unit/` (pure logic), `tests/integration/` (subprocesses, local HTTP
   server, Qt signals), `tests/e2e/` (UI driven with pytest-qt), fixtures in
-  `tests/fixtures/`.
+  `tests/fixtures/`. `tests/runtime_helpers.py` `mark_installed(paths)` makes a data
+  folder look fully installed (files, install markers, accelerate config).
 - Run a subset: `.venv/bin/pytest -m integration`, `.venv/bin/pytest tests/unit`.
 - Workflow is TDD: write the failing test first, then the code. Coverage must stay at
   80% or more.
@@ -75,8 +76,11 @@ for Qt:
 ## Code style
 
 - ruff for lint and format, strict mypy; both must be clean.
-- Many small files organized by feature (`settings/`, `dataset/`, `training/`,
-  `models/`, `preview/`, `system/`, `ui/`), 200-400 lines typical, 800 max.
+- Many small files organized by feature (`runtime/`, `settings/`, `dataset/`,
+  `training/`, `models/`, `preview/`, `system/`, `workflow/`, `ui/`), 200-400 lines
+  typical, 800 max.
+- Long jobs off the UI thread go through `system/background_task.py` `BackgroundTask`
+  (see `ModelDownloader` and `ModelFileChecker`) instead of a new QThread class.
 - Immutable data: frozen dataclasses and pydantic models; return new objects instead
   of changing existing ones.
 - Validate user input at the boundary (`settings/schema.py`), handle errors explicitly,

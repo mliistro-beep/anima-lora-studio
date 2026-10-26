@@ -3,10 +3,10 @@
 Operating the Anima LoRA Trainer desktop app on a workstation. It is a local desktop
 app, not a service: there are no servers, health endpoints or alerting.
 
-Current state: the training UI (M3) is done and was verified with a real run. M4 (the
-app's own training runtime, independent of Citron) is in progress: the app uses its own
-data folder and installs the training runtime from the Settings tab. Still to do for M4:
-a fresh install followed by a real training run (the exit criterion). See [milestones.md](milestones.md).
+Current state: M0-M4b are done, each verified with a real training run: the training UI
+with Citron parity, the app's own training runtime installed from the Settings tab, and
+model files already on disk used after a SHA-256 check. Previews and the image generator
+(M5) are not built yet. See [milestones.md](milestones.md).
 
 ## Install and launch
 
@@ -23,8 +23,21 @@ a fresh install followed by a real training run (the exit criterion). See [miles
    internet connection; torch and the sd-scripts requirements are several GB. The steps
    and their output appear in the install log, also saved as
    `<data>/logs/install_<timestamp>.log`. Then download Qwen3, the VAE and the DiT with
-   the Download buttons (the DiT is also downloaded on the first Start). Citron is not
-   needed and the app never writes into a Citron folder.
+   the Download buttons (the DiT is also downloaded on the first Start), or use files you
+   already have (next section). Citron is not needed and the app never writes into a
+   Citron folder.
+
+## Use model files you already have
+
+In the Settings tab, press **Use file...** on a model row and choose the file (for example
+the copy of a Citron or ComfyUI install). The app checks its size and SHA-256 against the
+official file on Hugging Face (a DiT takes a few seconds) and, if they match, uses the file
+where it is, without copying it: the row shows "OK (your file)". A different file is
+rejected with the reason. **Unlink** goes back to the copy in the data folder.
+
+The choice is saved in `~/.config/anima-trainer/anima-trainer.conf` (group
+`linked_models`) and is kept when the data folder changes. "Use file..." is disabled for a
+model already present in the data folder.
 
 ## Where things are
 
@@ -38,8 +51,11 @@ in `~/.config/anima-trainer/anima-trainer.conf`.
 | Saved settings | `<data>/config.json` (same format as Citron) |
 | Generated TOML configs | `<data>/configs/<project>_{training,dataset}_<timestamp>.toml` |
 | Training logs | `<data>/logs/<project>_<timestamp>.log` |
-| DiT base model | `<data>/models/anima/dit/<base-model>.safetensors` |
+| DiT base model | `<data>/models/anima/dit/<base-model>.safetensors`, or your linked file |
+| Qwen3, VAE | `<data>/models/anima/text_encoder/`, `<data>/models/anima/vae/`, or your linked files |
 | Partial downloads | same path with a `.part` suffix |
+| Install state | `<data>/.install/*.commit` (one marker per install step) |
+| Install logs | `<data>/logs/install_<timestamp>.log` |
 | Checkpoints | the output directory set in the settings |
 
 Relative image and output folders are resolved against the data folder, because
@@ -50,6 +66,20 @@ sd-scripts runs with that as its working directory.
 **"Missing models: Qwen3, VAE" when configuring.** The text encoder or VAE is not in
 `<data>/models/anima/`. Download it with its button in the Settings tab (only the DiT is
 downloaded automatically on Start).
+
+**"Training runtime incomplete or out of date: press Repair in Settings".** An install
+step is missing or was done for an older version (for example after updating the app, or
+an interrupted install). Press Repair: only the missing steps run. Installs made before the
+M4 review fixes ask for it once (venv, pip, requirements, GPU check; the packages are
+already there, so it is quick).
+
+**"... is not a compatible ... file" after Use file....** The file is not the official
+one: "wrong size" means a different model (checked before reading the file), "SHA-256
+does not match" a different version or a damaged file. Pick the right file or download it.
+
+**"Missing (your file was moved or changed)".** A linked file was moved, replaced or
+edited, so it is no longer trusted. Press Use file... again on its new location, or
+Download (the download goes to the data folder, never into your folder).
 
 **Install failed or was cancelled.** Read the install log (Settings tab, or
 `<data>/logs/install_<timestamp>.log`) and press Install again: steps already done are

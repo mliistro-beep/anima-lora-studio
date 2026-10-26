@@ -1,4 +1,4 @@
-<!-- Generated: 2026-10-21 | Files scanned: 97 (47 src, 50 tests) | Token estimate: ~280 -->
+<!-- Generated: 2026-10-26 | Files scanned: 129 (62 src, 67 tests) | Token estimate: ~280 -->
 # Dependencies
 
 ## Runtime (pyproject.toml)
@@ -11,12 +11,16 @@ pytest, pytest-qt, pytest-cov, ruff, mypy (+pydantic plugin), types-toml, bandit
 
 ## External, used through subprocesses (not imported)
 Training runtime in the data folder (<data>): .venv (torch, accelerate), sd-scripts
-  (installer planned in M4; Citron is never used)
+  (installed by the Settings tab: venv, pinned sd-scripts commit, its requirements + torchvision;
+  Citron is never used)
   accelerate launch ... sd-scripts/anima_train_network.py      training
   sd-scripts/anima_minimal_inference.py                        inference (M5)
   .venv/bin/python -c "import torch..."                        GPU list
+git                                                            fetches sd-scripts (installer)
 nvidia-smi                                                     GPU list fallback
 dmesg -T                                                       OOM hint (often not permitted)
 
 ## External services
-Hugging Face circlestone-labs/Anima (https only)  DiT downloads, models/catalog.py
+Hugging Face circlestone-labs/Anima (https only)  DiT, Qwen3 and VAE downloads; expected SHA-256 and
+                                                  sizes in models/catalog.py come from its LFS metadata
+GitHub kohya-ss/sd-scripts (https, via git)       pinned commit fetched by the installer
