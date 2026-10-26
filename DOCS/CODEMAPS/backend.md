@@ -57,7 +57,7 @@ start_service.py     StartRequest, plan_start(...) -> StartPlan
 command_builder.py   build_training_launch(...) -> LaunchSpec(program, arguments, env, working_dir)
 runner.py            TrainingRunner(QObject): start/stop/shutdown/log_tail; signals line_received,
                      event_received, finished(RunOutcome), failed_to_start, warning; split_lines, log_file_path
-log_parser.py        parse_line(line) -> TrainingEvent|None; parse_output(text); parse_duration
+log_parser.py        parse_line(line) -> TrainingEvent|None; parse_duration
 progress.py          ProgressState (frozen), apply_event(state, event), format_duration(seconds)
 outcome_report.py    completed(outcome), run_failed(outcome), outcome_messages(outcome, output_dir, hint)
 oom_hint.py          oom_hint(exit_code, log_tail, kernel_log, crashed) -> str|None; read_kernel_log()

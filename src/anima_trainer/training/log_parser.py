@@ -77,11 +77,6 @@ def parse_line(line: str) -> TrainingEvent | None:
     )
 
 
-def parse_output(text: str) -> tuple[TrainingEvent, ...]:
-    events = (parse_line(line) for line in text.splitlines())
-    return tuple(event for event in events if event is not None)
-
-
 def _parse_epoch(text: str) -> EpochStarted | None:
     match = _EPOCH.match(text)
     return EpochStarted(int(match[1]), int(match[2])) if match else None

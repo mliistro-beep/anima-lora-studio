@@ -66,13 +66,6 @@ def test_sample_generation_leaves_state_unchanged():
 
 
 @pytest.mark.parametrize(
-    ("step", "total", "expected"), [(0, None, 0.0), (50, 200, 0.25), (300, 200, 1.0), (1, 0, 0.0)]
-)
-def test_fraction_done(step, total, expected):
-    assert ProgressState(step=step, total_steps=total).fraction_done() == expected
-
-
-@pytest.mark.parametrize(
     ("seconds", "expected"), [(None, "--:--"), (0, "00:00"), (125, "02:05"), (3725, "1:02:05")]
 )
 def test_format_duration(seconds, expected):

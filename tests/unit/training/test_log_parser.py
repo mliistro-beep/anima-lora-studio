@@ -10,7 +10,6 @@ from anima_trainer.training.log_parser import (
     StepProgress,
     parse_duration,
     parse_line,
-    parse_output,
 )
 
 
@@ -101,7 +100,7 @@ def test_parse_duration(text, seconds):
 def test_real_log_excerpt_produces_expected_event_sequence(citron_fixtures):
     text = (citron_fixtures / "training_log_excerpt.log").read_text(encoding="utf-8")
 
-    events = parse_output(text)
+    events = [e for e in map(parse_line, text.splitlines()) if e is not None]
 
     kinds = [type(e).__name__ for e in events]
     assert kinds[0] == "StepProgress"

@@ -28,11 +28,6 @@ class ProgressState:
     last_checkpoint: Path | None = None
     completed: bool = False
 
-    def fraction_done(self) -> float:
-        if not self.total_steps:
-            return 0.0
-        return min(self.step / self.total_steps, 1.0)
-
 
 def apply_event(state: ProgressState, event: TrainingEvent) -> ProgressState:
     """Return the state after `event`; the given state is left unchanged."""
