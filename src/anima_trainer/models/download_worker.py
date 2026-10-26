@@ -1,10 +1,9 @@
-"""Runs download_file() on a background QThread and reports through Qt signals."""
+"""Runs download_file() on a background thread and reports through Qt signals."""
 
-import threading
-from dataclasses import dataclass
+from collections.abc import Callable
 from pathlib import Path
 
-from PySide6.QtCore import QObject, QThread, Signal
+from PySide6.QtCore import QObject
 
 from anima_trainer.models.downloader import (
     CHUNK_SIZE,
@@ -13,111 +12,28 @@ from anima_trainer.models.downloader import (
     DownloadProgress,
     download_file,
 )
+from anima_trainer.system.background_task import BackgroundTask, Report
 
 
-@dataclass(frozen=True)
-class _Result:
-    kind: str  # "finished", "failed" or "cancelled"
-    detail: str = ""
-
-
-class _DownloadThread(QThread):
-    # object instead of int: model files exceed the 32-bit range of int signals.
-    progress = Signal(object, object)
-
-    def __init__(self, url: str, destination: Path, chunk_size: int) -> None:
-        super().__init__()
-        self._url = url
-        self._destination = destination
-        self._chunk_size = chunk_size
-        self._cancel = threading.Event()
-        # Written once by run() before the thread ends, read after QThread.finished.
-        self.result = _Result("failed", "Download did not run")
-
-    def cancel(self) -> None:
-        self._cancel.set()
-
-    def run(self) -> None:
-        try:
-            path = download_file(
-                self._url,
-                self._destination,
-                on_progress=self._report,
-                is_cancelled=self._cancel.is_set,
-                chunk_size=self._chunk_size,
-            )
-        except DownloadCancelled:
-            self.result = _Result("cancelled")
-        except DownloadError as error:
-            self.result = _Result("failed", str(error))
-        except Exception as error:  # noqa: BLE001 - a thread must never die silently
-            self.result = _Result("failed", f"Unexpected download error: {error!r}")
-        else:
-            self.result = _Result("finished", str(path))
-
-    def _report(self, progress: DownloadProgress) -> None:
-        self.progress.emit(progress.downloaded, progress.total)
-
-
-class ModelDownloader(QObject):
-    """progress(downloaded, total or None), then exactly one of finished/failed/cancelled.
-
-    The terminal signal is emitted after the worker thread has fully stopped, so
-    is_running() is already False and a slot may start a new download right away.
-    Call shutdown() before the application exits.
-    """
-
-    progress = Signal(object, object)
-    finished = Signal(str)
-    failed = Signal(str)
-    cancelled = Signal()
+class ModelDownloader(BackgroundTask):
+    """progress(downloaded, total or None), then finished(path as str), failed or cancelled."""
 
     def __init__(self, chunk_size: int = CHUNK_SIZE, parent: QObject | None = None) -> None:
-        super().__init__(parent)
+        super().__init__((DownloadError,), DownloadCancelled, parent)
         self._chunk_size = chunk_size
-        self._thread: _DownloadThread | None = None
-
-    def is_running(self) -> bool:
-        return self._thread is not None
 
     def start(self, url: str, destination: Path) -> None:
-        if self._thread is not None:
-            raise RuntimeError("A download is already running")
-        thread = _DownloadThread(url, destination, self._chunk_size)
-        # Bind each event to its own thread: events still queued from a thread that was
-        # already shut down must not reach the caller or act on a newer download.
-        thread.progress.connect(lambda done, total: self._forward_progress(thread, done, total))
-        thread.finished.connect(lambda: self._on_thread_done(thread))
-        self._thread = thread
-        thread.start()
+        def job(report: Report, is_cancelled: Callable[[], bool]) -> str:
+            def on_progress(progress: DownloadProgress) -> None:
+                report(progress.downloaded, progress.total)
 
-    def cancel(self) -> None:
-        if self._thread is not None:
-            self._thread.cancel()
+            path = download_file(
+                url,
+                destination,
+                on_progress=on_progress,
+                is_cancelled=is_cancelled,
+                chunk_size=self._chunk_size,
+            )
+            return str(path)
 
-    def shutdown(self) -> None:
-        """Cancel any running download and block until its thread has exited."""
-        thread = self._thread
-        if thread is None:
-            return
-        thread.cancel()
-        thread.wait()
-        self._on_thread_done(thread)
-
-    def _forward_progress(self, thread: _DownloadThread, done: object, total: object) -> None:
-        if thread is self._thread:
-            self.progress.emit(done, total)
-
-    def _on_thread_done(self, thread: _DownloadThread) -> None:
-        if thread is not self._thread:
-            return
-        thread.wait()
-        self._thread = None
-        result = thread.result
-        thread.deleteLater()
-        if result.kind == "finished":
-            self.finished.emit(result.detail)
-        elif result.kind == "cancelled":
-            self.cancelled.emit()
-        else:
-            self.failed.emit(result.detail)
+        self._run(job)
