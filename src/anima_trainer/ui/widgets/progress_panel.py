@@ -22,6 +22,10 @@ def download_text(downloaded: int, total: int | None) -> str:
     return f"Downloading model: {_format_gb(downloaded)}"
 
 
+def check_text(checked: int, total: int) -> str:
+    return f"Checking model file (SHA-256): {_format_gb(checked)} / {_format_gb(total)}"
+
+
 class ProgressPanel(QWidget):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)

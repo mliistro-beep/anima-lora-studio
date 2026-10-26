@@ -1,7 +1,8 @@
-"""Main window: the three tabs wired to the training and install sessions, GPU detection and
-QSettings."""
+"""Main window: the three tabs wired to the training, install and model link sessions, GPU
+detection and QSettings."""
 
 from collections.abc import Callable
+from dataclasses import replace
 from pathlib import Path
 
 from pydantic import ValidationError
@@ -9,6 +10,7 @@ from PySide6.QtCore import QSettings
 from PySide6.QtGui import QCloseEvent
 from PySide6.QtWidgets import QMainWindow, QMessageBox, QTabWidget, QWidget
 
+from anima_trainer.models.check_worker import ModelFileChecker
 from anima_trainer.models.status import model_statuses
 from anima_trainer.runtime.data_dir import (
     OpenedRuntime,
@@ -26,11 +28,15 @@ from anima_trainer.ui.tabs.advanced_tab import AdvancedTab
 from anima_trainer.ui.tabs.settings_tab import SettingsTab
 from anima_trainer.ui.tabs.training_tab import TrainingTab
 from anima_trainer.workflow.install_session import InstallSession
+from anima_trainer.workflow.link_session import LinkSession
 from anima_trainer.workflow.training_session import SessionState, TrainingSession
 
 APP_NAME = "Anima LoRA Trainer"
 DEFAULT_SIZE = (1200, 800)
-QUIT_QUESTION = "Training, a model download or the install is still running. Stop it and quit?"
+QUIT_QUESTION = (
+    "Training, a model download, a model file check or the install is still running. "
+    "Stop it and quit?"
+)
 
 
 class MainWindow(QMainWindow):
@@ -42,6 +48,7 @@ class MainWindow(QMainWindow):
         opened: OpenedRuntime,
         install: InstallSession,
         open_root: Callable[[Path], OpenedRuntime] = open_data_dir,
+        links: LinkSession | None = None,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
@@ -52,6 +59,8 @@ class MainWindow(QMainWindow):
         self._store = store
         self._install = install
         self._installing = False
+        self._links = links if links is not None else LinkSession(store, ModelFileChecker())
+        self._checking = False
         self._open_root = open_root
         self._problems = opened.problems
         self._root_exists = opened.paths.root.is_dir()
@@ -65,11 +74,13 @@ class MainWindow(QMainWindow):
         self.tabs.addTab(self.settings_tab, "Settings")
         self.setCentralWidget(self.tabs)
         self._connect()
+        opened = self._with_links(opened)
+        self.session.set_runtime(opened.paths, opened.settings)
         self._show_runtime(opened)
         self._detector.start(opened.paths)
 
     def closeEvent(self, event: QCloseEvent) -> None:  # noqa: N802 - Qt override
-        if self.session.state is not SessionState.IDLE or self._installing:
+        if self.session.state is not SessionState.IDLE or self._installing or self._checking:
             answer = QMessageBox.question(
                 self,
                 APP_NAME,
@@ -86,7 +97,8 @@ class MainWindow(QMainWindow):
         event.accept()
 
     def shutdown(self) -> None:
-        """Stop training, downloads, the install and GPU detection; safe to call more than once.
+        """Stop training, downloads, file checks, the install and GPU detection; safe to call
+        more than once.
 
         Also connected to QApplication.aboutToQuit, so exits that skip closeEvent
         (Ctrl+C, SIGTERM, logout) do not leave the training child running on the GPU.
@@ -95,6 +107,7 @@ class MainWindow(QMainWindow):
             return
         self._shut_down = True
         self._install.shutdown()
+        self._links.shutdown()
         self.session.shutdown()
         self._detector.shutdown()
 
@@ -103,11 +116,18 @@ class MainWindow(QMainWindow):
         tab.configure_button.clicked.connect(self._configure)
         tab.start_button.clicked.connect(self._start)
         tab.stop_button.clicked.connect(self.session.stop)
+        # Linked model files may be moved or edited while the app runs.
+        self.tabs.currentChanged.connect(self._on_tab_changed)
         self.settings_tab.root_applied.connect(self._apply_root)
         self.settings_tab.download_requested.connect(self.session.download_model)
         self.settings_tab.cancel_requested.connect(self.session.stop)
         self.settings_tab.install_requested.connect(self._start_install)
         self.settings_tab.cancel_install_requested.connect(self._install.cancel)
+        self.settings_tab.link_requested.connect(self._link_model)
+        self.settings_tab.unlink_requested.connect(self._unlink_model)
+        self.settings_tab.cancel_check_requested.connect(self._links.cancel)
+        self._links.progress.connect(self.settings_tab.show_check)
+        self._links.finished.connect(self._on_link_finished)
         self._install.log_line.connect(self.settings_tab.install_log.append_line)
         self._install.step_changed.connect(self.settings_tab.show_install_step)
         self._install.finished.connect(self._on_install_finished)
@@ -167,7 +187,7 @@ class MainWindow(QMainWindow):
         if not text.strip():
             self.settings_tab.set_problems(("Choose the data folder first.",))
             return
-        opened = self._open_root(Path(text.strip()))
+        opened = self._with_links(self._open_root(Path(text.strip())))
         self.session.set_runtime(opened.paths, opened.settings)
         self._show_runtime(opened)
         self._detector.start(opened.paths)
@@ -179,7 +199,7 @@ class MainWindow(QMainWindow):
             self.training_tab.status.append_line(f"WARN: {error}")
 
     def _start_install(self) -> None:
-        if self.session.state is not SessionState.IDLE or self._installing:
+        if self._busy():
             return
         if not self._use_typed_folder():
             return
@@ -231,15 +251,62 @@ class MainWindow(QMainWindow):
         self._detector.start(paths)  # the training venv may have torch now
         self._set_installing(False)
 
+    def _link_model(self, key: str, path: str) -> None:
+        if self._busy():
+            return
+        error = self._links.check(key, Path(path))
+        if error is not None:
+            self.settings_tab.show_check_result(f"ERROR: {error}")
+            return
+        self._set_checking(True)
+
+    def _on_link_finished(self, linked: bool, message: str) -> None:
+        if self._shut_down:
+            return
+        self._set_checking(False)
+        self.settings_tab.show_check_result(message)
+        if linked:
+            self._reload_links()
+
+    def _unlink_model(self, key: str) -> None:
+        if self._busy():
+            return
+        error = self._links.unlink(key)
+        if error is not None:
+            self.settings_tab.show_check_result(f"ERROR: {error}")
+        self._reload_links()
+
+    def _reload_links(self) -> None:
+        """Use the saved links; called only while idle, as set_runtime requires."""
+        self.session.set_runtime(
+            self.session.paths.with_links(self._links.links()), self.session.settings
+        )
+        self._refresh_models()
+
+    def _with_links(self, opened: OpenedRuntime) -> OpenedRuntime:
+        return replace(opened, paths=opened.paths.with_links(self._links.links()))
+
+    def _busy(self) -> bool:
+        return self.session.state is not SessionState.IDLE or self._installing or self._checking
+
+    def _set_checking(self, checking: bool) -> None:
+        self._checking = checking
+        self.settings_tab.set_checking(checking)
+        self._apply_state(self.session.state)
+
     def _set_installing(self, installing: bool) -> None:
         self._installing = installing
         self.settings_tab.set_installing(installing)
         self._apply_state(self.session.state)
 
     def _apply_state(self, state: SessionState) -> None:
-        ready = not self._problems and not self._installing
+        ready = not self._problems and not self._installing and not self._checking
         self.training_tab.set_state(state, ready=ready)
         self.settings_tab.set_state(state, can_download=self._root_exists)
+
+    def _on_tab_changed(self, _index: int) -> None:
+        if self.tabs.currentWidget() is self.settings_tab:
+            self._refresh_models()
 
     def _refresh_models(self) -> None:
         self.settings_tab.set_models(model_statuses(self.session.paths))

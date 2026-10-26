@@ -3,6 +3,7 @@
 from PySide6.QtCore import Signal
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QFileDialog,
     QGroupBox,
     QHBoxLayout,
     QHeaderView,
@@ -17,7 +18,7 @@ from PySide6.QtWidgets import (
 from anima_trainer.models.status import ModelStatus
 from anima_trainer.ui.widgets.log_view import LogView
 from anima_trainer.ui.widgets.path_picker import PathPicker
-from anima_trainer.ui.widgets.progress_panel import download_text
+from anima_trainer.ui.widgets.progress_panel import check_text, download_text
 from anima_trainer.workflow.training_session import SessionState
 
 ROOT_HELP = (
@@ -28,9 +29,14 @@ INSTALL_HELP = (
     "Install creates the training venv, downloads sd-scripts and its requirements (torch, "
     "several GB) and checks the GPU. Repair redoes only what is missing or outdated."
 )
-MODEL_COLUMNS = ("Model", "Status", "Path", "")
+MODELS_HELP = (
+    "Already have a model? Use file... checks it against the official file (size and SHA-256) "
+    "and uses it where it is, without copying it."
+)
+MODEL_COLUMNS = ("Model", "Status", "Path", "", "")
+MODEL_FILE_FILTER = "Model files (*.safetensors);;All files (*)"
 INSTALL_LOG_LINES = 2000
-LABEL_COLUMN, PATH_COLUMN, ACTION_COLUMN = 0, 2, 3
+LABEL_COLUMN, PATH_COLUMN, ACTION_COLUMN, LINK_COLUMN = 0, 2, 3, 4
 
 
 class SettingsTab(QWidget):
@@ -39,11 +45,17 @@ class SettingsTab(QWidget):
     cancel_requested = Signal()  # cancel the model download
     install_requested = Signal()
     cancel_install_requested = Signal()
+    link_requested = Signal(str, str)  # model key, chosen file
+    unlink_requested = Signal(str)  # model key
+    cancel_check_requested = Signal()
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.download_buttons: dict[str, QPushButton] = {}
+        self.link_buttons: dict[str, QPushButton] = {}
         self._present: frozenset[str] = frozenset()  # download keys of the present models
+        self._linked: frozenset[str] = frozenset()  # keys of the models using the user's file
+        self._checking = False
         self._idle = True
         self._can_download = False
         self._installing = False
@@ -68,6 +80,10 @@ class SettingsTab(QWidget):
         self.download_label = QLabel()
         self.cancel_button = QPushButton("Cancel download")
         self.cancel_button.clicked.connect(self.cancel_requested.emit)
+        self.check_label = QLabel()
+        self.check_label.setWordWrap(True)
+        self.cancel_check_button = QPushButton("Cancel check")
+        self.cancel_check_button.clicked.connect(self.cancel_check_requested.emit)
 
         layout = QVBoxLayout(self)
         layout.addWidget(self._root_group(), 1)
@@ -87,15 +103,21 @@ class SettingsTab(QWidget):
     def set_models(self, statuses: tuple[ModelStatus, ...]) -> None:
         self.models_table.setRowCount(len(statuses))
         buttons: dict[str, QPushButton] = {}
+        link_buttons: dict[str, QPushButton] = {}
         for row, status in enumerate(statuses):
-            cells = (status.label, "OK" if status.present else "Missing", str(status.path))
+            cells = (status.label, _status_text(status), str(status.path))
             for column, text in enumerate(cells):
                 self.models_table.setItem(row, column, QTableWidgetItem(text))
             button = self._download_button(status.label, status.download_key)
             self.models_table.setCellWidget(row, ACTION_COLUMN, button)
             buttons[status.download_key] = button
+            link_button = self._link_button(status)
+            self.models_table.setCellWidget(row, LINK_COLUMN, link_button)
+            link_buttons[status.download_key] = link_button
         self.download_buttons = buttons
+        self.link_buttons = link_buttons
         self._present = frozenset(s.download_key for s in statuses if s.present)
+        self._linked = frozenset(s.download_key for s in statuses if s.linked)
         self._update_buttons()
 
     def set_state(self, state: SessionState, can_download: bool) -> None:
@@ -113,6 +135,16 @@ class SettingsTab(QWidget):
             self.install_step_label.clear()
         self._update_buttons()
 
+    def set_checking(self, checking: bool) -> None:
+        self._checking = checking
+        self._update_buttons()
+
+    def show_check(self, checked: int, total: int) -> None:
+        self.check_label.setText(check_text(checked, total))
+
+    def show_check_result(self, message: str) -> None:
+        self.check_label.setText(message)
+
     def show_install_step(self, text: str) -> None:
         self.install_step_label.setText(text)
 
@@ -125,8 +157,26 @@ class SettingsTab(QWidget):
         button.clicked.connect(lambda: self.download_requested.emit(key))
         return button
 
+    def _link_button(self, status: ModelStatus) -> QPushButton:
+        key = status.download_key
+        if status.linked:
+            button = QPushButton("Unlink")
+            button.setAccessibleName(f"Stop using your {status.label} file")
+            button.clicked.connect(lambda: self.unlink_requested.emit(key))
+            return button
+        button = QPushButton("Use file...")
+        button.setAccessibleName(f"Use an existing {status.label} file")
+        button.clicked.connect(lambda: self._choose_file(status.label, key))
+        return button
+
+    def _choose_file(self, label: str, key: str) -> None:
+        title = f"Choose your {label} file"
+        chosen, _ = QFileDialog.getOpenFileName(self, title, "", MODEL_FILE_FILTER)
+        if chosen:
+            self.link_requested.emit(key, chosen)
+
     def _update_buttons(self) -> None:
-        free = self._idle and not self._installing
+        free = self._idle and not self._installing and not self._checking
         self.root_picker.setEnabled(free)
         self.apply_button.setEnabled(free)
         self.install_button.setEnabled(free)
@@ -134,6 +184,9 @@ class SettingsTab(QWidget):
         allowed = free and self._can_download
         for key, button in self.download_buttons.items():
             button.setEnabled(allowed and key not in self._present)
+        for key, button in self.link_buttons.items():
+            button.setEnabled(free and (key in self._linked or key not in self._present))
+        self.cancel_check_button.setEnabled(self._checking)
 
     def _root_group(self) -> QGroupBox:
         group = QGroupBox("Training runtime")
@@ -160,9 +213,26 @@ class SettingsTab(QWidget):
     def _models_group(self) -> QGroupBox:
         group = QGroupBox("Models")
         layout = QVBoxLayout(group)
+        help_label = QLabel(MODELS_HELP)
+        help_label.setWordWrap(True)
+        layout.addWidget(help_label)
         layout.addWidget(self.models_table, 1)
         row = QHBoxLayout()
         row.addWidget(self.download_label, 1)
         row.addWidget(self.cancel_button)
         layout.addLayout(row)
+        check_row = QHBoxLayout()
+        check_row.addWidget(self.check_label, 1)
+        check_row.addWidget(self.cancel_check_button)
+        layout.addLayout(check_row)
         return group
+
+
+def _status_text(status: ModelStatus) -> str:
+    if status.linked:
+        return "OK (your file)"
+    if status.present:
+        return "OK"
+    if status.link_broken:
+        return "Missing (your file was moved or changed)"
+    return "Missing"

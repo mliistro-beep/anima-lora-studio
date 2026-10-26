@@ -1,12 +1,16 @@
+import hashlib
 import json
+import tomllib
 from datetime import datetime
 from pathlib import Path
 
 import pytest
 from PySide6.QtCore import QSettings
-from PySide6.QtWidgets import QMessageBox
+from PySide6.QtWidgets import QFileDialog, QMessageBox
 
-from anima_trainer.models.catalog import SUPPORT_MODEL_URLS, VAE_FILENAME
+from anima_trainer.models.catalog import SUPPORT_MODEL_URLS, VAE_FILENAME, ExpectedFile
+from anima_trainer.models.check_worker import ModelFileChecker
+from anima_trainer.models.linked_store import load_links
 from anima_trainer.runtime.data_dir import load_data_dir, open_data_dir
 from anima_trainer.runtime.install_plan import InstallPlan, InstallStep, verified_marker
 from anima_trainer.settings.store import load_settings
@@ -15,6 +19,7 @@ from anima_trainer.training.log_parser import EpochStarted
 from anima_trainer.training.runner import RunOutcome
 from anima_trainer.ui.main_window import MainWindow
 from anima_trainer.workflow.install_session import InstallSession
+from anima_trainer.workflow.link_session import LinkSession
 from anima_trainer.workflow.training_session import SessionState, TrainingSession
 from tests.fakes import FakeDownloader, FakeInstaller, FakeRunner
 from tests.runtime_helpers import mark_installed
@@ -84,7 +89,7 @@ def install_plan():
 
 @pytest.fixture
 def make_window(qtbot, tmp_path, installer, install_plan):
-    def build(root, detect=lambda _paths: GPUS):
+    def build(root, detect=lambda _paths: GPUS, expected=None):
         store = QSettings(str(tmp_path / "app.ini"), QSettings.Format.IniFormat)
         opened = open_data_dir(root)
         runner, downloader = FakeRunner(), FakeDownloader()
@@ -103,8 +108,9 @@ def make_window(qtbot, tmp_path, installer, install_plan):
             return install_plan["plan"]
 
         install = InstallSession(installer, plan=plan, clock=lambda: NOW)
+        links = None if expected is None else LinkSession(store, ModelFileChecker(), expected)
         with qtbot.waitSignal(detector.detected, timeout=TIMEOUT_MS):
-            window = MainWindow(session, detector, store, opened, install)
+            window = MainWindow(session, detector, store, opened, install, links=links)
         qtbot.addWidget(window)
         return window, runner, downloader, store
 
@@ -549,3 +555,118 @@ def test_install_end_keeps_the_earlier_status_lines(make_window, tmp_path, insta
     status = window.training_tab.status.text()
     assert "ERROR: Learning rate: invalid" in status
     assert "Training script not found" in status
+
+
+DIT_WEIGHTS = b"anima preview weights" * 50
+PREVIEW_EXPECTED = {
+    "anima-preview": ExpectedFile(hashlib.sha256(DIT_WEIGHTS).hexdigest(), len(DIT_WEIGHTS))
+}
+
+
+def _own_dit(tmp_path, content=DIT_WEIGHTS):
+    path = tmp_path / "my-models" / "anima-preview.safetensors"
+    path.parent.mkdir(exist_ok=True)
+    path.write_bytes(content)
+    return path
+
+
+def _use_file(qtbot, window, monkeypatch, key, path):
+    monkeypatch.setattr(QFileDialog, "getOpenFileName", lambda *_a: (str(path), ""))
+    window.settings_tab.link_buttons[key].click()
+    qtbot.waitUntil(
+        lambda: not window.settings_tab.cancel_check_button.isEnabled(), timeout=TIMEOUT_MS
+    )
+    return window.settings_tab.check_label.text()
+
+
+def _row_status(window, key):
+    row = list(window.settings_tab.link_buttons).index(key)
+    return window.settings_tab.models_table.item(row, 1).text()
+
+
+def test_linked_dit_with_the_right_hash_is_used_in_the_toml(
+    qtbot, make_window, tmp_path, dataset, monkeypatch
+):
+    paths = _make_runtime(tmp_path / "data", dataset, {"base_model": "anima-preview"})
+    window, _, _, store = make_window(paths.root, expected=PREVIEW_EXPECTED)
+    own = _own_dit(tmp_path)
+
+    message = _use_file(qtbot, window, monkeypatch, "anima-preview", own)
+
+    assert message.startswith("OK: DiT anima-preview file accepted")
+    assert load_links(store)["anima-preview"].path == own
+    assert _row_status(window, "anima-preview") == "OK (your file)"
+    assert window.settings_tab.link_buttons["anima-preview"].text() == "Unlink"
+    assert not window.settings_tab.download_buttons["anima-preview"].isEnabled()
+    window.training_tab.configure_button.click()
+    toml = load_settings(paths.config_file).settings.last_train_config
+    with open(toml, "rb") as file:
+        assert tomllib.load(file)["pretrained_model_name_or_path"] == str(own)
+    assert not (paths.models_dir / "dit" / "anima-preview.safetensors").exists()
+
+
+def test_file_with_a_different_hash_is_rejected(qtbot, make_window, tmp_path, dataset, monkeypatch):
+    paths = _make_runtime(tmp_path / "data", dataset)
+    window, _, _, store = make_window(paths.root, expected=PREVIEW_EXPECTED)
+    own = _own_dit(tmp_path, bytes(reversed(DIT_WEIGHTS)))
+
+    message = _use_file(qtbot, window, monkeypatch, "anima-preview", own)
+
+    assert "is not a compatible DiT anima-preview file: SHA-256" in message
+    assert dict(load_links(store)) == {}
+    assert _row_status(window, "anima-preview") == "Missing"
+    assert window.settings_tab.download_buttons["anima-preview"].isEnabled()
+
+
+def test_linked_file_survives_a_restart_until_it_changes(
+    qtbot, make_window, tmp_path, dataset, monkeypatch
+):
+    paths = _make_runtime(tmp_path / "data", dataset)
+    window, *_ = make_window(paths.root, expected=PREVIEW_EXPECTED)
+    own = _own_dit(tmp_path)
+    _use_file(qtbot, window, monkeypatch, "anima-preview", own)
+    window.shutdown()
+
+    reopened, _, downloader, _ = make_window(paths.root, expected=PREVIEW_EXPECTED)
+    assert reopened.session.paths.dit_model("anima-preview") == own
+
+    own.write_bytes(DIT_WEIGHTS + b"edited")
+    reopened.tabs.setCurrentWidget(reopened.training_tab)
+    reopened.tabs.setCurrentWidget(reopened.settings_tab)  # the table is re-read when shown
+    assert _row_status(reopened, "anima-preview") == "Missing (your file was moved or changed)"
+    reopened.settings_tab.download_buttons["anima-preview"].click()
+    assert downloader.started[0][1] == paths.models_dir / "dit" / "anima-preview.safetensors"
+
+
+def test_unlink_goes_back_to_the_data_folder(qtbot, make_window, tmp_path, dataset, monkeypatch):
+    paths = _make_runtime(tmp_path / "data", dataset)
+    window, _, _, store = make_window(paths.root, expected=PREVIEW_EXPECTED)
+    _use_file(qtbot, window, monkeypatch, "anima-preview", _own_dit(tmp_path))
+
+    window.settings_tab.link_buttons["anima-preview"].click()
+
+    assert dict(load_links(store)) == {}
+    assert _row_status(window, "anima-preview") == "Missing"
+    assert window.session.paths.dit_model("anima-preview").is_relative_to(paths.root)
+
+
+def test_training_is_blocked_while_a_file_is_checked(qtbot, make_window, tmp_path, dataset):
+    paths = _make_runtime(tmp_path / "data", dataset)
+    window, *_ = make_window(paths.root, expected=PREVIEW_EXPECTED)
+
+    window._set_checking(True)
+
+    assert not window.training_tab.start_button.isEnabled()
+    assert not window.settings_tab.install_button.isEnabled()
+    assert not window.settings_tab.link_buttons[VAE_FILENAME].isEnabled()
+    assert window.settings_tab.cancel_check_button.isEnabled()
+    window._set_checking(False)
+
+
+def test_unknown_model_check_error_is_shown(qtbot, make_window, tmp_path, dataset):
+    paths = _make_runtime(tmp_path / "data", dataset)
+    window, *_ = make_window(paths.root, expected=PREVIEW_EXPECTED)
+
+    window.settings_tab.link_requested.emit(VAE_FILENAME, str(tmp_path / "x"))
+
+    assert window.settings_tab.check_label.text() == f"ERROR: Unknown model: {VAE_FILENAME}"

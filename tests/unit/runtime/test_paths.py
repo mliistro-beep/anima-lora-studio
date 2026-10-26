@@ -2,7 +2,14 @@ from pathlib import Path
 
 import pytest
 
-from anima_trainer.models.catalog import BASE_MODEL_URLS, SUPPORT_MODEL_URLS, dit_filename
+from anima_trainer.models.catalog import (
+    BASE_MODEL_URLS,
+    QWEN3_FILENAME,
+    SUPPORT_MODEL_URLS,
+    VAE_FILENAME,
+    dit_filename,
+)
+from anima_trainer.models.linked_models import link_for
 from anima_trainer.runtime.paths import RuntimePaths
 from anima_trainer.settings.choices import BASE_MODELS
 
@@ -97,3 +104,55 @@ def test_every_required_model_has_a_download_url_by_file_name():
 def test_support_model_urls_end_with_the_local_file_name():
     for name, url in SUPPORT_MODEL_URLS.items():
         assert url.rsplit("/", 1)[1] == name
+
+
+def _linked_file(tmp_path, name="vae.safetensors"):
+    path = tmp_path / "elsewhere" / name
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(b"weights")
+    return link_for(path)
+
+
+def test_linked_models_are_used_from_where_they_are(tmp_path):
+    vae, qwen, dit = (_linked_file(tmp_path, n) for n in ("v", "q", "d"))
+    links = {VAE_FILENAME: vae, QWEN3_FILENAME: qwen, "anima-preview": dit}
+
+    paths = RuntimePaths(tmp_path / "data").with_links(links)
+
+    assert paths.vae_model == vae.path
+    assert paths.qwen3_model == qwen.path
+    assert paths.dit_model("anima-preview") == dit.path
+    assert (
+        paths.dit_model("anima-base-v1.0") == paths.models_dir / "dit/anima-base-v1.0.safetensors"
+    )
+
+
+def test_unknown_base_model_uses_the_default_dit_link(tmp_path):
+    dit = _linked_file(tmp_path)
+
+    paths = RuntimePaths(tmp_path / "data").with_links({"anima-base-v1.0": dit})
+
+    assert paths.dit_model("whatever") == dit.path
+
+
+def test_changed_or_missing_linked_file_falls_back_to_the_data_folder(tmp_path):
+    vae = _linked_file(tmp_path)
+    paths = RuntimePaths(tmp_path / "data").with_links({VAE_FILENAME: vae})
+
+    vae.path.write_bytes(b"other weights")
+
+    assert paths.vae_model == paths.models_dir / "vae" / VAE_FILENAME
+    assert not paths.is_linked(VAE_FILENAME)
+    assert paths.has_broken_link(VAE_FILENAME)
+
+
+def test_links_are_kept_by_value_and_compared(tmp_path):
+    vae = _linked_file(tmp_path)
+    links = {VAE_FILENAME: vae}
+    paths = RuntimePaths(tmp_path / "data").with_links(links)
+    links.clear()
+
+    assert paths.is_linked(VAE_FILENAME)
+    assert not paths.has_broken_link(VAE_FILENAME)
+    assert paths != RuntimePaths(tmp_path / "data")
+    assert paths.with_links({}) == RuntimePaths(tmp_path / "data")
