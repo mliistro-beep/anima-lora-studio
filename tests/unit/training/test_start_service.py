@@ -2,10 +2,9 @@ from datetime import datetime
 
 import pytest
 
-from anima_trainer.models.catalog import BASE_MODEL_URLS
 from anima_trainer.runtime.paths import RuntimePaths
 from anima_trainer.settings.schema import TrainingSettings
-from anima_trainer.training.start_service import StartRequest, dit_download, plan_start
+from anima_trainer.training.start_service import StartRequest, plan_start
 
 NOW = datetime(2026, 10, 20, 9, 15, 0)
 
@@ -99,15 +98,3 @@ def test_missing_training_script_fails(citron, configured):
 
     assert not plan.success
     assert "Training script not found" in plan.messages[-1]
-
-
-def test_dit_download_is_needed_only_when_the_model_is_missing(citron):
-    needed = dit_download(citron, "anima-preview")
-
-    assert needed is not None
-    assert needed.url == BASE_MODEL_URLS["anima-preview"]
-    assert needed.destination == citron.dit_model("anima-preview")
-
-    needed.destination.parent.mkdir(parents=True)
-    needed.destination.write_bytes(b"")
-    assert dit_download(citron, "anima-preview") is None

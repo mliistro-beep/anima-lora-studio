@@ -8,7 +8,6 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
-from anima_trainer.models.catalog import BASE_MODEL_URLS
 from anima_trainer.runtime.paths import RuntimePaths
 from anima_trainer.settings.schema import TrainingSettings
 from anima_trainer.training.command_builder import LaunchSpec, build_training_launch
@@ -32,21 +31,6 @@ class StartPlan:
     @property
     def success(self) -> bool:
         return self.spec is not None and self.log_path is not None
-
-
-@dataclass(frozen=True)
-class DitDownload:
-    url: str
-    destination: Path
-
-
-def dit_download(paths: RuntimePaths, base_model: str) -> DitDownload | None:
-    """What to download before training, or None when the DiT is already there."""
-    destination = paths.dit_model(base_model)
-    url = BASE_MODEL_URLS.get(base_model)
-    if destination.exists() or url is None:
-        return None
-    return DitDownload(url, destination)
 
 
 def plan_start(

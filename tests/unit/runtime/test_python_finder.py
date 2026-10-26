@@ -111,3 +111,18 @@ def test_preferred_python_stops_the_search():
     find_python(which=which, run=run)
 
     assert len(calls) == 1
+
+
+def test_the_same_interpreter_under_several_names_is_probed_once():
+    # python3 and python are usually links to a versioned interpreter already probed.
+    which, run, calls = _system(
+        {"python3.14": (0, "3.14\n"), "python3": (0, "3.14\n"), "python": (0, "3.14\n")}
+    )
+
+    def same_binary(path):
+        return "/usr/bin/python3.14"
+
+    found = find_python(which=which, run=run, resolve=same_binary)
+
+    assert found == PythonInterpreter("/usr/bin/python3.14", (3, 14))
+    assert len(calls) == 1

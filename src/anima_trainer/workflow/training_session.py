@@ -12,7 +12,7 @@ from typing import Protocol
 
 from PySide6.QtCore import QObject, Signal, SignalInstance
 
-from anima_trainer.models.model_downloads import ModelDownload, model_download
+from anima_trainer.models.model_downloads import ModelDownload, dit_model_download, model_download
 from anima_trainer.runtime.paths import RuntimePaths
 from anima_trainer.settings.schema import TrainingSettings
 from anima_trainer.training.command_builder import LaunchSpec
@@ -22,7 +22,7 @@ from anima_trainer.training.oom_hint import oom_hint, read_kernel_log
 from anima_trainer.training.outcome_report import outcome_messages, run_failed
 from anima_trainer.training.progress import ProgressState, apply_event
 from anima_trainer.training.runner import RunOutcome
-from anima_trainer.training.start_service import StartRequest, dit_download, plan_start
+from anima_trainer.training.start_service import StartRequest, plan_start
 
 
 class SessionState(Enum):
@@ -119,13 +119,12 @@ class TrainingSession(QObject):
     def start(self, request: StartRequest) -> None:
         self._require_idle()
         self.log_cleared.emit()
-        download = dit_download(self._paths, request.base_model)
+        download = dit_model_download(self._paths, request.base_model)
         if download is None:
             self._launch(request)
             return
         self._pending = request
-        description = f"base model '{request.base_model}'"
-        self._begin_download(ModelDownload(description, download.url, download.destination))
+        self._begin_download(download)
 
     def download_model(self, key: str) -> None:
         """Download a missing model by its key (base model name, or Qwen3 / VAE file name)."""

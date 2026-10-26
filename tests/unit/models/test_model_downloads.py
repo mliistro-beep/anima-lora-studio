@@ -6,7 +6,7 @@ from anima_trainer.models.catalog import (
     SUPPORT_MODEL_URLS,
     VAE_FILENAME,
 )
-from anima_trainer.models.model_downloads import ModelDownload, model_download
+from anima_trainer.models.model_downloads import ModelDownload, dit_model_download, model_download
 from anima_trainer.runtime.paths import RuntimePaths
 
 
@@ -43,3 +43,19 @@ def test_present_files_need_no_download(tmp_path, key):
 
 def test_unknown_keys_have_no_download(tmp_path):
     assert model_download(RuntimePaths(tmp_path), "sdxl") is None
+
+
+def test_dit_model_download_ignores_support_model_keys(tmp_path):
+    # Start passes the base model name: a Qwen3 or VAE file name is not a DiT.
+    paths = RuntimePaths(tmp_path)
+
+    assert dit_model_download(paths, QWEN3_FILENAME) is None
+    assert dit_model_download(paths, "anima-base-v1.0") == model_download(paths, "anima-base-v1.0")
+
+
+def test_dit_model_download_is_none_once_the_dit_exists(tmp_path):
+    paths = RuntimePaths(tmp_path)
+    paths.dit_model("anima-base-v1.0").parent.mkdir(parents=True)
+    paths.dit_model("anima-base-v1.0").write_bytes(b"")
+
+    assert dit_model_download(paths, "anima-base-v1.0") is None

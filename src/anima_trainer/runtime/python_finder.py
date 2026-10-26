@@ -5,6 +5,7 @@ after them because they are less proven. Python 3.14 and later are only a fallba
 forkserver default breaks DataLoader workers (see venv_info), which then must be disabled.
 """
 
+import os
 import shutil
 import subprocess
 from collections.abc import Callable
@@ -42,17 +43,25 @@ class PythonInterpreter:
 
 
 def find_python(
-    which: Which = shutil.which, run: Runner = subprocess.run
+    which: Which = shutil.which,
+    run: Runner = subprocess.run,
+    resolve: Callable[[str], str] = os.path.realpath,
 ) -> PythonInterpreter | None:
     """The first usable candidate older than 3.14, else the first usable one, else None.
 
-    Usable means on PATH, new enough and able to create a venv.
+    Usable means on PATH, new enough and able to create a venv. Names that lead to an
+    interpreter already probed (python3 -> python3.14) are skipped.
     """
     fallback = None
+    probed: set[str] = set()
     for name in CANDIDATES:
         path = which(name)
         if path is None:
             continue
+        real = resolve(path)
+        if real in probed:
+            continue
+        probed = probed | {real}
         version = _probe_version(path, run)
         if version is None or version < MIN_VERSION:
             continue

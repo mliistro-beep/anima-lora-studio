@@ -25,6 +25,15 @@ class ModelDownload:
 def model_download(paths: RuntimePaths, key: str) -> ModelDownload | None:
     """The download for `key`, or None when the file is already there or the key is unknown."""
     download = _support_download(paths, key) or _dit_download(paths, key)
+    return _if_missing(download)
+
+
+def dit_model_download(paths: RuntimePaths, base_model: str) -> ModelDownload | None:
+    """The DiT to fetch before training, or None when it is there or the name is unknown."""
+    return _if_missing(_dit_download(paths, base_model))
+
+
+def _if_missing(download: ModelDownload | None) -> ModelDownload | None:
     if download is None or download.destination.exists():
         return None
     return download
