@@ -46,6 +46,10 @@ class RuntimePaths:
         return self.root / "config.json"
 
     @property
+    def preview_settings_file(self) -> Path:
+        return self.root / "preview.json"
+
+    @property
     def configs_dir(self) -> Path:
         return self.root / "configs"
 

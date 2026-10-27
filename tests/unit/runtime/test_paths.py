@@ -20,6 +20,7 @@ def test_layout_matches_a_citron_installation():
     paths = RuntimePaths(ROOT)
 
     assert paths.config_file == ROOT / "config.json"
+    assert paths.preview_settings_file == ROOT / "preview.json"
     assert paths.configs_dir == ROOT / "configs"
     assert paths.logs_dir == ROOT / "logs"
     assert paths.qwen3_model == ROOT / "models/anima/text_encoder/qwen_3_06b_base.safetensors"
