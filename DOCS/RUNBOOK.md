@@ -3,10 +3,10 @@
 Operating the Anima LoRA Trainer desktop app on a workstation. It is a local desktop
 app, not a service: there are no servers, health endpoints or alerting.
 
-Current state: M0-M4b are done, each verified with a real training run: the training UI
-with Citron parity, the app's own training runtime installed from the Settings tab, and
-model files already on disk used after a SHA-256 check. Previews and the image generator
-(M5) are not built yet. See [milestones.md](milestones.md).
+Current state: M0-M4c are done. M0-M4b were each verified with a real training run: the
+training UI with Citron parity, the app's own training runtime installed from the Settings
+tab, and model files already on disk used after a SHA-256 check. M4c added the License and
+Credits buttons. Previews and the image generator (M5) are not built yet. See [milestones.md](milestones.md).
 
 ## Install and launch
 
@@ -17,7 +17,8 @@ model files already on disk used after a SHA-256 check. Previews and the image g
    .venv/bin/pip install -e .
    ```
 
-2. Start it with `.venv/bin/anima-trainer`.
+2. Start it with `.venv/bin/anima-trainer` (from a checkout, for development:
+   `scripts/dev-run.sh`, or `scripts/dev-run.sh --scratch` to keep your own settings untouched).
 3. In the Settings tab, choose the data folder (or keep the default) and press Install.
    It needs Python 3.10+ with `venv` (on Debian/Ubuntu `python3-venv`), git and an
    internet connection; torch and the sd-scripts requirements are several GB. The steps

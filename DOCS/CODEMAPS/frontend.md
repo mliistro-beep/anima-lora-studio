@@ -1,4 +1,4 @@
-<!-- Generated: 2026-10-26 | Files scanned: 129 (62 src, 67 tests) | Token estimate: ~300 -->
+<!-- Generated: 2026-10-27 | Files scanned: 138 (67 src, 71 tests) | Token estimate: ~340 -->
 # Frontend (Qt UI)
 
 main.py create_window(store, detect) -> MainWindow(session, GpuDetector, store, opened,
@@ -13,6 +13,8 @@ main.py create_window(store, detect) -> MainWindow(session, GpuDetector, store, 
                          Use file... / Unlink per model, file check progress and Cancel check
   tabs/previews_tab.py   epoch x prompt grid (M5, not built)
   tabs/generator_tab.py  manual inference on a checkpoint (M5, not built)
+  corner of the tab bar  License / Credits buttons -> dialogs/text_dialog.py TextDialog (QTextBrowser,
+                         external links) with about/render.py license_html / credits_html
   widgets/ path_picker, log_view (tqdm redraw collapse, max 5000 lines), progress_panel, settings_form
 
 ## State flow

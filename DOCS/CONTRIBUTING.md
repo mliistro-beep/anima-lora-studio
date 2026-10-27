@@ -19,10 +19,14 @@ python3 -m venv .venv
 .venv/bin/pip install -e ".[dev]"
 ```
 
+or `scripts/dev-run.sh --setup`, which does the same when `.venv` is missing and then starts
+the app. The script is for development only (a release launcher comes with M6).
+
 The app's venv holds only the GUI and dev tools. Training runs in the training venv of
 the data folder (torch, accelerate, sd-scripts), started as a separate process. To try the
 real app without touching your own settings, start it with `XDG_CONFIG_HOME` and
-`XDG_DATA_HOME` pointed at scratch folders.
+`XDG_DATA_HOME` pointed at scratch folders: `scripts/dev-run.sh --scratch [DIR]` does it
+(default `~/anima-dev-scratch`; not under `/tmp`, the runtime takes over 10 GB).
 
 <!-- AUTO-GENERATED: commands (source: pyproject.toml) -->
 ## Commands
@@ -30,6 +34,7 @@ real app without touching your own settings, start it with `XDG_CONFIG_HOME` and
 | Command | Description |
 |---------|-------------|
 | `.venv/bin/anima-trainer` | Start the desktop app (`anima_trainer.main:main`) |
+| `scripts/dev-run.sh` | Development only: start the app from the checkout (`--setup` creates `.venv`, `--scratch [DIR]` uses scratch XDG folders, default `~/anima-dev-scratch`) |
 | `.venv/bin/pytest` | Run all tests (`tests/`), markers `integration` and `e2e` available |
 | `.venv/bin/pytest --cov` | Run tests with coverage; fails under 80% (UI and `main.py` excluded) |
 | `.venv/bin/ruff check src tests` | Lint (rules E, F, W, I, B, UP, SIM, T20; line length 100) |

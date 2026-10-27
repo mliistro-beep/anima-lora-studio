@@ -1,11 +1,12 @@
-<!-- Generated: 2026-10-26 | Files scanned: 129 (62 src, 67 tests) | Token estimate: ~560 -->
+<!-- Generated: 2026-10-27 | Files scanned: 138 (67 src, 71 tests) | Token estimate: ~600 -->
 # Architecture
 
 Single desktop app (PySide6, src layout). The GUI venv runs Qt + logic; training and
 inference run as subprocesses in a separate training venv inside the app's data folder
 (same layout as a Citron install, but owned by the app; Citron is never used).
 Status: M0-M4b done (UI with Citron parity; own runtime installed from the Settings tab;
-existing model files linked after a SHA-256 check; each verified with a real run).
+existing model files linked after a SHA-256 check; each verified with a real run);
+M4c: License and Credits dialogs, dev launcher scripts/dev-run.sh.
 Previews and generator (M5) not built.
 
 ## Entry point
@@ -25,7 +26,9 @@ system/    GPU detection (+ QThread worker), dropdown parsing, process groups, B
 workflow/  TrainingSession: Configure / model download / Start / Stop state machine;
            InstallSession: plan, run and log the runtime install;
            LinkSession: check and save a model file the user already has
-ui/        MainWindow, tabs (training, advanced, settings), widgets
+about/     license notice (GPL-3.0-or-later, app version), credits (author, Citron, models, software),
+           rich text for the License and Credits dialogs
+ui/        MainWindow, tabs (training, advanced, settings), widgets, dialogs (License / Credits)
 preview/   (M5, empty)
 
 ## Configure flow
