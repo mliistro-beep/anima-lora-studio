@@ -10,8 +10,10 @@ from anima_trainer.preview.inference_command import (
 from anima_trainer.preview.sample_prompts import SampleSize
 from anima_trainer.preview.vram_profile import (
     IDLE_MARGIN_MIB,
+    IDLE_RAM_MARGIN_MIB,
     PROFILES,
     TRAINING_MARGIN_MIB,
+    TRAINING_RAM_MARGIN_MIB,
     estimate_mib,
 )
 from anima_trainer.runtime.paths import RuntimePaths
@@ -52,6 +54,8 @@ def test_launch_runs_generate_py_with_the_training_venv_and_models():
     assert spec.working_dir == ROOT
     assert spec.env["CUDA_VISIBLE_DEVICES"] == "0"
     assert spec.env["ANIMA_TRAINER_SD_SCRIPTS"] == str(PATHS.sd_scripts_dir)
+    # less memory held between the text encoder, DiT and VAE phases
+    assert spec.env["PYTORCH_CUDA_ALLOC_CONF"] == "expandable_segments:True"
     args = spec.arguments
     assert _option(args, "--dit") == str(PATHS.dit_model("anima-base-v1.0"))
     assert _option(args, "--qwen3") == str(PATHS.qwen3_model)
@@ -64,18 +68,28 @@ def test_launch_runs_generate_py_with_the_training_venv_and_models():
     assert _option(args, "--output") == "/out/generated/x.png"
 
 
-def test_profiles_are_passed_in_order_with_their_fitted_size():
+def test_profiles_are_passed_in_order_with_the_image_size():
     spec = build_generation_launch(PATHS, _request(), PROFILES, "0", training=False)
 
     profiles = json.loads(_option(spec.arguments, "--profiles"))
     assert [entry["name"] for entry in profiles] == [profile.name for profile in PROFILES]
     assert (profiles[0]["width"], profiles[0]["height"]) == (1024, 768)
-    assert (profiles[-1]["width"], profiles[-1]["height"]) == (512, 384)
+    assert all((entry["width"], entry["height"]) == (1024, 768) for entry in profiles)
     assert set(profiles[0]) == {
-        "name", "fp8", "vae_chunk_size", "blocks_to_swap", "text_encoder_cpu", "width", "height",
-        "estimate_mib",
+        "name", "vae_tiling", "blocks_to_swap", "text_encoder_cpu", "width", "height",
+        "estimate_mib", "ram_mib",
     }  # fmt: skip
     assert profiles[0]["estimate_mib"] == estimate_mib(PROFILES[0], SampleSize(1024, 768))
+    assert [entry["ram_mib"] for entry in profiles] == [profile.ram_mib for profile in PROFILES]
+
+
+def test_a_fallback_that_would_not_save_memory_is_not_passed():
+    large = _request(size=SampleSize(1536, 1024))  # text encoder no longer the peak
+
+    spec = build_generation_launch(PATHS, large, PROFILES, "0", training=False)
+
+    profiles = json.loads(_option(spec.arguments, "--profiles"))
+    assert [entry["name"] for entry in profiles] == ["standard", "block_swap"]
 
 
 def test_the_margin_is_larger_while_a_training_runs():
@@ -84,6 +98,8 @@ def test_the_margin_is_larger_while_a_training_runs():
 
     assert _option(idle.arguments, "--margin_mib") == str(IDLE_MARGIN_MIB)
     assert _option(training.arguments, "--margin_mib") == str(TRAINING_MARGIN_MIB)
+    assert _option(idle.arguments, "--ram_margin_mib") == str(IDLE_RAM_MARGIN_MIB)
+    assert _option(training.arguments, "--ram_margin_mib") == str(TRAINING_RAM_MARGIN_MIB)
 
 
 def test_without_a_lora_no_lora_option_is_passed():

@@ -12,8 +12,9 @@ from anima_trainer.preview.sample_prompts import SampleSize
 from anima_trainer.preview.vram_profile import (
     GenerationProfile,
     estimate_mib,
+    fallback_chain,
     margin_mib,
-    profile_size,
+    ram_margin_mib,
 )
 from anima_trainer.runtime.paths import RuntimePaths
 from anima_trainer.runtime_scripts import GENERATE
@@ -50,21 +51,19 @@ def output_image_path(output_dir: Path, project: str, label: str, seed: int, now
 
 
 def _profiles_json(profiles: tuple[GenerationProfile, ...], size: SampleSize) -> str:
-    entries = []
-    for profile in profiles:
-        fitted = profile_size(profile, size)
-        entries.append(
-            {
-                "name": profile.name,
-                "fp8": profile.fp8,
-                "vae_chunk_size": profile.vae_chunk_size,
-                "blocks_to_swap": profile.blocks_to_swap,
-                "text_encoder_cpu": profile.text_encoder_cpu,
-                "width": fitted.width,
-                "height": fitted.height,
-                "estimate_mib": estimate_mib(profile, size),
-            }
-        )
+    entries = [
+        {
+            "name": profile.name,
+            "vae_tiling": profile.vae_tiling,
+            "blocks_to_swap": profile.blocks_to_swap,
+            "text_encoder_cpu": profile.text_encoder_cpu,
+            "width": size.width,
+            "height": size.height,
+            "estimate_mib": estimate_mib(profile, size),
+            "ram_mib": profile.ram_mib,
+        }
+        for profile in profiles
+    ]
     return json.dumps(entries)
 
 
@@ -76,7 +75,9 @@ def build_generation_launch(
     training: bool,
 ) -> LaunchSpec:
     """generate.py tries `profiles` in order, from the first that fits the free GPU memory
-    with the margin (larger while a training runs)."""
+    with the margin (larger while a training runs), skipping those that do not fit the
+    available system RAM with its margin; fallbacks that would not save GPU memory at this
+    size are left out."""
     lora = ("--lora", str(request.lora)) if request.lora is not None else ()
     arguments = (
         "-B",  # no __pycache__ next to the scripts or in sd-scripts
@@ -93,14 +94,17 @@ def build_generation_launch(
         "--flow_shift", str(request.flow_shift),
         "--seed", str(request.seed),
         "--sampler", request.sampler,
-        "--profiles", _profiles_json(profiles, request.size),
+        "--profiles", _profiles_json(fallback_chain(profiles, request.size), request.size),
         "--margin_mib", str(margin_mib(training)),
+        "--ram_margin_mib", str(ram_margin_mib(training)),
         "--output", str(request.output),
     )  # fmt: skip
     env = MappingProxyType(
         {
             "CUDA_VISIBLE_DEVICES": gpu_index,
             "PYTHONUNBUFFERED": "1",
+            # less memory held between the text encoder, DiT and VAE phases
+            "PYTORCH_CUDA_ALLOC_CONF": "expandable_segments:True",
             SD_SCRIPTS_ENV: str(paths.sd_scripts_dir),
         }
     )

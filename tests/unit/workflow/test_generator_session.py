@@ -124,7 +124,7 @@ def test_second_request_and_empty_queue_are_refused(parts, paths, tmp_path):
 @pytest.mark.parametrize(
     "outcome, image, expected",
     [(RunOutcome(3, False, False, None), False,
-      "ERROR: Not enough GPU memory for any profile, see the log above."),
+      "ERROR: Not enough GPU memory or system RAM for any profile, see the log above."),
      (RunOutcome(1, False, False, Path("/l.log")), False,
       "ERROR: Generation failed (exit code 1), see /l.log"),
      (RunOutcome(0, False, False, None), False,
@@ -170,11 +170,11 @@ def test_other_lines_go_to_the_log_and_shutdown_reaches_the_runner(parts, paths,
     session.generate(paths, (_request(tmp_path),), "0", training=False)
 
     runner.line_received.emit("INFO loading DiT")
-    runner.line_received.emit("WARN: Out of GPU memory with standard, trying fp8.")
+    runner.line_received.emit("WARN: Out of GPU memory with standard, trying block_swap.")
     session.shutdown()
 
     assert events["log"][-2:] == [
         "INFO loading DiT",
-        "WARN: Out of GPU memory with standard, trying fp8.",
+        "WARN: Out of GPU memory with standard, trying block_swap.",
     ]
     assert runner.shut_down == 1

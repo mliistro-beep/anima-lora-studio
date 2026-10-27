@@ -10,6 +10,10 @@ Credits buttons. Previews and the image generator (M5) are not built yet. See [m
 
 ## Install and launch
 
+0. Check swap and the out-of-memory daemon once per machine
+   ([SYSTEM_SETUP.md](SYSTEM_SETUP.md)): 8-16 GB of swap and earlyoom (or systemd-oomd).
+   Without them, running out of RAM freezes the whole computer instead of stopping the
+   training.
 1. Install the app:
 
    ```bash
@@ -100,7 +104,22 @@ file: the catalog (`models/catalog.py`, `EXPECTED_FILES`) must be updated.
 - "GPU out of memory": lower `network_dim` (for example 8) and/or `resolution` (512),
   keep batch size 1.
 - "killed, probably by the system OOM killer": system RAM ran out; use the same
-  settings and close other programs.
+  settings and close other programs. If earlyoom stopped it, `journalctl -u earlyoom`
+  shows it.
+
+**Generator: "Not enough free system RAM: about N MiB needed".** The GPU memory left only
+the profiles that keep the DiT in system RAM (about 6-7 GB, more margin while a training
+runs), and that much RAM is not available. The generator refuses instead of pushing the
+system into swap. Close other programs, or generate after the training ends, when the
+`standard` profile fits the GPU and needs about 4 GB of RAM.
+
+**The whole computer freezes (no mouse, no SSH) during a training or a generation.**
+System RAM ran out with little swap and no out-of-memory daemon: the kernel keeps
+swapping instead of stopping a program. After the reset, confirm it with
+`journalctl -b -1 | grep -i "memory pressure"` and with `sar -r` if sysstat is installed
+(memory available near 0, commit above 100%), then set up swap and earlyoom as in
+[SYSTEM_SETUP.md](SYSTEM_SETUP.md). Seen on 2026-10-27 on a 16 GB machine with a 512 MB
+swap file, during a 1024x1024 test run with previews.
 
 The hint uses the training log and, when allowed, `dmesg`. On many desktops `dmesg`
 needs root, so the hint can be missing even after a real kernel OOM; check

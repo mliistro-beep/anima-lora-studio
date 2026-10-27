@@ -6,8 +6,10 @@ the unchanged training script:
 
 - do_sample: ER-SDE when the preview prompt asks for it (sample_sampler = "er_sde"),
   sd-scripts' own Euler otherwise, so Euler previews are exactly sd-scripts' images;
-- _sample_image_inference: a preview that runs out of GPU memory is skipped with a WARN line
-  instead of stopping the training, and the VAE goes back where it was.
+- _sample_image_inference: the preview is decoded in VAE tiles (sd-scripts decodes the whole
+  image at once, about 5 GB at 1024x1024 on top of the training; tiles keep it under 1 GB),
+  and a preview that runs out of GPU memory is skipped with a WARN line instead of stopping
+  the training; afterwards the VAE goes back where it was, with tiling as it was.
 """
 
 import gc
@@ -15,7 +17,8 @@ import inspect
 import os
 import runpy
 import sys
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from pathlib import Path
 from types import ModuleType
 from typing import Any
@@ -78,6 +81,22 @@ def er_sde_do_sample(
     return er_sde(denoiser_from_velocity(velocity), x, sigmas, noise_generator).to(dtype)
 
 
+@contextmanager
+def _tiled_decode(vae: Any) -> Iterator[None]:
+    """VAE tiles for the preview only: use_tiling also applies to the training's own encode
+    (latents not cached). A VAE without tiling (sd-scripts' 2D one) decodes as before."""
+    if not hasattr(vae, "use_tiling"):
+        yield
+        return
+    was_tiling = vae.use_tiling
+    vae.enable_tiling()
+    try:
+        yield
+    finally:
+        if not was_tiling:
+            vae.disable_tiling()
+
+
 def install_hooks(utils: ModuleType, report: Callable[[str], None] = print) -> None:
     """Replace do_sample and _sample_image_inference in sd-scripts' anima_train_utils."""
     state = _PromptState()
@@ -95,7 +114,8 @@ def install_hooks(utils: ModuleType, report: Callable[[str], None] = print) -> N
         vae_device = vae.device
         state.sampler = str(prompt_dict.get("sample_sampler", ""))
         try:
-            return inference(*args, **kwargs)
+            with _tiled_decode(vae):
+                return inference(*args, **kwargs)
         except torch.OutOfMemoryError:
             report(OOM_WARNING.format(index=prompt_dict.get("enum", 0)))
         finally:

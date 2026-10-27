@@ -3,10 +3,11 @@
 Run by the training venv's Python. Models are loaded one at a time (text encoder, DiT, VAE)
 with sd-scripts' anima_minimal_inference helpers; the sampler is ER-SDE or Euler. The memory
 profiles are tried in the given order, from the first whose estimate plus the margin fits the
-free GPU memory read here; on out-of-memory the next, lighter one is used.
+free GPU memory read here, skipping those whose RAM figure plus its margin does not fit the
+available system RAM; on out-of-memory the next, lighter one is used.
 
 Reports to the app through stdout, one line each:
-  INFO: <text>            free GPU memory and the profile chosen
+  INFO: <text>            free GPU memory and available RAM
   PROFILE: <name>         a profile is being tried
   STEP: <done>/<total>    a sampling step finished
   WARN: <text>            a profile ran out of memory, the next one follows
@@ -24,7 +25,18 @@ from pathlib import Path
 from typing import Any
 
 import torch
-from profile_choice import MIB, first_fitting, not_enough_memory
+from profile_choice import (
+    MIB,
+    MemoryBudget,
+    ProfileNeed,
+    all_out_of_gpu_memory,
+    available_ram_mib,
+    lighter_skipped_for_ram,
+    next_profile_warning,
+    not_enough_memory,
+    ram_unknown_warning,
+    usable_profiles,
+)
 from samplers import denoiser_from_velocity, er_sde, euler, flow_sigmas
 
 SD_SCRIPTS_ENV = "ANIMA_TRAINER_SD_SCRIPTS"
@@ -32,18 +44,19 @@ EXIT_FAILED = 1
 EXIT_OUT_OF_MEMORY = 3
 LATENT_SCALE = 8
 MAX_TOKENS = 512
+MEMINFO = "/proc/meminfo"
 
 
 @dataclass(frozen=True)
 class Profile:
     name: str
-    fp8: bool
-    vae_chunk_size: int | None
+    vae_tiling: bool
     blocks_to_swap: int
     text_encoder_cpu: bool
     width: int
     height: int
-    estimate_mib: int
+    estimate_mib: int  # GPU memory
+    ram_mib: int  # system RAM
 
 
 def say(kind: str, text: str) -> None:
@@ -63,7 +76,8 @@ def parse_options(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--sampler", choices=("er_sde", "euler"), default="er_sde")
     parser.add_argument("--profiles", required=True, help="JSON list of memory profiles")
-    parser.add_argument("--margin_mib", type=int, default=512, help="free memory left aside")
+    parser.add_argument("--margin_mib", type=int, default=512, help="free GPU memory left aside")
+    parser.add_argument("--ram_margin_mib", type=int, default=1024, help="free RAM left aside")
     return parser.parse_args(argv)
 
 
@@ -83,12 +97,8 @@ def _inference_args(ami: Any, options: argparse.Namespace, profile: Profile) -> 
     ]  # fmt: skip
     if options.lora:
         argv += ["--lora_weight", options.lora, "--lora_multiplier", str(options.lora_multiplier)]
-    if profile.fp8:
-        argv += ["--fp8", "--fp8_scaled"]
     if profile.text_encoder_cpu:
         argv.append("--text_encoder_cpu")
-    if profile.vae_chunk_size:
-        argv += ["--vae_chunk_size", str(profile.vae_chunk_size)]
     saved, sys.argv = sys.argv, ["anima_minimal_inference.py", *argv]
     try:
         return ami.parse_args()
@@ -129,8 +139,7 @@ def _encode_prompts(ami: Any, args: Any, device: torch.device) -> list[list[torc
 
 def _load_dit(ami: Any, args: Any, profile: Profile, device: torch.device) -> Any:
     if not profile.blocks_to_swap:
-        dit_dtype = None if profile.fp8 else torch.bfloat16  # fp8_scaled: weights as optimized
-        return ami.load_dit_model(args, device, dit_dtype)
+        return ami.load_dit_model(args, device, torch.bfloat16)
     dit = ami.load_dit_model(args, torch.device("cpu"), torch.bfloat16)
     dit.enable_block_swap(profile.blocks_to_swap, device)
     dit.move_to_device_except_swap_blocks(device)
@@ -175,7 +184,7 @@ def _sample(
     def velocity(x: torch.Tensor, sigma: torch.Tensor) -> torch.Tensor:
         model_input = x.to(torch.bfloat16)
         t = sigma.to(device, torch.bfloat16).reshape(1)
-        with torch.no_grad(), torch.autocast(device.type, torch.bfloat16, enabled=profile.fp8):
+        with torch.no_grad():
             prediction = dit(model_input, t, positive, padding_mask=padding_mask).float()
             if use_cfg:
                 unconditional = dit(model_input, t, negative, padding_mask=padding_mask).float()
@@ -206,9 +215,19 @@ def _free(device: torch.device) -> None:
         torch.cuda.empty_cache()
 
 
-def generate(ami: Any, options: argparse.Namespace, profile: Profile, device: torch.device) -> None:
+def _load_vae(args: Any, profile: Profile) -> Any:
+    """The VAE on the CPU; decode_latent moves it to the GPU. Tiles (256 px, sd-scripts'
+    default) keep the decode memory small whatever the image size."""
     from library import anima_train_utils
 
+    vae = anima_train_utils.load_qwen_image_vae(args, device="cpu", disable_mmap=True)
+    vae.to(torch.bfloat16).eval()
+    if profile.vae_tiling:
+        vae.enable_tiling()
+    return vae
+
+
+def generate(ami: Any, options: argparse.Namespace, profile: Profile, device: torch.device) -> None:
     args = _inference_args(ami, options, profile)
     embeds = _encode_prompts(ami, args, device)
     dit = _load_dit(ami, args, profile, device)
@@ -216,8 +235,7 @@ def generate(ami: Any, options: argparse.Namespace, profile: Profile, device: to
     latents = _sample(ami, dit, options, profile, conds, device)
     del dit, conds
     _free(device)
-    vae = anima_train_utils.load_qwen_image_vae(args, device="cpu", disable_mmap=True)
-    vae.to(torch.bfloat16).eval()
+    vae = _load_vae(args, profile)
     _save(ami.decode_latent(vae, latents, device), Path(options.output))
     del vae
     _free(device)
@@ -230,21 +248,45 @@ def _free_mib(device: torch.device) -> int | None:
     return free // MIB
 
 
-def run(ami: Any, options: argparse.Namespace, profiles: tuple[Profile, ...]) -> int:
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    free = _free_mib(device)
-    estimates = [profile.estimate_mib for profile in profiles]
-    start = first_fitting(estimates, free, options.margin_mib)
-    if start is None:  # only with a GPU: without one, free is None and start is 0
-        say("ERROR", not_enough_memory(estimates, free or 0, options.margin_mib))
-        return EXIT_OUT_OF_MEMORY
-    say(
-        "INFO",
-        f"{free} MiB of GPU memory free" if free is not None else "No CUDA GPU, using the CPU",
+def _available_ram_mib() -> int | None:
+    try:
+        return available_ram_mib(Path(MEMINFO).read_text(encoding="ascii"))
+    except (OSError, UnicodeDecodeError):  # not Linux, or no /proc
+        return None
+
+
+def _memory_note(budget: MemoryBudget) -> str:
+    gpu = (
+        f"{budget.free_vram_mib} MiB of GPU memory free"
+        if budget.free_vram_mib is not None
+        else "No CUDA GPU, using the CPU"
     )
+    if budget.available_ram_mib is None:
+        return f"{gpu}, system RAM unknown"
+    return f"{gpu}, {budget.available_ram_mib} MiB of RAM available"
+
+
+def run(ami: Any, options: argparse.Namespace, profiles: tuple[Profile, ...]) -> int:
+    """RAM is read once, before loading anything: each profile's figure already counts what
+    this process takes, so after an out-of-memory error the starting value still applies."""
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    budget = MemoryBudget(
+        free_vram_mib=_free_mib(device),
+        vram_margin_mib=options.margin_mib,
+        available_ram_mib=_available_ram_mib(),
+        ram_margin_mib=options.ram_margin_mib,
+    )
+    needs = [ProfileNeed(profile.estimate_mib, profile.ram_mib) for profile in profiles]
+    usable = [profiles[index] for index in usable_profiles(needs, budget)]
+    if not usable:
+        say("ERROR", not_enough_memory(needs, budget))
+        return EXIT_OUT_OF_MEMORY
+    say("INFO", _memory_note(budget))
+    ram_warning = ram_unknown_warning(sys.platform) if budget.available_ram_mib is None else None
+    if ram_warning is not None:
+        say("WARN", ram_warning)
     _set_strategies(options)
-    for index in range(start, len(profiles)):
-        profile = profiles[index]
+    for position, profile in enumerate(usable):
         say("PROFILE", profile.name)
         failed = False
         try:
@@ -255,11 +297,10 @@ def run(ami: Any, options: argparse.Namespace, profiles: tuple[Profile, ...]) ->
             say("IMAGE", options.output)
             return 0
         _free(device)  # outside the except block, so the error's tensors can be released
-        if index + 1 < len(profiles):
-            say(
-                "WARN", f"Out of GPU memory with {profile.name}, trying {profiles[index + 1].name}."
-            )
-    say("ERROR", "Out of GPU memory even with the lightest profile.")
+        if position + 1 < len(usable):
+            say("WARN", next_profile_warning(profile.name, usable[position + 1].name))
+    skipped = [profiles[index].name for index in lighter_skipped_for_ram(needs, budget)]
+    say("ERROR", all_out_of_gpu_memory(usable[-1].name, skipped, budget.available_ram_mib))
     return EXIT_OUT_OF_MEMORY
 
 

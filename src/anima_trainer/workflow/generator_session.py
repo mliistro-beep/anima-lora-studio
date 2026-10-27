@@ -19,7 +19,7 @@ from anima_trainer.training.runner import RunOutcome
 from anima_trainer.training.toml_builder import FILE_TIMESTAMP_FORMAT
 from anima_trainer.workflow.training_session import Runner
 
-EXIT_OUT_OF_MEMORY = 3  # generate.py: no profile fitted the free memory, or all ran out
+EXIT_OUT_OF_MEMORY = 3  # generate.py: no profile fitted the free GPU memory and RAM, or all ran out
 STEP_PREFIX = "STEP: "
 IMAGE_PREFIX = "IMAGE: "
 PROFILE_PREFIX = "PROFILE: "
@@ -132,7 +132,10 @@ class GeneratorSession(QObject):
                 images = "image" if self._done == 1 else "images"
                 self._finish(True, f"OK: {self._done} {images} generated.")
         elif outcome.exit_code == EXIT_OUT_OF_MEMORY:
-            self._finish(False, "ERROR: Not enough GPU memory for any profile, see the log above.")
+            self._finish(
+                False,
+                "ERROR: Not enough GPU memory or system RAM for any profile, see the log above.",
+            )
         else:
             where = outcome.log_path if outcome.log_path is not None else "the log above"
             self._finish(
