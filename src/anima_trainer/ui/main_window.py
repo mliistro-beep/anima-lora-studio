@@ -1,5 +1,5 @@
 """Main window: the three tabs wired to the training, install and model link sessions, GPU
-detection and QSettings."""
+detection and QSettings, plus the License and Credits buttons."""
 
 from collections.abc import Callable
 from dataclasses import replace
@@ -8,8 +8,18 @@ from pathlib import Path
 from pydantic import ValidationError
 from PySide6.QtCore import QSettings
 from PySide6.QtGui import QCloseEvent
-from PySide6.QtWidgets import QMainWindow, QMessageBox, QTabWidget, QWidget
+from PySide6.QtWidgets import (
+    QHBoxLayout,
+    QMainWindow,
+    QMessageBox,
+    QPushButton,
+    QTabWidget,
+    QWidget,
+)
 
+from anima_trainer.about.credits import CREDIT_SECTIONS
+from anima_trainer.about.license import app_version
+from anima_trainer.about.render import credits_html, license_html
 from anima_trainer.models.check_worker import ModelFileChecker
 from anima_trainer.models.status import model_statuses
 from anima_trainer.runtime.data_dir import (
@@ -24,6 +34,7 @@ from anima_trainer.settings.field_specs import describe_validation_error
 from anima_trainer.settings.schema import TrainingSettings
 from anima_trainer.system.gpu_worker import GpuDetector
 from anima_trainer.training.start_service import StartRequest
+from anima_trainer.ui.dialogs.text_dialog import TextDialog
 from anima_trainer.ui.tabs.advanced_tab import AdvancedTab
 from anima_trainer.ui.tabs.settings_tab import SettingsTab
 from anima_trainer.ui.tabs.training_tab import TrainingTab
@@ -72,6 +83,10 @@ class MainWindow(QMainWindow):
         self.tabs.addTab(self.training_tab, "Training")
         self.tabs.addTab(self.advanced_tab, "Advanced Settings")
         self.tabs.addTab(self.settings_tab, "Settings")
+        self.license_button = QPushButton("License")
+        self.credits_button = QPushButton("Credits")
+        self.about_dialog: TextDialog | None = None
+        self.tabs.setCornerWidget(self._about_buttons())
         self.setCentralWidget(self.tabs)
         self._connect()
         opened = self._with_links(opened)
@@ -111,7 +126,28 @@ class MainWindow(QMainWindow):
         self.session.shutdown()
         self._detector.shutdown()
 
+    def _about_buttons(self) -> QWidget:
+        corner = QWidget()
+        layout = QHBoxLayout(corner)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.addWidget(self.license_button)
+        layout.addWidget(self.credits_button)
+        return corner
+
+    def _show_about(self, title: str, html: str) -> None:
+        # open(), not exec(): window-modal without a nested event loop.
+        if self.about_dialog is not None:
+            self.about_dialog.deleteLater()
+        self.about_dialog = TextDialog(title, html, self)
+        self.about_dialog.open()
+
     def _connect(self) -> None:
+        self.license_button.clicked.connect(
+            lambda: self._show_about("License", license_html(APP_NAME, app_version()))
+        )
+        self.credits_button.clicked.connect(
+            lambda: self._show_about("Credits", credits_html(CREDIT_SECTIONS))
+        )
         tab = self.training_tab
         tab.configure_button.clicked.connect(self._configure)
         tab.start_button.clicked.connect(self._start)

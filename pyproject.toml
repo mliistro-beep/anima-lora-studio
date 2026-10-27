@@ -1,5 +1,6 @@
 [build-system]
-requires = ["setuptools>=69", "wheel"]
+# 77: SPDX `license` expression and `license-files` (PEP 639).
+requires = ["setuptools>=77", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -7,6 +8,9 @@ name = "anima-trainer"
 version = "0.1.0"
 description = "Desktop LoRA trainer for the Anima diffusion model, based on Citron's Anima LoRA Trainer UI"
 readme = "README.md"
+license = "GPL-3.0-or-later"
+license-files = ["LICENSE", "THIRD_PARTY_NOTICES.md"]
+authors = [{ name = "Mauro Liistro" }]
 requires-python = ">=3.12"
 dependencies = [
     "PySide6>=6.8",
