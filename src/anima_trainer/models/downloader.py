@@ -1,7 +1,8 @@
 """HTTP download with resume, replacing Citron's `wget -c` (also works on Windows).
 
-Data goes to "<name>.part" and is renamed only when complete, so an interrupted or cancelled
-download never leaves a truncated model in place and can be resumed later.
+Data goes to "<name>.part" and is renamed only when complete (and, when the expected file is
+known, only when its size and SHA-256 match), so an interrupted, cancelled or damaged download
+never leaves a wrong model in place; an interrupted one can be resumed later.
 Every failure surfaces as DownloadError (or DownloadCancelled), never as a raw exception.
 """
 
@@ -18,6 +19,8 @@ from urllib.parse import urlsplit
 from urllib.request import Request, urlopen
 
 from anima_trainer import __version__
+from anima_trainer.models.catalog import ExpectedFile
+from anima_trainer.models.file_check import CheckCancelled, file_sha256
 
 CHUNK_SIZE = 1 << 20
 TIMEOUT_S = 30
@@ -50,6 +53,7 @@ class _Transfer:
     is_cancelled: Callable[[], bool]
     chunk_size: int
     timeout_s: float
+    expected: ExpectedFile | None
 
 
 def partial_path(destination: Path) -> Path:
@@ -63,10 +67,11 @@ def download_file(
     is_cancelled: Callable[[], bool] = lambda: False,
     chunk_size: int = CHUNK_SIZE,
     timeout_s: float = TIMEOUT_S,
+    expected: ExpectedFile | None = None,
 ) -> Path:
     if urlsplit(url).scheme not in ALLOWED_SCHEMES:
         raise DownloadError(f"Unsupported URL scheme in {url}: only http and https are allowed")
-    transfer = _Transfer(on_progress, is_cancelled, chunk_size, timeout_s)
+    transfer = _Transfer(on_progress, is_cancelled, chunk_size, timeout_s, expected)
     try:
         return _download(url, destination, transfer)
     except (DownloadError, DownloadCancelled):
@@ -99,8 +104,7 @@ def _download(url: str, destination: Path, transfer: _Transfer) -> Path:
             written = _copy(response, handle, start, total, transfer)
     if total is not None and written != total:
         raise DownloadError(f"Download of {url} incomplete: {written} of {total} bytes")
-    os.replace(part, destination)
-    return destination
+    return _finalize(part, destination, transfer)
 
 
 def _handle_unsatisfiable_range(
@@ -109,11 +113,38 @@ def _handle_unsatisfiable_range(
     """416 means the .part is complete only if its size equals the remote size."""
     part = partial_path(destination)
     if _total_size(headers, 0) == offset:
-        os.replace(part, destination)
-        return destination
+        return _finalize(part, destination, transfer)
     # Stale leftover from a different (larger) file: discard it and start over.
     part.unlink()
     return _download(url, destination, transfer)
+
+
+def _finalize(part: Path, destination: Path, transfer: _Transfer) -> Path:
+    """Rename the complete .part, after checking it against the expected file if known.
+
+    A mismatch deletes the .part: resuming a damaged file would only damage it again.
+    """
+    expected = transfer.expected
+    if expected is not None:
+        size = part.stat().st_size
+        if size != expected.size:
+            part.unlink()
+            raise DownloadError(
+                f"Downloaded file has the wrong size ({size} bytes, expected {expected.size}); "
+                "it was deleted, try again"
+            )
+        try:
+            digest = file_sha256(part, is_cancelled=transfer.is_cancelled)
+        except CheckCancelled as error:
+            raise DownloadCancelled("Cancelled while checking the download") from error
+        if digest != expected.sha256:
+            part.unlink()
+            raise DownloadError(
+                "Downloaded file SHA-256 does not match the expected model; it was deleted, "
+                "try again"
+            )
+    os.replace(part, destination)
+    return destination
 
 
 def _copy(

@@ -12,8 +12,8 @@ key: path, size, mtime_ns).
 | Training config | <data>/configs/<proj>_training_<ts>.toml | toml_builder.write_configs | TOML (toml lib, byte-identical to Citron) |
 | Dataset config | <data>/configs/<proj>_dataset_<ts>.toml | toml_builder.write_configs | TOML |
 | Training log | <data>/logs/<proj>_<ts>.log | training/runner.py | "Command:", "Started:", blank, raw lines |
-| DiT model | <data>/models/anima/dit/<base>.safetensors | models/downloader.py | via .part, renamed when complete |
-| Qwen3 / VAE | <data>/models/anima/{text_encoder,vae}/<file>.safetensors | models/downloader.py | via .part |
+| DiT model | <data>/models/anima/dit/<base>.safetensors | models/downloader.py | via .part, renamed when complete and size + SHA-256 match |
+| Qwen3 / VAE | <data>/models/anima/{text_encoder,vae}/<file>.safetensors | models/downloader.py | via .part, checked like the DiT |
 | Linked model | anywhere chosen by the user | never written | used in place while size and mtime are unchanged |
 | Install state | <data>/.install/{venv,sd-scripts,requirements,verified}.commit | runtime/installer.py | one-line stamp: "ready" (venv), pinned commit, commit + "+torchvision" (requirements) |
 | Install log | <data>/logs/install_<ts>.log | workflow/install_session.py | step titles and output |

@@ -91,6 +91,11 @@ skipped. "CUDA is not available" means torch cannot see the GPU: check the NVIDI
 download resumes from it. If the remote file changed and the `.part` is larger, it is
 discarded and downloaded again. To force a clean download, delete the `.part`.
 
+**"Downloaded file SHA-256 does not match" or "wrong size".** Every download is checked
+against the catalog before it is kept; a damaged or different file is deleted, so press
+Download again. If it keeps failing, Hugging Face may have published a new version of the
+file: the catalog (`models/catalog.py`, `EXPECTED_FILES`) must be updated.
+
 **Training fails with an out-of-memory hint.**
 - "GPU out of memory": lower `network_dim` (for example 8) and/or `resolution` (512),
   keep batch size 1.

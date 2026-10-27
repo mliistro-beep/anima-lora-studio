@@ -47,11 +47,13 @@ class FakeDownloader(QObject):
     def __init__(self) -> None:
         super().__init__()
         self.started: list[tuple[str, Path]] = []
+        self.expected: list[object] = []
         self.cancels = 0
         self.shut_down = 0
 
-    def start(self, url: str, destination: Path) -> None:
+    def start(self, url: str, destination: Path, expected: object = None) -> None:
         self.started.append((url, destination))
+        self.expected.append(expected)
 
     def cancel(self) -> None:
         self.cancels += 1

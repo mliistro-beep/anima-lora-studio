@@ -364,3 +364,12 @@ def test_download_model_skips_a_present_model(parts):
 
     assert parts["downloader"].started == []
     assert parts["session"].state is SessionState.IDLE
+
+
+def test_downloads_pass_the_expected_file_of_the_catalog(parts):
+    from anima_trainer.models.catalog import EXPECTED_FILES
+
+    parts["session"].download_model("anima-preview")
+
+    assert parts["downloader"].expected == [EXPECTED_FILES["anima-preview"]]
+    assert "   The file is checked against its SHA-256 when complete." in parts["log"]

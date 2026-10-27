@@ -43,7 +43,7 @@ status.py          model_statuses(paths) -> tuple[ModelStatus(label, path, prese
 model_downloads.py model_download(paths, key) / dit_model_download(paths, base) -> ModelDownload(description,
                    url, destination)|None (key: base model name for a DiT, file name for Qwen3 / VAE)
 downloader.py      download_file(url, dest, on_progress, is_cancelled) -> Path; DownloadError, DownloadCancelled
-download_worker.py ModelDownloader(BackgroundTask): start(url, dest)/cancel/shutdown; finished(path)
+download_worker.py ModelDownloader(BackgroundTask): start(url, dest, expected)/cancel/shutdown; finished(path)
 linked_models.py   LinkedModel(path, size, mtime_ns); link_for(path); is_unchanged(link)
 file_check.py      check_model_file(path, expected, on_progress, is_cancelled) -> LinkedModel; ModelFileRejected,
                    CheckCancelled (size first, then SHA-256; read only)

@@ -129,3 +129,22 @@ def test_no_progress_is_delivered_after_the_terminal_signal(
     qtbot.wait(200)
 
     assert events[-1] == "cancelled"
+
+
+def test_worker_rejects_a_download_with_the_wrong_sha256(qtbot, file_server, tmp_path):
+    import hashlib
+
+    from anima_trainer.models.catalog import ExpectedFile
+    from anima_trainer.models.download_worker import ModelDownloader
+
+    state, url = file_server
+    state.payload = b"model bytes"
+    worker = ModelDownloader()
+    wrong = ExpectedFile(hashlib.sha256(b"other").hexdigest(), len(state.payload))
+
+    with qtbot.waitSignal(worker.failed, timeout=5000) as blocker:
+        worker.start(url, tmp_path / "m.safetensors", wrong)
+    worker.shutdown()
+
+    assert "SHA-256 does not match" in blocker.args[0]
+    assert not (tmp_path / "m.safetensors").exists()

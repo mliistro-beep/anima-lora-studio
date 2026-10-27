@@ -12,6 +12,7 @@ from typing import Protocol
 
 from PySide6.QtCore import QObject, Signal, SignalInstance
 
+from anima_trainer.models.catalog import ExpectedFile
 from anima_trainer.models.model_downloads import ModelDownload, dit_model_download, model_download
 from anima_trainer.runtime.paths import RuntimePaths
 from anima_trainer.settings.schema import TrainingSettings
@@ -55,7 +56,7 @@ class Downloader(Protocol):
     failed: SignalInstance
     cancelled: SignalInstance
 
-    def start(self, url: str, destination: Path) -> None: ...
+    def start(self, url: str, destination: Path, expected: ExpectedFile | None = None) -> None: ...
     def cancel(self) -> None: ...
     def shutdown(self) -> None: ...
 
@@ -163,10 +164,15 @@ class TrainingSession(QObject):
             f"INFO: Downloading {download.description}...",
             "   This may take a few minutes. Future runs will skip this step.",
             f"   Destination: {download.destination}",
+            *(
+                ("   The file is checked against its SHA-256 when complete.",)
+                if download.expected
+                else ()
+            ),
             "",
         )
         self._set_state(SessionState.DOWNLOADING)
-        self._downloader.start(download.url, download.destination)
+        self._downloader.start(download.url, download.destination, download.expected)
 
     def _launch(self, request: StartRequest) -> None:
         self._reset_progress()
