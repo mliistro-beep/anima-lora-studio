@@ -8,6 +8,7 @@ after a SHA-256 check), and will add epoch previews and a simple image generator
 Status and the per-component checklist: [DOCS/milestones.md](DOCS/milestones.md).
 Contributor setup: [DOCS/CONTRIBUTING.md](DOCS/CONTRIBUTING.md).
 Operations and troubleshooting: [DOCS/RUNBOOK.md](DOCS/RUNBOOK.md).
+Swap and earlyoom before the first training: [DOCS/SYSTEM_SETUP.md](DOCS/SYSTEM_SETUP.md).
 Architecture codemaps: [DOCS/CODEMAPS/](DOCS/CODEMAPS/architecture.md).
 
 ## Requirements
@@ -16,6 +17,10 @@ Architecture codemaps: [DOCS/CODEMAPS/](DOCS/CODEMAPS/architecture.md).
 - An internet connection for the first install of the training runtime and models
 - git, used by the Install button of the Settings tab to fetch sd-scripts
 - An NVIDIA GPU for training (the default settings use about 6 GB of VRAM)
+- 16 GB of system RAM, plus 8-16 GB of swap and an out-of-memory daemon (earlyoom or
+  systemd-oomd). Without them, running out of RAM during a training or a generation can
+  freeze the whole computer until a hard reset. Setup steps:
+  [DOCS/SYSTEM_SETUP.md](DOCS/SYSTEM_SETUP.md).
 
 ## Development
 

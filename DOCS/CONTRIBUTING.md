@@ -78,6 +78,20 @@ for Qt:
   (`block_delay_s`) instead of hoping a race goes your way, and make sure every thread
   or process a test starts has stopped before it ends.
 
+## Real GPU and memory experiments
+
+Simulations and measurements with the real runtime (trainings, `generate.py`, VRAM probes)
+can use more system RAM than expected. Before running them, set up swap and earlyoom
+([SYSTEM_SETUP.md](SYSTEM_SETUP.md)), and start long experiments with a memory cap so a
+mistake stops the experiment, not the machine:
+
+```bash
+systemd-run --user --scope -p MemoryMax=10G -p MemorySwapMax=4G <command>
+```
+
+Write their logs to disk line by line (unbuffered), so they survive a crash. Do not put
+scripts or outputs of experiments under `/tmp` when it is a `tmpfs`: it lives in RAM.
+
 ## Code style
 
 - ruff for lint and format, strict mypy; both must be clean.
