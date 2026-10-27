@@ -51,8 +51,12 @@ def test_wrong_file_fails_with_the_reason(qtbot, checker, model_file):
     assert "SHA-256" in blocker.args[0]
 
 
-def test_check_can_be_cancelled(qtbot, checker, model_file):
-    checker.progress.connect(lambda *_: checker.cancel())
+def test_check_can_be_cancelled(qtbot, checker, model_file, paused_file_check):
+    def cancel(*_):
+        checker.cancel()
+        paused_file_check.set()
+
+    checker.progress.connect(cancel)
 
     with qtbot.waitSignal(checker.cancelled, timeout=TIMEOUT_MS):
         checker.start(model_file, _expected())

@@ -87,3 +87,29 @@ def closed_port_url():
         sock.bind(("127.0.0.1", 0))
         port = sock.getsockname()[1]
     return f"http://127.0.0.1:{port}/none"
+
+
+PAUSE_LIMIT_S = 10
+
+
+@pytest.fixture
+def paused_file_check(monkeypatch):
+    """The real model file check, paused after each chunk until the returned event is set.
+
+    A test that cancels from a progress slot sets it there, so the cancel always lands before
+    the check reaches the end of the file, however slow the machine (coverage, CI).
+    """
+    from anima_trainer.models import check_worker
+
+    gate = threading.Event()
+    real_check = check_worker.check_model_file
+
+    def paused(path, expected, report, is_cancelled, chunk_size):
+        def report_then_wait(done, total):
+            report(done, total)
+            gate.wait(PAUSE_LIMIT_S)
+
+        return real_check(path, expected, report_then_wait, is_cancelled, chunk_size)
+
+    monkeypatch.setattr(check_worker, "check_model_file", paused)
+    return gate
