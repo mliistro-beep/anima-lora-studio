@@ -170,6 +170,8 @@ def test_gpu_index_accepts_indices(gpu, expected):
         ("discrete_flow_shift", 0.0),
         ("network_dim", True),
         ("seed", False),
+        ("learning_rate", True),
+        ("caption_dropout", False),
     ],
 )
 def test_numeric_fields_reject_non_finite_negative_and_bool(field, value):
