@@ -13,14 +13,15 @@
 
 set -euo pipefail
 
-readonly REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+readonly REPO_DIR
 readonly VENV_DIR="$REPO_DIR/.venv"
 readonly APP="$VENV_DIR/bin/anima-trainer"
 readonly DEFAULT_SCRATCH="$HOME/anima-dev-scratch"
 readonly MIN_PYTHON="3.12"
 
 usage() {
-    sed -n '7,13p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+    sed -n '/^# Usage:/,/^$/{/^$/!p}' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
 }
 
 die() {

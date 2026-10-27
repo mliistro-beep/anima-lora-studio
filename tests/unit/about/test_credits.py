@@ -40,3 +40,10 @@ def test_section_titles_are_unique():
     titles = [section.title for section in CREDIT_SECTIONS]
 
     assert len(titles) == len(set(titles))
+
+
+def test_anima_credit_role_names_every_base_model_of_the_catalog():
+    anima = next(credit for credit in MODELS if "anima-base-v1.0" in credit.model_keys)
+
+    for key in BASE_MODEL_URLS:
+        assert key in anima.role

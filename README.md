@@ -28,7 +28,7 @@ QT_QPA_PLATFORM=offscreen .venv/bin/pytest
 
 `scripts/dev-run.sh` is for development only; the release launcher is planned in M6.
 
-<!-- AUTO-GENERATED: commands (source: pyproject.toml) -->
+<!-- AUTO-GENERATED: commands (source: pyproject.toml, scripts/) -->
 | Command | Description |
 |---------|-------------|
 | `.venv/bin/anima-trainer` | Start the desktop app (`anima_trainer.main:main`) |

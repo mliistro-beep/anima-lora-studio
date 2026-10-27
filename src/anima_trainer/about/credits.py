@@ -53,7 +53,7 @@ QT = Credit(
 MODELS = (
     Credit(
         "Anima, by CircleStone Labs and Comfy Org",
-        "Base DiT models (anima-base-v1.0, anima-preview3-base, anima-preview)",
+        f"Base DiT models ({', '.join(BASE_MODEL_URLS)})",
         _ANIMA_URL,
         "CircleStone Labs Non-Commercial License; NVIDIA Open Model License (derivative of "
         "NVIDIA Cosmos-Predict2-2B-Text2Image)",

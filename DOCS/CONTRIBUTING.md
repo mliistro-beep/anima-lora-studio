@@ -28,7 +28,7 @@ real app without touching your own settings, start it with `XDG_CONFIG_HOME` and
 `XDG_DATA_HOME` pointed at scratch folders: `scripts/dev-run.sh --scratch [DIR]` does it
 (default `~/anima-dev-scratch`; not under `/tmp`, the runtime takes over 10 GB).
 
-<!-- AUTO-GENERATED: commands (source: pyproject.toml) -->
+<!-- AUTO-GENERATED: commands (source: pyproject.toml, scripts/) -->
 ## Commands
 
 | Command | Description |
