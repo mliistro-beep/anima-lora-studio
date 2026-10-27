@@ -5,6 +5,7 @@ Start) and turns runner and downloader signals into log lines, progress and stat
 """
 
 from collections.abc import Callable
+from dataclasses import replace
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
@@ -14,8 +15,11 @@ from PySide6.QtCore import QObject, Signal, SignalInstance
 
 from anima_trainer.models.catalog import ExpectedFile
 from anima_trainer.models.model_downloads import ModelDownload, dit_model_download, model_download
+from anima_trainer.preview.preview_plan import PreviewPlan, plan_previews
+from anima_trainer.preview.settings import PreviewSettings, save_preview_settings
 from anima_trainer.runtime.paths import RuntimePaths
 from anima_trainer.settings.schema import TrainingSettings
+from anima_trainer.system.gpu_memory import GpuMemory, memory_of
 from anima_trainer.training.command_builder import LaunchSpec
 from anima_trainer.training.configure_service import ConfigureResult, configure_training
 from anima_trainer.training.log_parser import TrainingEvent
@@ -87,6 +91,7 @@ class TrainingSession(QObject):
         self._downloader = downloader
         self._clock = clock
         self._kernel_log = kernel_log
+        self._gpu_memory: tuple[GpuMemory, ...] = ()  # from the GPU detection thread
         self._state = SessionState.IDLE
         self._progress = ProgressState()
         self._pending: StartRequest | None = None
@@ -104,17 +109,40 @@ class TrainingSession(QObject):
     def settings(self) -> TrainingSettings:
         return self._settings
 
+    def set_gpu_memory(self, gpus: tuple[GpuMemory, ...]) -> None:
+        """Memory of the GPUs, read off the UI thread; Configure sizes the previews with it."""
+        self._gpu_memory = gpus
+
     def set_runtime(self, paths: RuntimePaths, settings: TrainingSettings) -> None:
         self._require_idle()
         self._paths = paths
         self._settings = settings
 
-    def configure(self, settings: TrainingSettings) -> ConfigureResult:
+    def configure(
+        self, settings: TrainingSettings, previews: PreviewSettings | None = None
+    ) -> ConfigureResult:
+        """Write the training configs; with previews on, their size is fitted to the GPU.
+
+        The preview settings are saved to preview.json after a successful Configure.
+        """
         self._require_idle()
-        result = configure_training(settings, self._paths, self._clock())
-        if result.success:
-            self._settings = result.settings
-            self.settings_changed.emit(result.settings)
+        plan = PreviewPlan()
+        if previews is not None and previews.enabled:
+            memory = memory_of(self._gpu_memory, settings.gpu_index)
+            plan = plan_previews(previews, memory.total_mib if memory else None)
+        result = configure_training(settings, self._paths, self._clock(), plan)
+        if not result.success:
+            return result
+        self._settings = result.settings
+        self.settings_changed.emit(result.settings)
+        if previews is None:
+            return result
+        try:
+            save_preview_settings(self._paths.preview_settings_file, previews)
+        except OSError as error:
+            file = self._paths.preview_settings_file
+            warning = f"WARN: Preview settings could not be saved to {file}: {error}"
+            return replace(result, messages=(*result.messages, warning))
         return result
 
     def start(self, request: StartRequest) -> None:

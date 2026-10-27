@@ -32,11 +32,9 @@ def parse_memory_rows(stdout: str) -> tuple[GpuMemory, ...]:
     )
 
 
-def read_gpu_memory(gpu_index: str, run: Runner = subprocess.run) -> GpuMemory | None:
-    """Memory of the first GPU in `gpu_index` ("0" or "0,1"); None when it cannot be read."""
-    first = gpu_index.split(",", 1)[0].strip()
-    if not first.isdecimal():  # isdigit() also accepts '²', which int() rejects
-        return None
+def read_all_gpu_memory(run: Runner = subprocess.run) -> tuple[GpuMemory, ...]:
+    """Memory of every GPU; empty when nvidia-smi is missing or fails. Blocks up to
+    NVIDIA_SMI_TIMEOUT_S, so it runs with the GPU detection, off the UI thread."""
     try:
         result = run(
             list(NVIDIA_SMI_MEMORY_COMMAND),
@@ -45,7 +43,13 @@ def read_gpu_memory(gpu_index: str, run: Runner = subprocess.run) -> GpuMemory |
             timeout=NVIDIA_SMI_TIMEOUT_S,
         )
     except (OSError, subprocess.SubprocessError):
+        return ()
+    return parse_memory_rows(result.stdout) if result.returncode == 0 else ()
+
+
+def memory_of(gpus: tuple[GpuMemory, ...], gpu_index: str) -> GpuMemory | None:
+    """The first GPU of `gpu_index` ("0" or "0,1") among `gpus`, or None."""
+    first = gpu_index.split(",", 1)[0].strip()
+    if not first.isdecimal():  # isdigit() also accepts '²', which int() rejects
         return None
-    if result.returncode != 0:
-        return None
-    return next((gpu for gpu in parse_memory_rows(result.stdout) if gpu.index == int(first)), None)
+    return next((gpu for gpu in gpus if gpu.index == int(first)), None)

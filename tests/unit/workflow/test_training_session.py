@@ -366,6 +366,56 @@ def test_download_model_skips_a_present_model(parts):
     assert parts["session"].state is SessionState.IDLE
 
 
+def _previews_session(citron, total_mib=8192):
+    from anima_trainer.system.gpu_memory import GpuMemory
+
+    session = TrainingSession(
+        citron, TrainingSettings(), FakeRunner(), FakeDownloader(), clock=lambda: NOW
+    )
+    session.set_gpu_memory((GpuMemory(0, total_mib, total_mib),))
+    return session
+
+
+def test_configure_with_previews_fits_them_to_the_gpu_and_saves_them(
+    qtbot, citron, dataset, tmp_path
+):
+    from anima_trainer.preview.settings import PreviewSettings, load_preview_settings
+
+    session = _previews_session(citron)
+    previews = PreviewSettings(enabled=True, prompts=("a girl",))
+
+    result = session.configure(_settings(dataset, tmp_path).with_changes(gpu_index="0"), previews)
+
+    assert result.success and result.configs is not None and result.configs.samples is not None
+    assert "Preview size 768x768 chosen for 8192 MiB" in "\n".join(result.messages)
+    assert load_preview_settings(citron.preview_settings_file).settings == previews
+
+
+def test_configure_without_previews_writes_no_prompt_file(qtbot, citron, dataset, tmp_path):
+    from anima_trainer.preview.settings import PreviewSettings, load_preview_settings
+
+    session = _previews_session(citron)
+
+    result = session.configure(_settings(dataset, tmp_path), PreviewSettings(prompts=("a",)))
+
+    assert result.success and result.configs is not None and result.configs.samples is None
+    assert load_preview_settings(citron.preview_settings_file).settings.prompts == ("a",)
+
+
+def test_preview_settings_save_failure_is_a_warning(qtbot, citron, dataset, tmp_path):
+    from anima_trainer.preview.settings import PreviewSettings
+
+    citron.preview_settings_file.mkdir(parents=True)  # a folder where the file should go
+    session = _previews_session(citron)
+
+    result = session.configure(_settings(dataset, tmp_path), PreviewSettings())
+
+    assert result.success
+    assert result.messages[-1].startswith(
+        f"WARN: Preview settings could not be saved to {citron.preview_settings_file}"
+    )
+
+
 def test_downloads_pass_the_expected_file_of_the_catalog(parts):
     from anima_trainer.models.catalog import EXPECTED_FILES
 
@@ -373,3 +423,14 @@ def test_downloads_pass_the_expected_file_of_the_catalog(parts):
 
     assert parts["downloader"].expected == [EXPECTED_FILES["anima-preview"]]
     assert "   The file is checked against its SHA-256 when complete." in parts["log"]
+
+
+def test_unknown_gpu_memory_keeps_the_preview_size(qtbot, citron, dataset, tmp_path):
+    from anima_trainer.preview.settings import PreviewSettings
+
+    session = TrainingSession(citron, TrainingSettings(), FakeRunner(), FakeDownloader())
+    previews = PreviewSettings(enabled=True, prompts=("a",))
+
+    result = session.configure(_settings(dataset, tmp_path), previews)
+
+    assert "GPU memory unknown, preview size 1024x1024 kept." in "\n".join(result.messages)

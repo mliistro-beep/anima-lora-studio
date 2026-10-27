@@ -3,6 +3,7 @@
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 
+from pydantic import BaseModel
 from PySide6.QtCore import QLocale
 from PySide6.QtWidgets import (
     QCheckBox,
@@ -17,7 +18,6 @@ from PySide6.QtWidgets import (
 )
 
 from anima_trainer.settings.field_specs import INT_MAX, INT_MIN, FieldKind, FieldSpec
-from anima_trainer.settings.schema import TrainingSettings
 from anima_trainer.system.gpu_choice import choice_for_index, gpu_index_from_choice
 from anima_trainer.ui.widgets.path_picker import PathPicker
 
@@ -73,6 +73,8 @@ def _int(spec: FieldSpec) -> _Field:
     low = INT_MIN if spec.minimum is None else int(spec.minimum)
     high = INT_MAX if spec.maximum is None else int(spec.maximum)
     spin.setRange(low, high)
+    if spec.step is not None:
+        spin.setSingleStep(int(spec.step))
     return _Field(spin, spin.value, lambda value: spin.setValue(int(str(value))))
 
 
@@ -142,7 +144,7 @@ class SettingsForm(QWidget):
     def values(self) -> dict[str, FieldValue]:
         return {name: field.read() for name, field in self._fields.items()}
 
-    def set_values(self, settings: TrainingSettings) -> None:
+    def set_values(self, settings: BaseModel) -> None:
         for name, field in self._fields.items():
             field.write(getattr(settings, name))
 

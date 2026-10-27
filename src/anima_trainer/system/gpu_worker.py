@@ -1,4 +1,5 @@
-"""Runs detect_gpus() off the UI thread: the torch probe can take up to a minute."""
+"""Runs detect_gpus() and the GPU memory read off the UI thread: the torch probe can take up
+to a minute and nvidia-smi up to its timeout."""
 
 import logging
 from collections.abc import Callable
@@ -7,19 +8,28 @@ from PySide6.QtCore import QObject, QThread, Signal
 
 from anima_trainer.runtime.paths import RuntimePaths
 from anima_trainer.system.gpu_info import FALLBACK_CHOICES, detect_gpus
+from anima_trainer.system.gpu_memory import GpuMemory
 
 Detect = Callable[[RuntimePaths], tuple[str, ...]]
+ReadMemory = Callable[[], tuple[GpuMemory, ...]]
+
+
+def no_memory() -> tuple[GpuMemory, ...]:
+    return ()
+
 
 _LOG = logging.getLogger(__name__)
 
 
 class _DetectThread(QThread):
-    def __init__(self, paths: RuntimePaths, detect: Detect) -> None:
+    def __init__(self, paths: RuntimePaths, detect: Detect, memory: ReadMemory) -> None:
         super().__init__()
         self._paths = paths
         self._detect = detect
+        self._memory = memory
         # Written by run() before the thread ends, read after QThread.finished.
         self.choices: tuple[str, ...] = FALLBACK_CHOICES
+        self.gpu_memory: tuple[GpuMemory, ...] = ()
         self.error: str | None = None
 
     def run(self) -> None:
@@ -29,20 +39,33 @@ class _DetectThread(QThread):
             _LOG.exception("GPU detection failed for %s", self._paths.root)
             self.choices = FALLBACK_CHOICES
             self.error = f"GPU detection failed ({error!r}), using {', '.join(FALLBACK_CHOICES)}."
+        try:
+            self.gpu_memory = self._memory()
+        except Exception:  # noqa: BLE001 - unknown memory only makes the previews keep their size
+            _LOG.exception("GPU memory read failed")
+            self.gpu_memory = ()
 
 
 class GpuDetector(QObject):
-    """detected(choices) for the latest start(); results of superseded runs are dropped.
+    """detected(choices), then memory_detected(gpu memory) for the latest start(); results of
+    superseded runs are dropped.
 
     When detection fails, warning(message) comes first and detected() gets the fallback.
     """
 
     detected = Signal(object)  # tuple[str, ...]
+    memory_detected = Signal(object)  # tuple[GpuMemory, ...], empty when unknown
     warning = Signal(str)
 
-    def __init__(self, detect: Detect = detect_gpus, parent: QObject | None = None) -> None:
+    def __init__(
+        self,
+        detect: Detect = detect_gpus,
+        memory: ReadMemory = no_memory,
+        parent: QObject | None = None,
+    ) -> None:
         super().__init__(parent)
         self._detect = detect
+        self._memory = memory
         self._latest: _DetectThread | None = None
         self._threads: tuple[_DetectThread, ...] = ()
 
@@ -50,7 +73,7 @@ class GpuDetector(QObject):
         return bool(self._threads)
 
     def start(self, paths: RuntimePaths) -> None:
-        thread = _DetectThread(paths, self._detect)
+        thread = _DetectThread(paths, self._detect, self._memory)
         thread.finished.connect(lambda: self._on_done(thread))
         self._latest = thread
         self._threads = (*self._threads, thread)
@@ -75,3 +98,4 @@ class GpuDetector(QObject):
             if thread.error is not None:
                 self.warning.emit(thread.error)
             self.detected.emit(thread.choices)
+            self.memory_detected.emit(thread.gpu_memory)

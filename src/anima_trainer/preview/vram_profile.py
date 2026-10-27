@@ -1,22 +1,25 @@
 """Fit image generation to the GPU memory instead of refusing it.
 
 Generation profiles go from the fastest to the lightest; the generator starts with the first
-one that fits the free memory and falls back to the next ones on out-of-memory. The memory
-figures are estimates for the Anima DiT (2B, 28 blocks), Qwen3 0.6B and the Qwen-Image VAE,
-to be refined with measurements on real GPUs.
+one that fits the free memory (runtime_scripts/profile_choice.py, with these estimates) and
+falls back to the next ones on out-of-memory. Each image is
+made by its own process that loads the text encoder, the DiT and the VAE one at a time, so
+keeping them all loaded would not be faster. The memory figures are estimates for the Anima
+DiT (2B, 28 blocks), Qwen3 0.6B and the Qwen-Image VAE, to be refined with measurements.
 """
 
 from dataclasses import dataclass
 
 from anima_trainer.preview.sample_prompts import SampleSize
 
-SIDE_STEP = 16
+PREVIEW_SIDE_STEP = 16  # sd-scripts rounds training previews to a multiple of 16
+GENERATOR_SIDE_STEP = 32  # anima_minimal_inference requires multiples of 32
 MIB_PER_MEGAPIXEL = 1024 * 1024
 
 CUDA_CONTEXT_MIB = 500
 DIT_BF16_MIB = 3990
 DIT_FP8_MIB = 2000
-DIT_SWAPPED_MIB = 400  # fp8 with 26 of the 28 blocks kept in system RAM
+DIT_SWAPPED_MIB = 700  # bf16 with 26 of the 28 blocks kept in system RAM
 TEXT_ENCODER_MIB = 1140
 VAE_MIB = 250
 DENOISE_MIB_PER_MP = 1000
@@ -34,7 +37,6 @@ TRAINING_MARGIN_MIB = 1536  # a running training must never be the one to run ou
 class GenerationProfile:
     name: str
     label: str
-    sequential: bool  # text encoder, DiT and VAE loaded one at a time
     fp8: bool
     vae_chunk_size: int | None
     blocks_to_swap: int
@@ -44,43 +46,26 @@ class GenerationProfile:
 
 PROFILES = (
     GenerationProfile(
-        "full", "All models on the GPU", sequential=False, fp8=False, vae_chunk_size=None,
+        "standard", "bf16, models loaded one at a time", fp8=False, vae_chunk_size=None,
         blocks_to_swap=0, text_encoder_cpu=False, max_side=None,
     ),
     GenerationProfile(
-        "sequential", "Models loaded one at a time", sequential=True, fp8=False,
-        vae_chunk_size=None, blocks_to_swap=0, text_encoder_cpu=False, max_side=None,
+        "fp8", "DiT in fp8, VAE in chunks", fp8=True, vae_chunk_size=VAE_CHUNK_SIZE,
+        blocks_to_swap=0, text_encoder_cpu=False, max_side=None,
     ),
     GenerationProfile(
-        "fp8", "DiT in fp8, VAE in chunks", sequential=True, fp8=True,
-        vae_chunk_size=VAE_CHUNK_SIZE, blocks_to_swap=0,
-        text_encoder_cpu=False, max_side=None,
+        "block_swap", "DiT blocks swapped to RAM", fp8=False, vae_chunk_size=VAE_CHUNK_SIZE,
+        blocks_to_swap=BLOCKS_TO_SWAP, text_encoder_cpu=False, max_side=None,
     ),
     GenerationProfile(
-        "block_swap", "DiT blocks swapped to RAM", sequential=True, fp8=True,
-        vae_chunk_size=VAE_CHUNK_SIZE, blocks_to_swap=BLOCKS_TO_SWAP,
-        text_encoder_cpu=False, max_side=None,
+        "low_res", "Reduced size (768)", fp8=False, vae_chunk_size=VAE_CHUNK_SIZE,
+        blocks_to_swap=BLOCKS_TO_SWAP, text_encoder_cpu=True, max_side=768,
     ),
     GenerationProfile(
-        "low_res", "Reduced size (768)", sequential=True, fp8=True,
-        vae_chunk_size=VAE_CHUNK_SIZE, blocks_to_swap=BLOCKS_TO_SWAP,
-        text_encoder_cpu=True, max_side=768,
-    ),
-    GenerationProfile(
-        "lowest", "Reduced size (512)", sequential=True, fp8=True,
-        vae_chunk_size=VAE_CHUNK_SIZE, blocks_to_swap=BLOCKS_TO_SWAP,
-        text_encoder_cpu=True, max_side=512,
+        "lowest", "Reduced size (512)", fp8=False, vae_chunk_size=VAE_CHUNK_SIZE,
+        blocks_to_swap=BLOCKS_TO_SWAP, text_encoder_cpu=True, max_side=512,
     ),
 )  # fmt: skip
-_UNKNOWN_MEMORY_START = 1  # "sequential": fast enough, and the fallbacks cover the rest
-# During a training an unknown amount must not risk the training's own memory.
-_UNKNOWN_MEMORY_TRAINING_START = 3  # "block_swap"
-
-
-@dataclass(frozen=True)
-class GenerationPlan:
-    profiles: tuple[GenerationProfile, ...]  # first to try, then the fallbacks
-    blocked_reason: str | None = None
 
 
 @dataclass(frozen=True)
@@ -90,7 +75,7 @@ class PreviewSizeChoice:
 
 
 def profile_size(profile: GenerationProfile, size: SampleSize) -> SampleSize:
-    return size if profile.max_side is None else _fit(size, profile.max_side)
+    return size if profile.max_side is None else _fit(size, profile.max_side, GENERATOR_SIDE_STEP)
 
 
 def estimate_mib(profile: GenerationProfile, size: SampleSize) -> int:
@@ -103,24 +88,12 @@ def estimate_mib(profile: GenerationProfile, size: SampleSize) -> int:
     text_encoder = 0 if profile.text_encoder_cpu else TEXT_ENCODER_MIB
     denoise = dit + DENOISE_MIB_PER_MP * megapixels
     decode = VAE_MIB + per_mp * megapixels
-    if profile.sequential:
-        peak = max(text_encoder, denoise, decode)
-    else:
-        peak = text_encoder + dit + VAE_MIB + max(denoise - dit, decode - VAE_MIB)
-    return round(CUDA_CONTEXT_MIB + peak)
+    return round(CUDA_CONTEXT_MIB + max(text_encoder, denoise, decode))
 
 
-def plan_generation(free_mib: int | None, size: SampleSize, training: bool) -> GenerationPlan:
-    if free_mib is None:
-        start = _UNKNOWN_MEMORY_TRAINING_START if training else _UNKNOWN_MEMORY_START
-        return GenerationPlan(PROFILES[start:])
-    margin = TRAINING_MARGIN_MIB if training else IDLE_MARGIN_MIB
-    for index, profile in enumerate(PROFILES):
-        if estimate_mib(profile, size) + margin <= free_mib:
-            return GenerationPlan(PROFILES[index:])
-    needed = estimate_mib(PROFILES[-1], size) + margin
-    reason = f"Not enough free GPU memory: about {needed} MiB needed, {free_mib} MiB free."
-    return GenerationPlan((), reason)
+def margin_mib(training: bool) -> int:
+    """Free memory left aside: more while a training runs, so it never runs out itself."""
+    return TRAINING_MARGIN_MIB if training else IDLE_MARGIN_MIB
 
 
 # Longest preview side that leaves room for sampling inside a training, by total GPU memory.
@@ -146,20 +119,20 @@ def fit_preview_size(total_mib: int | None, requested: SampleSize, auto: bool) -
             "sample during training."
         )
         return PreviewSizeChoice(None, note)
-    size = _fit(requested, advised)
+    size = _fit(requested, advised, PREVIEW_SIDE_STEP)
     note = (
         f"INFO: Preview size {size.width}x{size.height} chosen for {total_mib} MiB of GPU memory."
     )
     return PreviewSizeChoice(size, note)
 
 
-def _fit(size: SampleSize, max_side: int) -> SampleSize:
+def _fit(size: SampleSize, max_side: int, step: int) -> SampleSize:
     longer = max(size.width, size.height)
     if longer <= max_side:
         return size
     ratio = max_side / longer
 
     def scaled(side: int) -> int:
-        return max(SIDE_STEP, int(side * ratio) // SIDE_STEP * SIDE_STEP)
+        return max(step, int(side * ratio) // step * step)
 
     return SampleSize(scaled(size.width), scaled(size.height))

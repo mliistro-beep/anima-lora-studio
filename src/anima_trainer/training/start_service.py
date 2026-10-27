@@ -8,10 +8,14 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
+import toml
+
 from anima_trainer.runtime.paths import RuntimePaths
 from anima_trainer.settings.schema import TrainingSettings
 from anima_trainer.training.command_builder import LaunchSpec, build_training_launch
 from anima_trainer.training.runner import log_file_path
+
+PREVIEWS_NOTE = "INFO: Previews on: images in <output_dir>/sample/ during training."
 
 
 @dataclass(frozen=True)
@@ -48,10 +52,22 @@ def plan_start(
         return StartPlan((f"ERROR: Training script not found: {script}. Run setup first.",))
 
     # Passed verbatim: accelerate runs from the data folder, like Citron's own command.
+    with_previews = has_previews(paths.resolve(train_config))
     spec = build_training_launch(
-        paths, Path(train_config), Path(dataset_config), request.gpu_index, request.cpu_threads
+        paths,
+        Path(train_config),
+        Path(dataset_config),
+        request.gpu_index,
+        request.cpu_threads,
+        with_previews,
     )
-    messages = (f"Using GPU index: {request.gpu_index}", f"Command: {spec.display()}", "")
+    previews = (PREVIEWS_NOTE,) if with_previews else ()
+    messages = (
+        f"Using GPU index: {request.gpu_index}",
+        *previews,
+        f"Command: {spec.display()}",
+        "",
+    )
     log_path = log_file_path(paths.logs_dir, saved.project_name or "run", now)
     return StartPlan(messages, spec, log_path)
 
@@ -66,3 +82,15 @@ def _config_error(paths: RuntimePaths, train_config: str, dataset_config: str) -
     if not paths.resolve(dataset_config).exists():
         return f"Dataset config not found: {dataset_config}"
     return None
+
+
+def has_previews(train_config: Path) -> bool:
+    """True when the training config asks sd-scripts for preview images.
+
+    Read from the file, so a custom config with sample_prompts gets the preview launcher too;
+    a config that cannot be parsed runs sd-scripts directly, which then reports the problem.
+    """
+    try:
+        return "sample_prompts" in toml.loads(train_config.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, toml.TomlDecodeError):
+        return False

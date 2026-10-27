@@ -117,13 +117,13 @@ def make_window(qtbot, tmp_path, installer, install_plan):
     return build
 
 
-def test_window_has_the_three_tabs_and_saved_values(make_window, tmp_path, dataset):
+def test_window_has_the_tabs_and_saved_values(make_window, tmp_path, dataset):
     _make_runtime(tmp_path / "data", dataset)
 
     window, *_ = make_window(tmp_path / "data")
 
     titles = [window.tabs.tabText(i) for i in range(window.tabs.count())]
-    assert titles == ["Training", "Advanced Settings", "Settings"]
+    assert titles == ["Training", "Advanced Settings", "Previews", "Generator", "Settings"]
     basic = window.training_tab.form.values()
     assert (basic["project_name"], basic["network_dim"]) == ("saved_proj", 16)
     assert window.advanced_tab.form.values()["cache_latents"] is False

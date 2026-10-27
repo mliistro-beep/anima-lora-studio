@@ -50,6 +50,10 @@ class RuntimePaths:
         return self.root / "preview.json"
 
     @property
+    def generator_settings_file(self) -> Path:
+        return self.root / "generator.json"
+
+    @property
     def configs_dir(self) -> Path:
         return self.root / "configs"
 

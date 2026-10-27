@@ -1,0 +1,61 @@
+"""Settings of the Generator tab, kept in <data>/generator.json."""
+
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Annotated, Any, Self
+
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field
+
+from anima_trainer.preview.settings import MAX_SIDE, MIN_SIDE, Sampler
+from anima_trainer.preview.vram_profile import GENERATOR_SIDE_STEP
+from anima_trainer.settings.json_store import load_model, save_model
+from anima_trainer.settings.schema import DecimalNumber, WholeNumber
+
+
+def _check_side(value: int) -> int:
+    if value % GENERATOR_SIDE_STEP:
+        raise ValueError(f"must be a multiple of {GENERATOR_SIDE_STEP}")
+    return value
+
+
+Side = Annotated[WholeNumber, Field(ge=MIN_SIDE, le=MAX_SIDE), AfterValidator(_check_side)]
+
+
+class GeneratorSettings(BaseModel):
+    model_config = ConfigDict(
+        frozen=True, extra="ignore", validate_default=True, allow_inf_nan=False
+    )
+
+    prompt: Annotated[str, AfterValidator(str.strip)] = ""
+    negative_prompt: str = ""
+    width: Side = 1024
+    height: Side = 1024
+    sampler: Sampler = "er_sde"
+    steps: WholeNumber = Field(25, ge=1, le=200)
+    cfg_scale: DecimalNumber = Field(4.0, ge=1.0, le=20.0)
+    flow_shift: DecimalNumber = Field(3.0, gt=0, le=20.0)
+    seed: WholeNumber = Field(42, ge=0)
+    lora_multiplier: DecimalNumber = Field(1.0, ge=0.0, le=2.0)
+
+    def with_changes(self, **changes: Any) -> Self:
+        """Return a new, re-validated copy with the given fields replaced."""
+        return type(self).model_validate({**self.model_dump(), **changes})
+
+    def problems(self) -> tuple[str, ...]:
+        return () if self.prompt else ("Write a prompt first.",)
+
+
+@dataclass(frozen=True)
+class GeneratorLoadResult:
+    settings: GeneratorSettings
+    warnings: tuple[str, ...]
+
+
+def load_generator_settings(path: Path) -> GeneratorLoadResult:
+    loaded = load_model(path, GeneratorSettings)
+    return GeneratorLoadResult(loaded.model, loaded.warnings)
+
+
+def save_generator_settings(path: Path, settings: GeneratorSettings) -> None:
+    """Raises OSError when the file cannot be written."""
+    save_model(path, settings)

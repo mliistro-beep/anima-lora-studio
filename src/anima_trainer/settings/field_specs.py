@@ -4,6 +4,7 @@ Labels, groups and limits are Citron's (app.py, build_ui) so both UIs read the s
 Floats are edited as text: a spin box would round values such as 0.0001 and break TOML parity.
 """
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Literal
 
@@ -133,14 +134,20 @@ def field_label(name: str) -> str:
     return _LABELS.get(name, name)
 
 
-def describe_validation_error(error: ValidationError) -> tuple[str, ...]:
-    """One "ERROR: <label>: <reason>" line per invalid field, in the error's order."""
-    return tuple(_describe(detail) for detail in error.errors())
+def describe_validation_error(
+    error: ValidationError, labels: Mapping[str, str] | None = None
+) -> tuple[str, ...]:
+    """One "ERROR: <label>: <reason>" line per invalid field, in the error's order.
+
+    `labels` names the fields of another settings model; by default the training fields.
+    """
+    names = _LABELS if labels is None else labels
+    return tuple(_describe(detail, names) for detail in error.errors())
 
 
-def _describe(detail: ErrorDetails) -> str:
+def _describe(detail: ErrorDetails, labels: Mapping[str, str]) -> str:
     location = detail["loc"]
-    field = field_label(str(location[0])) if location else "Settings"
+    field = labels.get(str(location[0]), str(location[0])) if location else "Settings"
     nested = "".join(f".{part}" for part in location[1:])
     # Custom validators raise ValueError, which pydantic prefixes with "Value error, ".
     reason = detail["msg"].removeprefix(VALUE_ERROR_PREFIX)
