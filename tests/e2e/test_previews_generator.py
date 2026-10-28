@@ -22,33 +22,18 @@ from anima_trainer.ui.preview_controller import TRAINING_NOTE
 from anima_trainer.workflow.generator_session import GeneratorSession
 from anima_trainer.workflow.install_session import InstallSession
 from anima_trainer.workflow.training_session import TrainingSession
-from tests.e2e.test_main_window import GPUS, INSTALL_STEPS, NOW, TIMEOUT_MS, _make_runtime
+from tests.e2e.helpers import GPUS, INSTALL_STEPS, NOW, PROJECT, TIMEOUT_MS, make_runtime
 from tests.fakes import FakeDownloader, FakeInstaller, FakeRunner
 
 pytestmark = pytest.mark.e2e
-PROJECT = "saved_proj"  # project name written by _make_runtime
 GPU_MEMORY = (GpuMemory(0, 12288, 11000), GpuMemory(1, 12288, 11000))
 OK = RunOutcome(0, crashed=False, stopped=False, log_path=None)
-
-
-@pytest.fixture(autouse=True)
-def confirm_quit_at_teardown(monkeypatch):
-    monkeypatch.setattr(QMessageBox, "question", lambda *_a, **_k: QMessageBox.StandardButton.Yes)
-
-
-@pytest.fixture
-def dataset(tmp_path):
-    folder = tmp_path / "images"
-    folder.mkdir()
-    (folder / "a.png").write_bytes(b"")
-    (folder / "a.txt").write_text("caption")
-    return folder
 
 
 @pytest.fixture
 def app(qtbot, tmp_path, dataset):
     """The window on an installed runtime, its training runner and its generator runner."""
-    paths = _make_runtime(tmp_path / "data", dataset)
+    paths = make_runtime(tmp_path / "data", dataset)
     store = QSettings(str(tmp_path / "app.ini"), QSettings.Format.IniFormat)
     opened = open_data_dir(paths.root)
     runner, generator_runner = FakeRunner(), FakeRunner()
