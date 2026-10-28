@@ -11,7 +11,7 @@ key: path, size, mtime_ns).
 | Settings | <data>/config.json | settings/store.py save_settings | JSON, 35 keys, Citron order, indent 2 |
 | Training config | <data>/configs/<proj>_training_<ts>.toml | toml_builder.write_configs | TOML (toml lib, byte-identical to Citron) |
 | Dataset config | <data>/configs/<proj>_dataset_<ts>.toml | toml_builder.write_configs | TOML |
-| Training log | <data>/logs/<proj>_<ts>.log | training/runner.py | "Command:", "Started:", blank, raw lines |
+| Training log | <data>/logs/<proj>_<ts>.log | training/runner.py | "Command:", "Started:", blank, raw lines; a "RESOURCES ..." line at the start and every minute |
 | DiT model | <data>/models/anima/dit/<base>.safetensors | models/downloader.py | via .part, renamed when complete and size + SHA-256 match |
 | Qwen3 / VAE | <data>/models/anima/{text_encoder,vae}/<file>.safetensors | models/downloader.py | via .part, checked like the DiT |
 | Linked model | anywhere chosen by the user | never written | used in place while size and mtime are unchanged |

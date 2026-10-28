@@ -105,6 +105,13 @@ upgraded under the venv. Remove `<checkout>/.venv` and start `./run_linux.sh` ag
 a `pyproject.toml` change failed (often no network); the previous install is started and
 the update is retried at the next start.
 
+**The computer froze or became unreachable during a training.** Open the training log
+(`<data folder>/logs/<project>_<date>.log`) and search for `RESOURCES`: one such line is
+written at the start and every minute, and synced to disk, with the available RAM, the used
+swap and each GPU's VRAM, temperature, power and load. The last lines show whether the RAM or
+the swap ran out, or whether the GPU was at its power or temperature limit, before the end.
+Epoch checkpoints already saved stay in the output folder.
+
 **"WARN: Swap is ..." or "WARN: No out-of-memory daemon ...".** Shown at start and after
 Apply in the data folder; the app still works, but running out of RAM can freeze the
 computer. Set up swap and earlyoom as in [SYSTEM_SETUP.md](SYSTEM_SETUP.md).

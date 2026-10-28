@@ -55,8 +55,9 @@ toml_builder.py      build_training_config, build_dataset_config, render_toml, c
 configure_service.py configure_training(settings, paths, now) -> ConfigureResult (3.14+ venv: max_data_loader_n_workers = 0)
 start_service.py     StartRequest, plan_start(...) -> StartPlan
 command_builder.py   build_training_launch(...) -> LaunchSpec(program, arguments, env, working_dir)
-runner.py            TrainingRunner(QObject): start/stop/shutdown/log_tail; signals line_received,
-                     event_received, finished(RunOutcome), failed_to_start, warning; split_lines, log_file_path
+runner.py            TrainingRunner(QObject, monitor=None): start/stop/shutdown/log_tail; signals line_received,
+                     event_received, finished(RunOutcome), failed_to_start, warning; split_lines, log_file_path;
+                     monitor lines go to the log file only (flush + fsync)
 log_parser.py        parse_line(line) -> TrainingEvent|None; parse_duration
 progress.py          ProgressState (frozen), apply_event(state, event), format_duration(seconds)
 outcome_report.py    completed(outcome), run_failed(outcome), outcome_messages(outcome, output_dir, hint)
@@ -69,6 +70,10 @@ gpu_choice.py gpu_index_from_choice(label) -> "N"; choice_for_index(choices, sav
 gpu_memory.py read_all_gpu_memory(run) -> tuple[GpuMemory] (nvidia-smi), memory_of(gpus, index)
 memory_safety.py memory_safety_lines(meminfo, processes, platform) -> OK/WARN lines (swap < 8 GB,
                  no earlyoom / systemd-oomd), warnings_only(lines), read_memory_safety(proc=/proc)
+resource_usage.py parse_meminfo(text) -> MemoryUsage|None, parse_gpu_usage(nvidia-smi stdout) -> tuple[GpuUsage],
+                  resource_line(now, memory, gpus) -> "RESOURCES <iso> | RAM ... | swap ... | GPU n: ..."
+resource_monitor.py ResourceMonitor(QObject): start/stop/is_sampling; signal line_ready(str); a sample at
+                  start and every 60 s, nvidia-smi as an async QProcess with a 10 s timeout
 process_group.py use_own_session(process), terminate_group(process), kill_group(process),
                  KILL_GRACE_MS, SHUTDOWN_KILL_WAIT_MS (runner + installer)
 process_output.py split_lines(pending, data) -> (lines, rest)
