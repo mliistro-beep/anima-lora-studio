@@ -41,7 +41,7 @@ def install_plan():
 
 @pytest.fixture
 def make_window(qtbot, tmp_path, installer, install_plan):
-    def build(root, detect=lambda _paths: GPUS, expected=None):
+    def build(root, detect=lambda _paths: GPUS, expected=None, memory_check=lambda: ()):
         store = QSettings(str(tmp_path / "app.ini"), QSettings.Format.IniFormat)
         opened = open_data_dir(root)
         runner, downloader = FakeRunner(), FakeDownloader()
@@ -62,7 +62,9 @@ def make_window(qtbot, tmp_path, installer, install_plan):
         install = InstallSession(installer, plan=plan, clock=lambda: NOW)
         links = None if expected is None else LinkSession(store, ModelFileChecker(), expected)
         with qtbot.waitSignal(detector.detected, timeout=TIMEOUT_MS):
-            window = MainWindow(session, detector, store, opened, install, links=links)
+            window = MainWindow(
+                session, detector, store, opened, install, links=links, memory_check=memory_check
+            )
         qtbot.addWidget(window)
         return window, runner, downloader, store
 
@@ -87,6 +89,33 @@ def test_detected_gpus_select_the_saved_index(make_window, tmp_path, dataset):
     window, *_ = make_window(tmp_path / "data")
 
     assert window.training_tab.form.field_widget("gpu_index").currentText() == "1: NVIDIA B"
+
+
+MEMORY_LINES = (
+    "WARN: Swap is 0.5 GB; 8-16 GB is recommended.",
+    "OK: Out-of-memory daemon running: earlyoom.",
+)
+
+
+def test_memory_warnings_show_at_start_and_all_lines_in_the_settings_tab(
+    make_window, tmp_path, dataset
+):
+    window, *_ = make_window(
+        make_runtime(tmp_path / "data", dataset).root, memory_check=lambda: MEMORY_LINES
+    )
+
+    status = window.training_tab.status.text()
+    assert MEMORY_LINES[0] in status
+    assert MEMORY_LINES[1] not in status  # only warnings at start
+    assert window.settings_tab.system_label.text() == "\n".join(MEMORY_LINES)
+    assert not window.settings_tab.system_label.isHidden()
+
+
+def test_no_memory_lines_hide_the_system_line(make_window, tmp_path, dataset):
+    window, *_ = make_window(make_runtime(tmp_path / "data", dataset).root)
+
+    assert window.settings_tab.system_label.isHidden()
+    assert "WARN:" not in window.training_tab.status.text()
 
 
 def test_missing_data_dir_opens_settings_and_blocks_training(make_window, tmp_path):

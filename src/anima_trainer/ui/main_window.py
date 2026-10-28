@@ -34,6 +34,7 @@ from anima_trainer.runtime.data_dir import (
 from anima_trainer.settings.field_specs import describe_validation_error
 from anima_trainer.settings.schema import TrainingSettings
 from anima_trainer.system.gpu_worker import GpuDetector
+from anima_trainer.system.memory_safety import warnings_only
 from anima_trainer.training.runner import TrainingRunner
 from anima_trainer.training.start_service import StartRequest
 from anima_trainer.ui.dialogs.text_dialog import TextDialog
@@ -68,6 +69,7 @@ class MainWindow(QMainWindow):
         open_root: Callable[[Path], OpenedRuntime] = open_data_dir,
         links: LinkSession | None = None,
         generator: GeneratorSession | None = None,
+        memory_check: Callable[[], tuple[str, ...]] = lambda: (),
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
@@ -81,6 +83,7 @@ class MainWindow(QMainWindow):
         self._links = links if links is not None else LinkSession(store, ModelFileChecker())
         self._checking = False
         self._open_root = open_root
+        self._memory_check = memory_check  # swap / OOM daemon lines, see system/memory_safety.py
         self._problems = opened.problems
         self._root_exists = opened.paths.root.is_dir()
         self._shut_down = False
@@ -213,7 +216,10 @@ class MainWindow(QMainWindow):
         self.settings_tab.set_problems(opened.problems)
         self._refresh_models()
         preview_warnings = self.previews.load(opened.paths, opened.settings)
+        memory_lines = self._memory_check()
+        self.settings_tab.set_system_lines(memory_lines)
         notes = (
+            *warnings_only(memory_lines),
             *(f"WARN: {warning}" for warning in (*opened.warnings, *preview_warnings)),
             *(f"ERROR: {problem}" for problem in opened.problems),
         )

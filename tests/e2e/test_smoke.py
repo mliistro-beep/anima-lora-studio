@@ -3,6 +3,7 @@ import signal
 import pytest
 from PySide6.QtCore import QSettings
 
+from anima_trainer import main as main_module
 from anima_trainer.main import APP_NAME, create_window, install_quit_signals
 from anima_trainer.runtime.data_dir import DATA_DIR_KEY
 
@@ -31,6 +32,18 @@ def test_fresh_start_uses_the_app_data_folder(qtbot, tmp_path, monkeypatch):
 
     assert window.session.paths.root == tmp_path / "share" / "anima-trainer"
     assert "not installed" in window.settings_tab.problems_label.text()
+
+
+@pytest.mark.e2e
+def test_create_window_checks_the_swap_and_the_oom_daemon(qtbot, tmp_path, monkeypatch):
+    monkeypatch.setattr(main_module, "read_memory_safety", lambda: ("WARN: little swap",))
+    store = QSettings(str(tmp_path / "app.ini"), QSettings.Format.IniFormat)
+    store.setValue(DATA_DIR_KEY, str(tmp_path / "data"))
+    window = create_window(store, detect=lambda _paths: ("0",))
+    qtbot.addWidget(window)
+
+    assert "WARN: little swap" in window.training_tab.status.text()
+    assert window.settings_tab.system_label.text() == "WARN: little swap"
 
 
 @pytest.mark.skipif(not hasattr(signal, "SIGTERM"), reason="needs POSIX signals")

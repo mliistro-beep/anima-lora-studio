@@ -64,6 +64,9 @@ class SettingsTab(QWidget):
         self.apply_button.clicked.connect(lambda: self.root_applied.emit(self.root_picker.path()))
         self.problems_label = QLabel()
         self.problems_label.setWordWrap(True)
+        self.system_label = QLabel()  # swap and out-of-memory daemon (system/memory_safety.py)
+        self.system_label.setWordWrap(True)
+        self.system_label.setHidden(True)
         self.install_button = QPushButton("Install")
         self.install_button.clicked.connect(self.install_requested.emit)
         self.cancel_install_button = QPushButton("Cancel install")
@@ -99,6 +102,11 @@ class SettingsTab(QWidget):
         else:
             self.problems_label.setText("OK: Training runtime installed.")
         self.install_button.setText("Install" if problems else "Repair")
+
+    def set_system_lines(self, lines: tuple[str, ...]) -> None:
+        """OK / WARN lines about the swap and the out-of-memory daemon; hidden when none."""
+        self.system_label.setText("\n".join(lines))
+        self.system_label.setHidden(not lines)
 
     def set_models(self, statuses: tuple[ModelStatus, ...]) -> None:
         self.models_table.setRowCount(len(statuses))
@@ -199,6 +207,7 @@ class SettingsTab(QWidget):
         layout.addWidget(help_label)
         layout.addLayout(row)
         layout.addWidget(self.problems_label)
+        layout.addWidget(self.system_label)
         install_help = QLabel(INSTALL_HELP)
         install_help.setWordWrap(True)
         install_row = QHBoxLayout()
