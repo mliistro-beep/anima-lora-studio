@@ -27,7 +27,6 @@ def test_layout_matches_a_citron_installation():
     assert paths.qwen3_model == ROOT / "models/anima/text_encoder/qwen_3_06b_base.safetensors"
     assert paths.vae_model == ROOT / "models/anima/vae/qwen_image_vae.safetensors"
     assert paths.train_script == ROOT / "sd-scripts/anima_train_network.py"
-    assert paths.inference_script == ROOT / "sd-scripts/anima_minimal_inference.py"
     assert paths.accelerate_config == Path("app_configs/accelerate_gpu.yaml")
     assert paths.accelerate_config_file == ROOT / "app_configs/accelerate_gpu.yaml"
     assert paths.venv_dir == ROOT / ".venv"

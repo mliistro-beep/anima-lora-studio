@@ -82,10 +82,6 @@ class RuntimePaths:
         return self.sd_scripts_dir / "anima_train_network.py"
 
     @property
-    def inference_script(self) -> Path:
-        return self.sd_scripts_dir / "anima_minimal_inference.py"
-
-    @property
     def accelerate_config(self) -> Path:
         return ACCELERATE_CONFIG
 
