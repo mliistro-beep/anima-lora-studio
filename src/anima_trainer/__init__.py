@@ -1,3 +1,3 @@
 """Desktop LoRA trainer for the Anima diffusion model."""
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"

@@ -1,11 +1,12 @@
-# Anima LoRA Trainer (desktop)
+# Anima LoRA Studio
 
-Desktop (PySide6) version of Citron's Anima LoRA Trainer UI, with the same settings and
-identical TOML configs. It does not need Citron: it keeps its own training runtime (venv,
-sd-scripts, models) in its data folder, can use model files you already have (accepted
-after a SHA-256 check), shows epoch previews during training and has a simple image generator
-to try or compare the checkpoints.
+LoRA trainer for the Anima image model: a desktop (PySide6) version of Citron's Anima LoRA
+Trainer UI, with the same settings and identical TOML configs. It does not need Citron: it
+keeps its own training runtime (venv, sd-scripts, models) in its data folder, can use model
+files you already have (accepted after a SHA-256 check), shows epoch previews during training
+and has a simple image generator to try or compare the checkpoints.
 
+Version 0.2.0, Linux. Changes per version: [CHANGELOG.md](CHANGELOG.md).
 Status and the per-component checklist: [DOCS/milestones.md](DOCS/milestones.md).
 Contributor setup: [DOCS/CONTRIBUTING.md](DOCS/CONTRIBUTING.md).
 Operations and troubleshooting: [DOCS/RUNBOOK.md](DOCS/RUNBOOK.md).
@@ -23,6 +24,30 @@ Architecture codemaps: [DOCS/CODEMAPS/](DOCS/CODEMAPS/architecture.md).
   freeze the whole computer until a hard reset. Setup steps:
   [DOCS/SYSTEM_SETUP.md](DOCS/SYSTEM_SETUP.md).
 
+## Install
+
+Check the requirements above first, in particular the swap and the out-of-memory daemon
+([DOCS/SYSTEM_SETUP.md](DOCS/SYSTEM_SETUP.md)). On Debian/Ubuntu the system packages are
+`sudo apt install python3 python3-venv git`.
+
+```bash
+git clone https://github.com/mliistro-beep/anima-lora-studio.git
+cd anima-lora-studio
+./run_linux.sh                    # first start: creates .venv and installs the app (needs the network)
+./run_linux.sh --install-desktop  # optional: add Anima LoRA Studio to the applications menu
+```
+
+Then, in the app's Settings tab, press **Install** to set up the training runtime (torch and
+sd-scripts, several GB) and download the models, or point it to model files you already have
+with **Use file...**. The app keeps all of it in its data folder,
+`~/.local/share/anima-trainer`.
+
+Later starts reinstall only when `pyproject.toml` changed (for example after `git pull`).
+Do the first start from a terminal or with `--install-desktop`: from the menu it shows only a
+notification while it installs, and its output is in `~/.local/state/anima-trainer/launcher.log`.
+`./run_linux.sh --uninstall-desktop` removes the menu entry. More in
+[DOCS/RUNBOOK.md](DOCS/RUNBOOK.md).
+
 ## Development
 
 ```bash
@@ -32,11 +57,14 @@ scripts/dev-run.sh --scratch          # same, with data folder and settings in ~
 QT_QPA_PLATFORM=offscreen .venv/bin/pytest
 ```
 
-`scripts/dev-run.sh` is for development only; the release launcher is planned in M6.
+`scripts/dev-run.sh` is for development only; users start the app with `./run_linux.sh`.
+To try a development build with `./run_linux.sh`, point `XDG_DATA_HOME` and `XDG_CONFIG_HOME`
+at scratch folders first, or it uses your real data folder.
 
 <!-- AUTO-GENERATED: commands (source: pyproject.toml, scripts/) -->
 | Command | Description |
 |---------|-------------|
+| `./run_linux.sh` | Start the app, creating or updating `.venv` when needed; `--install-desktop` / `--uninstall-desktop` add or remove the menu entry |
 | `.venv/bin/anima-trainer` | Start the desktop app (`anima_trainer.main:main`) |
 | `scripts/dev-run.sh` | Development only: start the app from the checkout (`--setup` creates `.venv`, `--scratch [DIR]` uses scratch XDG folders, default `~/anima-dev-scratch`) |
 | `.venv/bin/pytest` | Run all tests (`tests/`), markers `integration`, `e2e` and `runtime` available (`runtime` tests are skipped unless `ANIMA_TRAINER_TEST_RUNTIME` is set) |

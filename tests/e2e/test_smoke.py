@@ -18,7 +18,7 @@ def test_main_window_opens_with_app_title(qtbot, tmp_path):
     window.show()
 
     assert window.isVisible()
-    assert window.windowTitle() == APP_NAME
+    assert window.windowTitle() == APP_NAME == "Anima LoRA Studio"
     assert window.session.paths.root == tmp_path / "data"
     assert window.close()
 

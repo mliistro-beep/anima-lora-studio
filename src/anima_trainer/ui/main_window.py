@@ -49,7 +49,7 @@ from anima_trainer.workflow.install_session import InstallSession
 from anima_trainer.workflow.link_session import LinkSession
 from anima_trainer.workflow.training_session import SessionState, TrainingSession
 
-APP_NAME = "Anima LoRA Trainer"
+APP_NAME = "Anima LoRA Studio"
 DEFAULT_SIZE = (1200, 800)
 QUIT_QUESTION = (
     "Training, image generation, a model download, a model file check or the install is "
