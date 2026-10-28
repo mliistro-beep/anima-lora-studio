@@ -1,4 +1,4 @@
-<!-- Generated: 2026-10-26 | Files scanned: 129 (62 src, 67 tests) | Token estimate: ~330 -->
+<!-- Generated: 2026-10-28 | Files scanned: 189 (93 src, 96 tests) | Token estimate: ~330 -->
 # Data
 
 No database. All state is files inside the app's data folder (<data>, default
@@ -18,7 +18,11 @@ key: path, size, mtime_ns).
 | Install state | <data>/.install/{venv,sd-scripts,requirements,verified}.commit | runtime/installer.py | one-line stamp: "ready" (venv), pinned commit, commit + "+torchvision" (requirements) |
 | Install log | <data>/logs/install_<ts>.log | workflow/install_session.py | step titles and output |
 | Checkpoints | <output_dir>/<proj>-NNNNNN.safetensors, <proj>.safetensors | sd-scripts | read by log_parser (CheckpointSaved) |
-| Samples (M5) | <output_dir>/sample/*.png | sd-scripts | planned gallery source |
+| Preview prompts | <data>/configs/<proj>_samples_<ts>.json | toml_builder.write_configs | JSON list for sd-scripts, only with previews on |
+| Preview settings | <data>/preview.json | preview/settings.py save_preview_settings | JSON (PreviewSettings) |
+| Generator settings | <data>/generator.json | preview/generator_settings.py | JSON (GeneratorSettings) |
+| Samples | <output_dir>/sample/<proj>_eNNNNNN_PP_<YYYYmmddHHMMSS>[_seed].png | sd-scripts (train_with_previews.py) | PNG, gallery source (sample_files.py) |
+| Generated images | <output_dir>/generated/<proj>_<label>_<time>_<seed>[_N].png | runtime_scripts/generate.py | PNG, never overwritten |
 
 <ts> = %Y-%m-%d_%H%M%S (toml_builder.FILE_TIMESTAMP_FORMAT)
 

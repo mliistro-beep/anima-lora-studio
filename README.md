@@ -3,7 +3,8 @@
 Desktop (PySide6) version of Citron's Anima LoRA Trainer UI, with the same settings and
 identical TOML configs. It does not need Citron: it keeps its own training runtime (venv,
 sd-scripts, models) in its data folder, can use model files you already have (accepted
-after a SHA-256 check), and will add epoch previews and a simple image generator.
+after a SHA-256 check), shows epoch previews during training and has a simple image generator
+to try or compare the checkpoints.
 
 Status and the per-component checklist: [DOCS/milestones.md](DOCS/milestones.md).
 Contributor setup: [DOCS/CONTRIBUTING.md](DOCS/CONTRIBUTING.md).
@@ -38,7 +39,7 @@ QT_QPA_PLATFORM=offscreen .venv/bin/pytest
 |---------|-------------|
 | `.venv/bin/anima-trainer` | Start the desktop app (`anima_trainer.main:main`) |
 | `scripts/dev-run.sh` | Development only: start the app from the checkout (`--setup` creates `.venv`, `--scratch [DIR]` uses scratch XDG folders, default `~/anima-dev-scratch`) |
-| `.venv/bin/pytest` | Run all tests (`tests/`), markers `integration` and `e2e` available |
+| `.venv/bin/pytest` | Run all tests (`tests/`), markers `integration`, `e2e` and `runtime` available (`runtime` tests are skipped unless `ANIMA_TRAINER_TEST_RUNTIME` is set) |
 | `.venv/bin/pytest --cov` | Run tests with coverage; fails under 80% (UI and `main.py` excluded) |
 | `.venv/bin/ruff check src tests` | Lint (rules E, F, W, I, B, UP, SIM, T20; line length 100) |
 | `.venv/bin/ruff format src tests` | Format the code |

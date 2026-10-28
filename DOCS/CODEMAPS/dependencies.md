@@ -1,4 +1,4 @@
-<!-- Generated: 2026-10-26 | Files scanned: 129 (62 src, 67 tests) | Token estimate: ~280 -->
+<!-- Generated: 2026-10-28 | Files scanned: 189 (93 src, 96 tests) | Token estimate: ~280 -->
 # Dependencies
 
 ## Runtime (pyproject.toml)
@@ -14,7 +14,8 @@ Training runtime in the data folder (<data>): .venv (torch, accelerate), sd-scri
   (installed by the Settings tab: venv, pinned sd-scripts commit, its requirements + torchvision;
   Citron is never used)
   accelerate launch ... sd-scripts/anima_train_network.py      training
-  sd-scripts/anima_minimal_inference.py                        inference (M5)
+  runtime_scripts/train_with_previews.py (app's, in place of the training script)  training with previews
+  runtime_scripts/generate.py (app's, imports sd-scripts' anima_minimal_inference) generator
   .venv/bin/python -c "import torch..."                        GPU list
 git                                                            fetches sd-scripts (installer)
 nvidia-smi                                                     GPU list fallback

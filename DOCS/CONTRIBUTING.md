@@ -35,7 +35,7 @@ real app without touching your own settings, start it with `XDG_CONFIG_HOME` and
 |---------|-------------|
 | `.venv/bin/anima-trainer` | Start the desktop app (`anima_trainer.main:main`) |
 | `scripts/dev-run.sh` | Development only: start the app from the checkout (`--setup` creates `.venv`, `--scratch [DIR]` uses scratch XDG folders, default `~/anima-dev-scratch`) |
-| `.venv/bin/pytest` | Run all tests (`tests/`), markers `integration` and `e2e` available |
+| `.venv/bin/pytest` | Run all tests (`tests/`), markers `integration`, `e2e` and `runtime` available (`runtime` tests are skipped unless `ANIMA_TRAINER_TEST_RUNTIME` is set) |
 | `.venv/bin/pytest --cov` | Run tests with coverage; fails under 80% (UI and `main.py` excluded) |
 | `.venv/bin/ruff check src tests` | Lint (rules E, F, W, I, B, UP, SIM, T20; line length 100) |
 | `.venv/bin/ruff format src tests` | Format the code |
@@ -48,16 +48,19 @@ real app without touching your own settings, start it with `XDG_CONFIG_HOME` and
 ## Environment variables
 
 The app reads no environment variables of its own; Qt reads the XDG ones for it. It sets
-the others for the processes it launches (training and install steps), and tests use one
-for Qt:
+the others for the processes it launches (training, generator and install steps), and tests
+use two:
 
 | Variable | Set by | Value | Purpose |
 |----------|--------|-------|---------|
-| `CUDA_VISIBLE_DEVICES` | `training/command_builder.py` | selected GPU index | Same as Citron: limits the training to the chosen GPU |
-| `PYTHONUNBUFFERED` | `training/command_builder.py`, `runtime/installer.py` | `1` | Streams sd-scripts, pip and GPU check output line by line |
+| `CUDA_VISIBLE_DEVICES` | `training/command_builder.py`, `preview/inference_command.py` | selected GPU index | Same as Citron: limits the training and the generator to the chosen GPU |
+| `PYTHONUNBUFFERED` | `training/command_builder.py`, `preview/inference_command.py`, `runtime/installer.py` | `1` | Streams sd-scripts, generator, pip and GPU check output line by line |
+| `ANIMA_TRAINER_SD_SCRIPTS` | `training/command_builder.py` (with previews), `preview/inference_command.py` | the data folder's `sd-scripts` | Tells `train_with_previews.py` and `generate.py` where sd-scripts is |
+| `PYTORCH_CUDA_ALLOC_CONF` | `preview/inference_command.py` | `expandable_segments:True` | Less GPU memory held between the generator's text encoder, DiT and VAE phases |
 | `XDG_DATA_HOME` | you (optional) | a folder | Read by Qt (`QStandardPaths`): parent of the default data folder `anima-trainer` |
 | `XDG_CONFIG_HOME` | you (optional) | a folder | Read by Qt (`QSettings`): where the app keeps its settings (the chosen data folder, the linked model files) |
 | `QT_QPA_PLATFORM` | you, when running tests | `offscreen` | Lets Qt tests run without a display |
+| `ANIMA_TRAINER_TEST_RUNTIME` | you, when running tests (optional) | an installed data folder, e.g. `~/anima-dev-scratch/share/anima-trainer` | Enables the `runtime` tests (`tests/runtime_scripts/`), which need torch; skipped otherwise |
 <!-- /AUTO-GENERATED -->
 
 ## Tests

@@ -3,10 +3,11 @@
 Operating the Anima LoRA Trainer desktop app on a workstation. It is a local desktop
 app, not a service: there are no servers, health endpoints or alerting.
 
-Current state: M0-M4c are done. M0-M4b were each verified with a real training run: the
+Current state: M0-M5 are done. M0-M4b were each verified with a real training run: the
 training UI with Citron parity, the app's own training runtime installed from the Settings
 tab, and model files already on disk used after a SHA-256 check. M4c added the License and
-Credits buttons. Previews and the image generator (M5) are not built yet. See [milestones.md](milestones.md).
+Credits buttons. M5 added previews during training (Previews tab) and the image generator
+(Generator tab), verified from the real UI with a training running. See [milestones.md](milestones.md).
 
 ## Install and launch
 
