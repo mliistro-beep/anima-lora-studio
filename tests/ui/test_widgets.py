@@ -1,8 +1,11 @@
+import os
 from pathlib import Path
 
+from PySide6.QtGui import QColor, QImage
 from PySide6.QtWidgets import QApplication, QFileDialog
 
 from anima_trainer.training.progress import ProgressState
+from anima_trainer.ui.widgets.image_grid import ImageGrid
 from anima_trainer.ui.widgets.log_view import LogView
 from anima_trainer.ui.widgets.path_picker import PathPicker
 from anima_trainer.ui.widgets.progress_panel import ProgressPanel
@@ -156,3 +159,22 @@ def test_progress_panel_download_with_unknown_size(qtbot):
 
     assert panel.bar.maximum() == 0  # busy indicator
     assert panel.epoch_label.text() == "Downloading model: 0.50 GB"
+
+
+def test_image_grid_loads_again_a_thumbnail_that_was_half_written(qtbot, tmp_path):
+    # A failed load must not be cached: the same path and mtime may hold the full file later.
+    grid = ImageGrid()
+    qtbot.addWidget(grid)
+    path = tmp_path / "sample.png"
+    path.write_bytes(b"\x89PNG half")
+    stamp = path.stat().st_mtime_ns
+    grid.set_grid(("Epoch 1",), ("Prompt 1",), {(0, 0): path})
+    assert grid.item(0, 0).icon().isNull()
+
+    image = QImage(8, 8, QImage.Format.Format_RGB32)
+    image.fill(QColor("red"))
+    assert image.save(str(path))
+    os.utime(path, ns=(stamp, stamp))
+    grid.set_grid(("Epoch 1",), ("Prompt 1",), {(0, 0): path})
+
+    assert not grid.item(0, 0).icon().isNull()

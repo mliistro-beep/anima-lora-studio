@@ -27,11 +27,12 @@ class SampleWatcher(QObject):
         self._project = ""
         self._since: datetime | None = None
         self._last: tuple[SampleImage, ...] = ()
+        self._last_stamps: tuple[tuple[int, int], ...] = ()
 
     def watch(self, output_dir: Path, project: str, since: datetime | None) -> None:
         """Follow the previews of `project` newer than `since`; reports the current ones first."""
         self._folder, self._project, self._since = output_dir / SAMPLE_DIR, project, since
-        self._last = ()
+        self._last, self._last_stamps = (), ()
         self._timer.start()
         self._poll()
 
@@ -50,6 +51,17 @@ class SampleWatcher(QObject):
         if self._folder is None:
             return
         samples = scan_samples(self._folder, self._project, self._since)
-        if samples != self._last:
-            self._last = samples
+        stamps = tuple(_file_stamp(sample.path) for sample in samples)
+        # The stamps catch a preview seen half written: sd-scripts saves the PNG in place.
+        if samples != self._last or stamps != self._last_stamps:
+            self._last, self._last_stamps = samples, stamps
             self.samples_changed.emit(samples)
+
+
+def _file_stamp(path: Path) -> tuple[int, int]:
+    """Size and modification time; (-1, -1) when the file is gone."""
+    try:
+        status = path.stat()
+    except OSError:
+        return -1, -1
+    return status.st_size, status.st_mtime_ns

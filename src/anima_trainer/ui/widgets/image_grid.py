@@ -63,6 +63,10 @@ class ImageGrid(QTableWidget):
         cached = self._thumbnails.get(key)
         if cached is None:
             pixmap = QPixmap(str(path))
+            if pixmap.isNull():
+                # Half written (sd-scripts saves in place) or unreadable: not cached, so the
+                # next set_grid tries again.
+                return QIcon()
             scaled = pixmap.scaled(
                 self._side,
                 self._side,
