@@ -1,7 +1,7 @@
-<!-- Generated: 2026-10-28 | Files scanned: 189 (93 src, 96 tests) | Token estimate: ~600 -->
+<!-- Generated: 2026-10-28 | Files scanned: 199 (95 src, 104 tests) | Token estimate: ~600 -->
 # Architecture
 
-Single desktop app (PySide6, src layout). The GUI venv runs Qt + logic; training and
+Single desktop app, Anima LoRA Studio (PySide6, src layout; package anima_trainer, version 0.2.0). The GUI venv runs Qt + logic; training and
 inference run as subprocesses in a separate training venv inside the app's data folder
 (same layout as a Citron install, but owned by the app; Citron is never used).
 Status: M0-M4b done (UI with Citron parity; own runtime installed from the Settings tab;
@@ -9,9 +9,14 @@ existing model files linked after a SHA-256 check; each verified with a real run
 M4c: License and Credits dialogs, dev launcher scripts/dev-run.sh.
 M5: previews during training and the image generator (memory profiles from free VRAM and RAM),
 verified from the real UI on 2026-10-28.
+M6 (release 0.2.0): run_linux.sh launcher and menu entry, app icon, swap / OOM daemon warning.
 
 ## Entry point
-src/anima_trainer/main.py  main() -> int; create_window(store, detect) -> MainWindow
+run_linux.sh  finds Python >= 3.12, creates <checkout>/.venv, pip install -e . when the stamp
+              (sha256 of pyproject.toml + checkout path) changed, exec .venv/bin/anima-trainer;
+              --install-desktop / --uninstall-desktop: anima-lora-studio.desktop + hicolor SVG icon
+src/anima_trainer/main.py  main() -> int (window icon, setDesktopFileName("anima-lora-studio"));
+                           create_window(store, detect) -> MainWindow
 console script: anima-trainer = anima_trainer.main:main
 
 ## Layers (feature packages)
@@ -23,7 +28,8 @@ models/    catalog (URLs, expected size + SHA-256), model status, downloader and
            (+ background workers), linked model files (QSettings group linked_models)
 training/  TOML builder, configure/start services, accelerate command, QProcess runner, log parser,
            progress state, outcome report, OOM hint
-system/    GPU detection (+ QThread worker), dropdown parsing, process groups, BackgroundTask
+system/    GPU detection (+ QThread worker), GPU memory, dropdown parsing, process groups,
+           BackgroundTask, memory safety (swap and OOM daemon from /proc)
 workflow/  TrainingSession: Configure / model download / Start / Stop state machine;
            GeneratorSession: queue of generate.py runs (Generate, Compare epochs), Stop;
            InstallSession: plan, run and log the runtime install;
@@ -31,7 +37,7 @@ workflow/  TrainingSession: Configure / model download / Start / Stop state mach
 about/     license notice (GPL-3.0-or-later, app version), credits (author, Citron, models, software),
            rich text for the License and Credits dialogs
 ui/        MainWindow, tabs (training, advanced, previews, generator, settings), PreviewController,
-           widgets, dialogs (License / Credits, image viewer)
+           widgets, dialogs (License / Credits, image viewer), app_icon (assets/anima-lora-studio.svg)
 preview/   preview and generator settings (preview.json, generator.json), sample prompts JSON,
            preview plan (size from total VRAM), VRAM/RAM profiles, generate.py command,
            checkpoints, sample files and SampleWatcher (polls sample/, size + mtime), gallery layout

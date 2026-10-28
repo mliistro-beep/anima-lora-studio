@@ -1,6 +1,6 @@
 # Contributing
 
-How to set up, test and submit changes for the Anima LoRA Trainer desktop app.
+How to set up, test and submit changes for the Anima LoRA Studio desktop app.
 Project rules come from [CLAUDE.md](../CLAUDE.md); progress is tracked in
 [milestones.md](milestones.md).
 
@@ -20,7 +20,10 @@ python3 -m venv .venv
 ```
 
 or `scripts/dev-run.sh --setup`, which does the same when `.venv` is missing and then starts
-the app. The script is for development only (a release launcher comes with M6).
+the app. The script is for development only: users start the app with `./run_linux.sh`
+(see [RUNBOOK.md](RUNBOOK.md)), which installs without the dev tools and reuses this `.venv`
+as it is. Do not try a development build with `./run_linux.sh` unless the XDG folders point
+at scratch folders: it would use your real data folder.
 
 The app's venv holds only the GUI and dev tools. Training runs in the training venv of
 the data folder (torch, accelerate, sd-scripts), started as a separate process. To try the
@@ -34,6 +37,7 @@ real app without touching your own settings, start it with `XDG_CONFIG_HOME` and
 | Command | Description |
 |---------|-------------|
 | `.venv/bin/anima-trainer` | Start the desktop app (`anima_trainer.main:main`) |
+| `./run_linux.sh` | Release launcher: creates or updates `.venv` when needed and starts the app; `--install-desktop` / `--uninstall-desktop` add or remove the menu entry |
 | `scripts/dev-run.sh` | Development only: start the app from the checkout (`--setup` creates `.venv`, `--scratch [DIR]` uses scratch XDG folders, default `~/anima-dev-scratch`) |
 | `.venv/bin/pytest` | Run all tests (`tests/`), markers `integration`, `e2e` and `runtime` available (`runtime` tests are skipped unless `ANIMA_TRAINER_TEST_RUNTIME` is set) |
 | `.venv/bin/pytest --cov` | Run tests with coverage; fails under 80% (UI and `main.py` excluded) |
@@ -59,6 +63,7 @@ use two:
 | `PYTORCH_CUDA_ALLOC_CONF` | `preview/inference_command.py` | `expandable_segments:True` | Less GPU memory held between the generator's text encoder, DiT and VAE phases |
 | `XDG_DATA_HOME` | you (optional) | a folder | Read by Qt (`QStandardPaths`): parent of the default data folder `anima-trainer` |
 | `XDG_CONFIG_HOME` | you (optional) | a folder | Read by Qt (`QSettings`): where the app keeps its settings (the chosen data folder, the linked model files) |
+| `XDG_STATE_HOME` | you (optional) | a folder | Read by `run_linux.sh`: parent of `anima-trainer/launcher.log` (default `~/.local/state`) |
 | `QT_QPA_PLATFORM` | you, when running tests | `offscreen` | Lets Qt tests run without a display |
 | `ANIMA_TRAINER_TEST_RUNTIME` | you, when running tests (optional) | an installed data folder, e.g. `~/anima-dev-scratch/share/anima-trainer` | Enables the `runtime` tests (`tests/runtime_scripts/`), which need torch; skipped otherwise |
 <!-- /AUTO-GENERATED -->
@@ -76,7 +81,11 @@ use two:
   byte for byte with real Citron files in `tests/fixtures/citron/`. If Citron's output
   format changes, refresh those fixtures from a real Citron run, not by hand.
 - `tests/fixtures/fake_accelerate.py` stands in for `accelerate launch` (replay a log,
-  exit codes, crash, process groups). Extend it rather than spawning real training.
+  exit codes, crash, process groups, and `train`: a run that writes checkpoints and preview
+  PNGs from the real training TOML). Extend it rather than spawning real training.
+- `tests/integration/launcher/` runs `run_linux.sh` copied into a temporary checkout, with
+  a fake `python3` and a `PATH` that holds only the fakes and a few system tools, so it never
+  touches the real `.venv`, Python, pip or menu entries.
 - Tests that wait on Qt signals must not rely on timing: throttle the fake server
   (`block_delay_s`) instead of hoping a race goes your way, and make sure every thread
   or process a test starts has stopped before it ends.

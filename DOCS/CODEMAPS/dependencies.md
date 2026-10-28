@@ -1,4 +1,4 @@
-<!-- Generated: 2026-10-28 | Files scanned: 189 (93 src, 96 tests) | Token estimate: ~280 -->
+<!-- Generated: 2026-10-28 | Files scanned: 199 (95 src, 104 tests) | Token estimate: ~330 -->
 # Dependencies
 
 ## Runtime (pyproject.toml)
@@ -8,6 +8,11 @@ toml>=0.10.2                   TOML writer, same lib as Citron for identical out
 
 ## Dev
 pytest, pytest-qt, pytest-cov, ruff, mypy (+pydantic plugin), types-toml, bandit, pip-audit
+
+## Launcher (run_linux.sh, bash)
+python3 (>= 3.12, or python3.14/3.13/3.12) -m venv, pip   app venv in the checkout
+sha256sum, readlink, flock (optional), tee                 install stamp, symlinks, one install at a time, log
+desktop-file-validate, notify-send (both optional)         menu entry check, notifications without a terminal
 
 ## External, used through subprocesses (not imported)
 Training runtime in the data folder (<data>): .venv (torch, accelerate), sd-scripts

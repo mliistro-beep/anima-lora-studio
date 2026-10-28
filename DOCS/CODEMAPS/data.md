@@ -1,4 +1,4 @@
-<!-- Generated: 2026-10-28 | Files scanned: 189 (93 src, 96 tests) | Token estimate: ~330 -->
+<!-- Generated: 2026-10-28 | Files scanned: 199 (95 src, 104 tests) | Token estimate: ~330 -->
 # Data
 
 No database. All state is files inside the app's data folder (<data>, default
@@ -23,6 +23,9 @@ key: path, size, mtime_ns).
 | Generator settings | <data>/generator.json | preview/generator_settings.py | JSON (GeneratorSettings) |
 | Samples | <output_dir>/sample/<proj>_eNNNNNN_PP_<YYYYmmddHHMMSS>[_seed].png | sd-scripts (train_with_previews.py) | PNG, gallery source (sample_files.py) |
 | Generated images | <output_dir>/generated/<proj>_<label>_<time>_<seed>[_N].png | runtime_scripts/generate.py | PNG, never overwritten |
+| App venv stamp | <checkout>/.venv/.anima-pyproject.sha256 | run_linux.sh | "<sha256 of pyproject.toml> <checkout path>" |
+| Launcher log | ~/.local/state/anima-trainer/launcher.log | run_linux.sh (no terminal only) | launcher lines, appended |
+| Menu entry, icon | ~/.local/share/applications/anima-lora-studio.desktop, icons/hicolor/scalable/apps/anima-lora-studio.svg | run_linux.sh --install-desktop | Desktop Entry 1.5, SVG |
 
 <ts> = %Y-%m-%d_%H%M%S (toml_builder.FILE_TIMESTAMP_FORMAT)
 

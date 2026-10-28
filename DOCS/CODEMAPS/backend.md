@@ -1,4 +1,4 @@
-<!-- Generated: 2026-10-26 | Files scanned: 129 (62 src, 67 tests) | Token estimate: ~700 -->
+<!-- Generated: 2026-10-28 | Files scanned: 199 (95 src, 104 tests) | Token estimate: ~720 -->
 # Backend (core and services)
 
 No HTTP API: "backend" = non-UI modules called by the Qt UI. Public surface only.
@@ -66,6 +66,9 @@ oom_hint.py          oom_hint(exit_code, log_tail, kernel_log, crashed) -> str|N
 gpu_info.py   detect_gpus(paths, run) -> tuple[str] (training venv torch -> nvidia-smi -> ("0","1"))
 gpu_worker.py GpuDetector(detect): start(paths)/shutdown; signals detected(choices), warning
 gpu_choice.py gpu_index_from_choice(label) -> "N"; choice_for_index(choices, saved)
+gpu_memory.py read_all_gpu_memory(run) -> tuple[GpuMemory] (nvidia-smi), memory_of(gpus, index)
+memory_safety.py memory_safety_lines(meminfo, processes, platform) -> OK/WARN lines (swap < 8 GB,
+                 no earlyoom / systemd-oomd), warnings_only(lines), read_memory_safety(proc=/proc)
 process_group.py use_own_session(process), terminate_group(process), kill_group(process),
                  KILL_GRACE_MS, SHUTDOWN_KILL_WAIT_MS (runner + installer)
 process_output.py split_lines(pending, data) -> (lines, rest)
@@ -83,4 +86,4 @@ link_session.py    LinkSession(store, checker, expected): check(key, path) -> pr
                    cancel, shutdown, is_running; signals progress, finished(linked, message)
 
 ## Largest files
-ui/main_window.py 316 | workflow/training_session.py 242 | ui/tabs/settings_tab.py 238 | runtime/install_plan.py 226
+ui/main_window.py 414 | workflow/training_session.py 276 | ui/tabs/settings_tab.py 247 | runtime/install_plan.py 226

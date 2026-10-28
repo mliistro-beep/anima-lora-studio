@@ -1,13 +1,16 @@
 # Runbook
 
-Operating the Anima LoRA Trainer desktop app on a workstation. It is a local desktop
+Operating the Anima LoRA Studio desktop app on a workstation. It is a local desktop
 app, not a service: there are no servers, health endpoints or alerting.
 
 Current state: M0-M5 are done. M0-M4b were each verified with a real training run: the
 training UI with Citron parity, the app's own training runtime installed from the Settings
 tab, and model files already on disk used after a SHA-256 check. M4c added the License and
 Credits buttons. M5 added previews during training (Previews tab) and the image generator
-(Generator tab), verified from the real UI with a training running. See [milestones.md](milestones.md).
+(Generator tab), verified from the real UI with a training running. M6 (release 0.2.0) adds
+the `run_linux.sh` launcher with the applications menu entry, the swap / out-of-memory daemon
+warning and the new display name. See [milestones.md](milestones.md) and
+[CHANGELOG.md](../CHANGELOG.md).
 
 ## Install and launch
 
@@ -15,15 +18,28 @@ Credits buttons. M5 added previews during training (Previews tab) and the image 
    ([SYSTEM_SETUP.md](SYSTEM_SETUP.md)): 8-16 GB of swap and earlyoom (or systemd-oomd).
    Without them, running out of RAM freezes the whole computer instead of stopping the
    training.
-1. Install the app:
+1. Get the app and start it (Python 3.12 or newer with `venv`; on Debian/Ubuntu
+   `sudo apt install python3 python3-venv git`):
 
    ```bash
-   python3 -m venv .venv
-   .venv/bin/pip install -e .
+   git clone https://github.com/mliistro-beep/anima-lora-studio.git
+   cd anima-lora-studio
+   ./run_linux.sh                    # first start: creates .venv and installs the app (network)
+   ./run_linux.sh --install-desktop  # optional: add Anima LoRA Studio to the applications menu
    ```
 
-2. Start it with `.venv/bin/anima-trainer` (from a checkout, for development:
-   `scripts/dev-run.sh`, or `scripts/dev-run.sh --scratch` to keep your own settings untouched).
+   Later starts reinstall only when `pyproject.toml` changed (for example after `git pull`)
+   or the checkout was moved; otherwise they start the app right away. Run the first start
+   from a terminal, or use `--install-desktop` first: started from the menu, the install
+   has no window, only a notification. `./run_linux.sh --uninstall-desktop` removes the menu
+   entry and its icon.
+
+   For development use `scripts/dev-run.sh` (dev tools, `--scratch`). Trying a development
+   build with `./run_linux.sh` uses your real data folder and settings: point
+   `XDG_DATA_HOME` and `XDG_CONFIG_HOME` at scratch folders first (or use
+   `scripts/dev-run.sh --scratch`), so a stable install such as v0.1.0 is not touched.
+2. On the first start the Training tab may show a `WARN:` about the swap or the
+   out-of-memory daemon (the Settings tab shows both checks): see step 0.
 3. In the Settings tab, choose the data folder (or keep the default) and press Install.
    It needs Python 3.10+ with `venv` (on Debian/Ubuntu `python3-venv`), git and an
    internet connection; torch and the sd-scripts requirements are several GB. The steps
@@ -62,12 +78,36 @@ in `~/.config/anima-trainer/anima-trainer.conf`.
 | Partial downloads | same path with a `.part` suffix |
 | Install state | `<data>/.install/*.commit` (one marker per install step) |
 | Install logs | `<data>/logs/install_<timestamp>.log` |
+| Launcher log (started without a terminal) | `~/.local/state/anima-trainer/launcher.log` |
+| App venv (`run_linux.sh`) | `<checkout>/.venv`, install stamp `.venv/.anima-pyproject.sha256` |
+| Menu entry and icon | `~/.local/share/applications/anima-lora-studio.desktop`, `~/.local/share/icons/hicolor/scalable/apps/anima-lora-studio.svg` |
 | Checkpoints | the output directory set in the settings |
 
 Relative image and output folders are resolved against the data folder, because
 sd-scripts runs with that as its working directory.
 
 ## Common issues
+
+**Nothing happens when Anima LoRA Studio is started from the menu.** The first start (or
+the first after a `git pull` that changed `pyproject.toml`) installs the app before the
+window opens; a notification says so. Errors also arrive as a notification when
+`notify-send` is installed. Either way the launcher's output is in
+`~/.local/state/anima-trainer/launcher.log`; or run `./run_linux.sh` from a terminal.
+
+**"Python 3.12 or newer is needed".** `run_linux.sh` looks for `python3`, `python3.14`,
+`python3.13` and `python3.12`. Install a newer Python with the package manager.
+
+**"Could not create .venv with pip" or ".venv has no working Python or pip".** The first
+needs `python3-venv` (Debian/Ubuntu); the second usually means the system Python was
+upgraded under the venv. Remove `<checkout>/.venv` and start `./run_linux.sh` again.
+
+**"WARN: Updating the app failed ... starting the installed version".** The reinstall after
+a `pyproject.toml` change failed (often no network); the previous install is started and
+the update is retried at the next start.
+
+**"WARN: Swap is ..." or "WARN: No out-of-memory daemon ...".** Shown at start and after
+Apply in the data folder; the app still works, but running out of RAM can freeze the
+computer. Set up swap and earlyoom as in [SYSTEM_SETUP.md](SYSTEM_SETUP.md).
 
 **"Missing models: Qwen3, VAE" when configuring.** The text encoder or VAE is not in
 `<data>/models/anima/`. Download it with its button in the Settings tab (only the DiT is
@@ -148,7 +188,12 @@ answered (runtime not installed, driver problem). Training can still be started 
 
 ## Rollback
 
-- To go back to an earlier version of the app: `git checkout <commit>` and reinstall with
-  `.venv/bin/pip install -e .`.
+- To go back to an earlier version of the app: `git checkout <tag or commit>` and start
+  `./run_linux.sh` (it reinstalls when `pyproject.toml` differs). Versions before 0.2.0 have
+  no `run_linux.sh`: there, run `.venv/bin/pip install -e .` and `.venv/bin/anima-trainer`.
+  The data folder and the settings are shared, and 0.1.0 reads them as they are.
+- To remove the app: `./run_linux.sh --uninstall-desktop`, then delete the checkout. The
+  data folder (`~/.local/share/anima-trainer`, several GB) and
+  `~/.config/anima-trainer/` are kept until you delete them.
 - Citron's own web UI is independent of this app and keeps working. To reuse settings
   there, copy `<data>/config.json` into the Citron folder: the format is the same.
