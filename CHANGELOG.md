@@ -29,6 +29,9 @@ The release name is now Anima LoRA Studio. The package (`anima_trainer`), the co
 - A warning in the Training status and the Settings tab when the swap is under 8 GB or no
   out-of-memory daemon (earlyoom or systemd-oomd) runs, with the setup steps in
   `DOCS/SYSTEM_SETUP.md` (M6).
+- A `RESOURCES` line in the training log at the start and every minute (M6): available RAM,
+  used swap and, for each GPU, VRAM, temperature, power and load, synced to disk so that the
+  log tells what the computer was doing even after a hard reset.
 - `run_linux.sh` (M6): starts the app from the checkout, creating `.venv` and reinstalling only
   when `pyproject.toml` or the checkout path changed; `--install-desktop` / `--uninstall-desktop`
   add or remove the applications menu entry. Started from the menu, its output also goes to

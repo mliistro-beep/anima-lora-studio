@@ -1,5 +1,9 @@
 """Runs the training process with QProcess: streams lines, parsed events and a log file.
 
+With a resource monitor, a line with RAM, swap and GPU usage goes into the log file at the
+start and every minute, synced to disk so that it survives a hard reset (UI and log tail
+show only the process output).
+
 Unlike Citron, a run can be stopped. On POSIX the process gets its own session so that
 stop() reaches the whole process group: `accelerate launch` starts the real training as a
 child and does not forward SIGTERM to it.
@@ -7,13 +11,14 @@ child and does not forward SIGTERM to it.
 
 import codecs
 import contextlib
+import os
 from collections import deque
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import TextIO
+from typing import Protocol, TextIO
 
-from PySide6.QtCore import QObject, QProcess, QProcessEnvironment, QTimer, Signal
+from PySide6.QtCore import QObject, QProcess, QProcessEnvironment, QTimer, Signal, SignalInstance
 
 from anima_trainer.system.process_group import (
     KILL_GRACE_MS,
@@ -38,6 +43,15 @@ class RunOutcome:
     log_path: Path | None  # None when the log file could not be written to the end
 
 
+class ResourceSampler(Protocol):
+    """The part of ResourceMonitor the runner uses."""
+
+    line_ready: SignalInstance
+
+    def start(self) -> None: ...
+    def stop(self) -> None: ...
+
+
 def log_file_path(logs_dir: Path, project_name: str, now: datetime) -> Path:
     return logs_dir / f"{project_name}_{now.strftime(FILE_TIMESTAMP_FORMAT)}.log"
 
@@ -49,9 +63,17 @@ class TrainingRunner(QObject):
     failed_to_start = Signal(str)
     warning = Signal(str)  # problems that do not stop the run, e.g. the log file failing
 
-    def __init__(self, kill_grace_ms: int = KILL_GRACE_MS, parent: QObject | None = None) -> None:
+    def __init__(
+        self,
+        kill_grace_ms: int = KILL_GRACE_MS,
+        monitor: ResourceSampler | None = None,
+        parent: QObject | None = None,
+    ) -> None:
         super().__init__(parent)
         self._kill_grace_ms = kill_grace_ms
+        self._monitor = monitor
+        if monitor is not None:
+            monitor.line_ready.connect(self._on_resource_line)
         self._kill_timer = QTimer(self)
         self._kill_timer.setSingleShot(True)
         self._kill_timer.timeout.connect(self._force_kill)
@@ -86,6 +108,9 @@ class TrainingRunner(QObject):
         self._write_log(f"Command: {spec.display()}\nStarted: {datetime.now().isoformat()}\n\n")
         self._flush_log()
         self._process = self._create_process(spec)
+        # Before the process: a start failure reaches _cleanup(), which stops the monitor.
+        if self._monitor is not None:
+            self._monitor.start()
         self._process.start()
 
     def stop(self) -> None:
@@ -180,6 +205,26 @@ class TrainingRunner(QObject):
         except OSError as error:
             self._abandon_log(error)
 
+    def _on_resource_line(self, line: str) -> None:
+        if self._log is None:  # no run, or the log was abandoned
+            return
+        self._write_log(line + "\n")
+        self._sync_log()
+
+    def _sync_log(self) -> None:
+        """Flush and fsync: what was written survives a hard reset of the computer.
+
+        It runs on the UI thread, once a minute; on a disk busy with swap it can stall the UI
+        for a moment, which is accepted for a log that is still there after a freeze.
+        """
+        self._flush_log()
+        if self._log is None:
+            return
+        try:
+            os.fsync(self._log.fileno())
+        except OSError as error:
+            self._abandon_log(error)
+
     def _flush_log(self) -> None:
         # Once per output chunk rather than per line: tqdm produces thousands of lines.
         if self._log is None:
@@ -203,6 +248,8 @@ class TrainingRunner(QObject):
 
     def _cleanup(self) -> None:
         self._kill_timer.stop()
+        if self._monitor is not None:
+            self._monitor.stop()
         if self._log is not None:
             with contextlib.suppress(OSError):
                 self._log.close()

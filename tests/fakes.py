@@ -1,4 +1,5 @@
-"""Stand-ins for TrainingRunner, ModelDownloader and RuntimeInstaller with the same signals."""
+"""Stand-ins for TrainingRunner, ModelDownloader, RuntimeInstaller and ResourceMonitor with the
+same signals."""
 
 from collections.abc import Iterable
 from pathlib import Path
@@ -6,6 +7,21 @@ from pathlib import Path
 from PySide6.QtCore import QObject, Signal
 
 from anima_trainer.training.command_builder import LaunchSpec
+
+
+class FakeResourceMonitor(QObject):
+    line_ready = Signal(str)
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.started = 0
+        self.stopped = 0
+
+    def start(self) -> None:
+        self.started += 1
+
+    def stop(self) -> None:
+        self.stopped += 1
 
 
 class FakeRunner(QObject):

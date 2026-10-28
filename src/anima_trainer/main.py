@@ -15,6 +15,7 @@ from anima_trainer.system.gpu_info import detect_gpus
 from anima_trainer.system.gpu_memory import read_all_gpu_memory
 from anima_trainer.system.gpu_worker import Detect, GpuDetector
 from anima_trainer.system.memory_safety import read_memory_safety
+from anima_trainer.system.resource_monitor import ResourceMonitor
 from anima_trainer.training.runner import TrainingRunner
 from anima_trainer.ui.app_icon import DESKTOP_FILE_NAME, app_icon
 from anima_trainer.ui.main_window import APP_NAME, MainWindow
@@ -36,7 +37,8 @@ __all__ = ["APP_NAME", "create_window", "install_quit_signals", "main"]
 
 def create_window(store: QSettings, detect: Detect = detect_gpus) -> MainWindow:
     opened = open_data_dir(load_data_dir(store, default_data_dir()))
-    session = TrainingSession(opened.paths, opened.settings, TrainingRunner(), ModelDownloader())
+    runner = TrainingRunner(monitor=ResourceMonitor())
+    session = TrainingSession(opened.paths, opened.settings, runner, ModelDownloader())
     install = InstallSession(RuntimeInstaller())
     # The memory check reads /proc each time the data folder is shown (start and Apply); the
     # name is looked up at call time so tests can replace read_memory_safety.
