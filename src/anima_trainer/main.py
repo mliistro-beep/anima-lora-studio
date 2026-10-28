@@ -16,6 +16,7 @@ from anima_trainer.system.gpu_memory import read_all_gpu_memory
 from anima_trainer.system.gpu_worker import Detect, GpuDetector
 from anima_trainer.system.memory_safety import read_memory_safety
 from anima_trainer.training.runner import TrainingRunner
+from anima_trainer.ui.app_icon import DESKTOP_FILE_NAME, app_icon
 from anima_trainer.ui.main_window import APP_NAME, MainWindow
 from anima_trainer.workflow.install_session import InstallSession
 from anima_trainer.workflow.training_session import TrainingSession
@@ -71,6 +72,8 @@ def main() -> int:
     app.setOrganizationName(SETTINGS_ORGANIZATION)
     app.setApplicationName(SETTINGS_APPLICATION)
     app.setApplicationDisplayName(APP_NAME)
+    app.setDesktopFileName(DESKTOP_FILE_NAME)
+    app.setWindowIcon(app_icon())
     window = create_window(QSettings())
     app.aboutToQuit.connect(window.shutdown)
     install_quit_signals(app.quit)

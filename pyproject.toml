@@ -37,6 +37,10 @@ anima-trainer = "anima_trainer.main:main"
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+# The app icon (window and menu entry).
+"anima_trainer.ui" = ["assets/*.svg"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-ra --strict-markers"
