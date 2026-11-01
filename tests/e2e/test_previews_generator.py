@@ -1,5 +1,6 @@
 """The Previews and Generator tabs in the real MainWindow, with fake runners and a known GPU."""
 
+import hashlib
 import json
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -7,8 +8,10 @@ from pathlib import Path
 import pytest
 import toml
 from PySide6.QtCore import QSettings
-from PySide6.QtWidgets import QMessageBox
+from PySide6.QtWidgets import QFileDialog, QMessageBox
 
+from anima_trainer.models.catalog import VAE_FILENAME, ExpectedFile
+from anima_trainer.models.check_worker import ModelFileChecker
 from anima_trainer.preview.settings import load_preview_settings
 from anima_trainer.preview.vram_profile import IDLE_MARGIN_MIB, TRAINING_MARGIN_MIB
 from anima_trainer.runtime.data_dir import open_data_dir
@@ -21,6 +24,7 @@ from anima_trainer.ui.main_window import MainWindow
 from anima_trainer.ui.preview_controller import TRAINING_NOTE
 from anima_trainer.workflow.generator_session import GeneratorSession
 from anima_trainer.workflow.install_session import InstallSession
+from anima_trainer.workflow.link_session import LinkSession
 from anima_trainer.workflow.training_session import TrainingSession
 from tests.e2e.helpers import GPUS, INSTALL_STEPS, NOW, PROJECT, TIMEOUT_MS, make_runtime
 from tests.fakes import FakeDownloader, FakeInstaller, FakeRunner
@@ -28,6 +32,10 @@ from tests.fakes import FakeDownloader, FakeInstaller, FakeRunner
 pytestmark = pytest.mark.e2e
 GPU_MEMORY = (GpuMemory(0, 12288, 11000), GpuMemory(1, 12288, 11000))
 OK = RunOutcome(0, crashed=False, stopped=False, log_path=None)
+VAE_WEIGHTS = b"qwen image vae weights" * 50
+VAE_EXPECTED = {
+    VAE_FILENAME: ExpectedFile(hashlib.sha256(VAE_WEIGHTS).hexdigest(), len(VAE_WEIGHTS))
+}
 
 
 @pytest.fixture
@@ -46,8 +54,11 @@ def app(qtbot, tmp_path, dataset):
         FakeInstaller(), plan=lambda _paths: InstallPlan(INSTALL_STEPS, ()), clock=lambda: NOW
     )
     generator = GeneratorSession(generator_runner, clock=lambda: NOW)
+    links = LinkSession(store, ModelFileChecker(), VAE_EXPECTED)
     with qtbot.waitSignal(detector.memory_detected, timeout=TIMEOUT_MS):
-        window = MainWindow(session, detector, store, opened, install, generator=generator)
+        window = MainWindow(
+            session, detector, store, opened, install, links=links, generator=generator
+        )
     qtbot.addWidget(window)
     return window, runner, generator_runner, paths
 
@@ -183,6 +194,28 @@ def test_generator_lists_the_checkpoints_and_generates_with_the_chosen_one(app):
     assert window.training_tab.start_button.isEnabled()
     assert tab.generate_button.isEnabled()
     assert (paths.root / "out" / "generated").as_posix() in output
+
+
+def test_generator_uses_a_model_file_linked_while_the_app_is_open(app, qtbot, monkeypatch):
+    window, _, generator_runner, paths = app
+    _checkpoints(paths)
+    paths.vae_model.unlink()
+    own = _touch(paths.root.parent / "my-models" / VAE_FILENAME)
+    own.write_bytes(VAE_WEIGHTS)
+    monkeypatch.setattr(QFileDialog, "getOpenFileName", lambda *_a: (str(own), ""))
+    window.tabs.setCurrentWidget(window.settings_tab)  # the model table is re-read when shown
+    window.settings_tab.link_buttons[VAE_FILENAME].click()
+    qtbot.waitUntil(
+        lambda: not window.settings_tab.cancel_check_button.isEnabled(), timeout=TIMEOUT_MS
+    )
+    assert window.settings_tab.check_label.text().startswith("OK:")
+    window.tabs.setCurrentWidget(window.generator_tab)
+    window.generator_tab.prompt.setPlainText("a girl")
+
+    window.generator_tab.generate_button.click()
+
+    assert "Missing models" not in window.generator_tab.log.text()
+    assert _option(generator_runner.started[0][0].arguments, "--vae") == str(own)
 
 
 def test_compare_epochs_generates_one_image_per_checkpoint(app):

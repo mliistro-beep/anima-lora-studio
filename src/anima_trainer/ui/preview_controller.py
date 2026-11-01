@@ -69,6 +69,10 @@ class PreviewController(QObject):
         self._show_project()
         return (*previews.warnings, *generator.warnings)
 
+    def set_paths(self, paths: RuntimePaths) -> None:
+        """After a model file was linked or unlinked: the generator uses the new model paths."""
+        self._paths = paths
+
     def preview_settings(self) -> PreviewSettings | tuple[str, ...]:
         return self.previews_tab.settings()
 

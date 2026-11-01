@@ -359,6 +359,7 @@ class MainWindow(QMainWindow):
         self.session.set_runtime(
             self.session.paths.with_links(self._links.links()), self.session.settings
         )
+        self.previews.set_paths(self.session.paths)
         self._refresh_models()
 
     def _with_links(self, opened: OpenedRuntime) -> OpenedRuntime:
