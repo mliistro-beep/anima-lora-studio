@@ -77,3 +77,12 @@ def test_previews_run_the_preview_launcher_with_the_same_arguments():
     assert previews.arguments[script_index + 1 :] == plain.arguments[script_index + 1 :]
     assert previews.env["ANIMA_TRAINER_SD_SCRIPTS"] == str(ROOT / "sd-scripts")
     assert "ANIMA_TRAINER_SD_SCRIPTS" not in plain.env
+
+
+def test_previews_leave_no_bytecode_next_to_the_scripts():
+    previews = build_training_launch(
+        RuntimePaths(ROOT, platform="posix"), TRAIN_TOML, DATASET_TOML, "0", 1, with_previews=True
+    )
+
+    assert previews.env["PYTHONDONTWRITEBYTECODE"] == "1"
+    assert "PYTHONDONTWRITEBYTECODE" not in _launch().env  # the same environment as Citron

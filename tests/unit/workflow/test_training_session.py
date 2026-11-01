@@ -434,3 +434,27 @@ def test_unknown_gpu_memory_keeps_the_preview_size(qtbot, citron, dataset, tmp_p
     result = session.configure(_settings(dataset, tmp_path), previews)
 
     assert "GPU memory unknown, preview size 1024x1024 kept." in "\n".join(result.messages)
+
+
+def test_preview_settings_are_saved_when_configure_fails(qtbot, citron):
+    from anima_trainer.preview.settings import PreviewSettings, load_preview_settings
+
+    session = _previews_session(citron)
+    previews = PreviewSettings(enabled=True, prompts=("a girl",))
+
+    result = session.configure(TrainingSettings(image_directory=""), previews)
+
+    assert not result.success
+    assert load_preview_settings(citron.preview_settings_file).settings == previews
+
+
+def test_preview_settings_save_failure_is_reported_when_configure_fails(qtbot, citron):
+    from anima_trainer.preview.settings import PreviewSettings
+
+    citron.preview_settings_file.mkdir(parents=True)  # a folder where the file should go
+    session = _previews_session(citron)
+
+    result = session.configure(TrainingSettings(image_directory=""), PreviewSettings())
+
+    assert not result.success
+    assert result.messages[-1].startswith("WARN: Preview settings could not be saved")

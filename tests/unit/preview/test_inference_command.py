@@ -1,6 +1,9 @@
+import argparse
 import json
 from datetime import datetime
 from pathlib import Path
+
+import pytest
 
 from anima_trainer.preview.inference_command import (
     GenerationRequest,
@@ -126,3 +129,17 @@ def test_an_existing_image_is_never_overwritten(tmp_path):
     path = output_image_path(tmp_path, "p", "Final", 7, NOW)
 
     assert path == first.with_name(first.stem + "_3.png")
+
+
+@pytest.mark.parametrize("text", ["-low quality", "--steps 3", "a=b", ""])
+def test_prompts_reach_argparse_whatever_they_start_with(text):
+    parser = argparse.ArgumentParser(exit_on_error=False)
+    parser.add_argument("--prompt", required=True)
+    parser.add_argument("--negative_prompt", default="")
+    request = _request(prompt=text, negative_prompt=text)
+
+    arguments = build_generation_launch(PATHS, request, PROFILES, "0", False).arguments
+    options = [item for item in arguments if item.startswith(("--prompt=", "--negative_prompt="))]
+
+    parsed = parser.parse_args(options)
+    assert (parsed.prompt, parsed.negative_prompt) == (text, text)

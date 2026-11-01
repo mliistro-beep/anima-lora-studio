@@ -178,3 +178,26 @@ def test_other_lines_go_to_the_log_and_shutdown_reaches_the_runner(parts, paths,
         "WARN: Out of GPU memory with standard, trying block_swap.",
     ]
     assert runner.shut_down == 1
+
+
+def test_a_log_file_that_cannot_open_ends_the_generation(parts, paths, tmp_path):
+    session, runner, events = parts
+    runner.start_error = OSError("disk full")
+
+    assert session.generate(paths, (_request(tmp_path),), "0", training=False) is None
+
+    assert not session.is_running()
+    assert events["running"] == [True, False]
+    assert events["finished"] == [(False, "ERROR: Could not start generation: disk full")]
+
+
+def test_a_log_file_that_cannot_open_ends_the_rest_of_the_queue(parts, paths, tmp_path):
+    session, runner, events = parts
+    first, second = _request(tmp_path, "1.png"), _request(tmp_path, "2.png")
+    session.generate(paths, (first, second), "0", training=False)
+
+    runner.start_error = OSError("disk full")
+    _ok(runner, first.output)
+
+    assert not session.is_running()
+    assert events["finished"] == [(False, "ERROR: Could not start generation: disk full")]

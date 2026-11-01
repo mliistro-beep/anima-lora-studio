@@ -123,27 +123,20 @@ class TrainingSession(QObject):
     ) -> ConfigureResult:
         """Write the training configs; with previews on, their size is fitted to the GPU.
 
-        The preview settings are saved to preview.json after a successful Configure.
+        The preview settings are saved to preview.json also when Configure fails: the problem
+        is in the training settings, and the edits in the Previews tab must not be lost.
         """
         self._require_idle()
+        warnings = () if previews is None else self._save_previews(previews)
         plan = PreviewPlan()
         if previews is not None and previews.enabled:
             memory = memory_of(self._gpu_memory, settings.gpu_index)
             plan = plan_previews(previews, memory.total_mib if memory else None)
         result = configure_training(settings, self._paths, self._clock(), plan)
-        if not result.success:
-            return result
-        self._settings = result.settings
-        self.settings_changed.emit(result.settings)
-        if previews is None:
-            return result
-        try:
-            save_preview_settings(self._paths.preview_settings_file, previews)
-        except OSError as error:
-            file = self._paths.preview_settings_file
-            warning = f"WARN: Preview settings could not be saved to {file}: {error}"
-            return replace(result, messages=(*result.messages, warning))
-        return result
+        if result.success:
+            self._settings = result.settings
+            self.settings_changed.emit(result.settings)
+        return replace(result, messages=(*result.messages, *warnings))
 
     def start(self, request: StartRequest) -> None:
         self._require_idle()
@@ -175,6 +168,14 @@ class TrainingSession(QObject):
         self._pending = None
         self._runner.shutdown()
         self._downloader.shutdown()
+
+    def _save_previews(self, previews: PreviewSettings) -> tuple[str, ...]:
+        try:
+            save_preview_settings(self._paths.preview_settings_file, previews)
+        except OSError as error:
+            file = self._paths.preview_settings_file
+            return (f"WARN: Preview settings could not be saved to {file}: {error}",)
+        return ()
 
     def _connect(self) -> None:
         self._runner.line_received.connect(self.log_line.emit)

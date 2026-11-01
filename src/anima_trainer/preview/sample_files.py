@@ -44,7 +44,7 @@ def _parse(path: Path, pattern: re.Pattern[str]) -> SampleImage | None:
 def scan_samples(
     folder: Path, project: str, since: datetime | None = None
 ) -> tuple[SampleImage, ...]:
-    """Images of `project`, one per (epoch, prompt): the newest, and none older than `since`."""
+    """Images of `project` from its last run, none older than `since`, by epoch and prompt."""
     try:
         entries = tuple(folder.iterdir())
     except OSError:
@@ -54,9 +54,21 @@ def scan_samples(
     images = [
         image for image in parsed if image is not None and (since is None or image.created >= since)
     ]
-    # Oldest first, so a later run's image of the same slot wins.
-    newest = {
-        (image.epoch, image.prompt_index): image
-        for image in sorted(images, key=lambda item: item.created)
-    }
-    return tuple(newest[key] for key in sorted(newest))
+    return _last_run(images)
+
+
+def _last_run(images: list[SampleImage]) -> tuple[SampleImage, ...]:
+    """The newest images whose (epoch, prompt) only grow with time: a run makes them in that
+    order, so an image at or past the next one's position belongs to an earlier run.
+
+    From the images alone, so a run that failed before its first preview does not hide the last
+    good one. A run whose first preview is past where a stopped run ended (epoch 2, then every
+    5 epochs) cannot be told apart from it, and the two are shown together.
+    """
+    ordered = sorted(images, key=lambda item: (item.created, item.epoch, item.prompt_index))
+    run: list[SampleImage] = []
+    for image in reversed(ordered):
+        if run and (image.epoch, image.prompt_index) >= (run[-1].epoch, run[-1].prompt_index):
+            break
+        run.append(image)
+    return tuple(reversed(run))

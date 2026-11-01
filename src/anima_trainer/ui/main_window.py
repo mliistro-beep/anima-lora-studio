@@ -55,6 +55,7 @@ QUIT_QUESTION = (
     "Training, image generation, a model download, a model file check or the install is "
     "still running. Stop it and quit?"
 )
+PREVIEWS_NOT_SAVED = "WARN: Previews are off; these Previews tab values were not saved:"
 TRAINING_STATES = (SessionState.TRAINING, SessionState.STOPPING)
 
 
@@ -241,11 +242,19 @@ class MainWindow(QMainWindow):
         if settings is None:
             return
         previews = self.previews.preview_settings()
+        notes: tuple[str, ...] = ()
         if isinstance(previews, tuple):
-            self.training_tab.status.set_lines(("ERROR: Previews tab:", *previews))
-            return
+            if self.previews.previews_enabled():
+                self.training_tab.status.set_lines(("ERROR: Previews tab:", *previews))
+                return
+            # Off: their values are not used, so they do not block the training.
+            notes = (
+                PREVIEWS_NOT_SAVED,
+                *(f"WARN: {line.removeprefix('ERROR: ')}" for line in previews),
+            )
+            previews = self.previews.saved_settings_turned_off()
         result = self.session.configure(settings, previews)
-        self.training_tab.status.set_lines(result.messages)
+        self.training_tab.status.set_lines((*result.messages, *notes))
         if result.success:
             self.previews.previews_configured(previews)
 
@@ -262,6 +271,8 @@ class MainWindow(QMainWindow):
         self.session.start(request)
 
     def _apply_root(self, text: str) -> None:
+        if self._busy():
+            return
         if not text.strip():
             self.settings_tab.set_problems(("Choose the data folder first.",))
             return
@@ -389,7 +400,8 @@ class MainWindow(QMainWindow):
         # The generator may join a running training (lighter profile), not the other way:
         # a training started during a generation could not know how much memory is left.
         self.training_tab.set_state(state, ready=ready and not generating)
-        self.settings_tab.set_state(state, can_download=self._root_exists and not generating)
+        self.settings_tab.set_generating(generating)
+        self.settings_tab.set_state(state, can_download=self._root_exists)
         self.previews.set_ready(ready and state is not SessionState.DOWNLOADING)
         was_training = self._last_state in TRAINING_STATES
         self._last_state = state

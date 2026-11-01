@@ -60,6 +60,10 @@ class PreviewsTab(QWidget):
         except ValidationError as error:
             return describe_validation_error(error, PREVIEW_LABELS)
 
+    def previews_enabled(self) -> bool:
+        """The Enabled box alone, readable also when another field of the form is invalid."""
+        return bool(self.form.value("enabled"))
+
     def set_settings(self, settings: PreviewSettings) -> None:
         self.form.set_values(settings)
         self.prompts.setPlainText("\n".join(settings.prompts))

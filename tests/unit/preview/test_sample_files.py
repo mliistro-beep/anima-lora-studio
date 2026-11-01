@@ -44,17 +44,15 @@ def test_project_names_with_regex_characters_are_matched_literally(tmp_path):
     assert parse_sample_name(tmp_path / "aXb-c_e000001_00_20261027101500.png", "a.b-c") is None
 
 
-def test_scan_sorts_by_epoch_then_prompt_and_keeps_the_newest_duplicate(tmp_path):
+def test_scan_sorts_by_epoch_then_prompt(tmp_path):
     folder = tmp_path / "sample"
-    _touch(folder, "my_lora_e000002_00_20261027101000_42.png")
-    _touch(folder, "my_lora_e000001_01_20261027100000_42.png")
-    newest = _touch(folder, "my_lora_e000001_00_20261027110000_42.png")
+    _touch(folder, "my_lora_e000002_00_20261027102000_42.png")
+    _touch(folder, "my_lora_e000001_01_20261027101000_42.png")
     _touch(folder, "my_lora_e000001_00_20261027100000_42.png")
 
     images = scan_samples(folder, PROJECT)
 
     assert [(image.epoch, image.prompt_index) for image in images] == [(1, 0), (1, 1), (2, 0)]
-    assert images[0].path == newest
 
 
 def test_scan_keeps_only_images_of_the_current_run(tmp_path):
@@ -73,3 +71,31 @@ def test_scan_of_a_missing_folder_is_empty(tmp_path):
 
 def test_impossible_timestamp_is_ignored(tmp_path):
     assert parse_sample_name(tmp_path / "my_lora_e000001_00_20261327101500.png", PROJECT) is None
+
+
+def test_scan_without_a_start_shows_only_the_last_run(tmp_path):
+    folder = tmp_path / "sample"
+    _touch(folder, "my_lora_e000009_00_20261026090000.png")
+    _touch(folder, "my_lora_e000010_00_20261026100000.png")
+    first = _touch(folder, "my_lora_e000001_00_20261027100000.png")
+    second = _touch(folder, "my_lora_e000002_00_20261027110000.png")
+
+    images = scan_samples(folder, PROJECT)
+
+    assert [image.path for image in images] == [first, second]
+
+
+def test_a_run_stopped_after_its_first_prompt_starts_a_new_run_at_the_same_slot(tmp_path):
+    folder = tmp_path / "sample"
+    _touch(folder, "my_lora_e000001_00_20261026090000.png")
+    current = _touch(folder, "my_lora_e000001_00_20261027100000.png")
+
+    assert [image.path for image in scan_samples(folder, PROJECT)] == [current]
+
+
+def test_images_of_one_second_stay_in_one_run(tmp_path):
+    folder = tmp_path / "sample"
+    second = _touch(folder, "my_lora_e000001_01_20261027100000.png")
+    first = _touch(folder, "my_lora_e000001_00_20261027100000.png")
+
+    assert [image.path for image in scan_samples(folder, PROJECT)] == [first, second]

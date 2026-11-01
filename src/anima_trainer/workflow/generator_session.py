@@ -99,7 +99,10 @@ class GeneratorSession(QObject):
         total = self._done + len(self._queue)
         self.log_line.emit(f"INFO: Generating image {position}/{total}: {request.output.name}")
         self._image_seen = False
-        self._runner.start(spec, log_path)
+        try:
+            self._runner.start(spec, log_path)
+        except OSError as error:  # the log file could not be opened
+            self._finish(False, f"ERROR: Could not start generation: {error}")
 
     def _on_line(self, line: str) -> None:
         if not self._running:

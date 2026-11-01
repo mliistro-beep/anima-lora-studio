@@ -49,5 +49,6 @@ def build_training_launch(
     )  # fmt: skip
     env = {"CUDA_VISIBLE_DEVICES": gpu_index, "PYTHONUNBUFFERED": "1"}
     if with_previews:
-        env = {**env, SD_SCRIPTS_ENV: str(paths.sd_scripts_dir)}
+        # accelerate launch has no option for python -B; the variable reaches the child it starts.
+        env = {**env, SD_SCRIPTS_ENV: str(paths.sd_scripts_dir), "PYTHONDONTWRITEBYTECODE": "1"}
     return LaunchSpec(paths.venv_accelerate, arguments, MappingProxyType(env), paths.root)

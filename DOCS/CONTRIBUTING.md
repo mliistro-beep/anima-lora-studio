@@ -59,6 +59,7 @@ use two:
 |----------|--------|-------|---------|
 | `CUDA_VISIBLE_DEVICES` | `training/command_builder.py`, `preview/inference_command.py` | selected GPU index | Same as Citron: limits the training and the generator to the chosen GPU |
 | `PYTHONUNBUFFERED` | `training/command_builder.py`, `preview/inference_command.py`, `runtime/installer.py` | `1` | Streams sd-scripts, generator, pip and GPU check output line by line |
+| `PYTHONDONTWRITEBYTECODE` | `training/command_builder.py` (with previews) | `1` | No `__pycache__` next to `train_with_previews.py` in the package; `generate.py` gets the same with `python -B` |
 | `ANIMA_TRAINER_SD_SCRIPTS` | `training/command_builder.py` (with previews), `preview/inference_command.py` | the data folder's `sd-scripts` | Tells `train_with_previews.py` and `generate.py` where sd-scripts is |
 | `PYTORCH_CUDA_ALLOC_CONF` | `preview/inference_command.py` | `expandable_segments:True` | Less GPU memory held between the generator's text encoder, DiT and VAE phases |
 | `XDG_DATA_HOME` | you (optional) | a folder | Read by Qt (`QStandardPaths`): parent of the default data folder `anima-trainer` |

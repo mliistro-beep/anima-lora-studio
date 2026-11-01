@@ -89,7 +89,8 @@ def _inference_args(ami: Any, options: argparse.Namespace, profile: Profile) -> 
     """anima_minimal_inference's own argument namespace for this profile."""
     argv = [
         "--dit", options.dit, "--vae", options.vae, "--text_encoder", options.qwen3,
-        "--prompt", options.prompt, "--negative_prompt", options.negative_prompt,
+        # One item each: as two, argparse takes a prompt starting with "-" for an option.
+        f"--prompt={options.prompt}", f"--negative_prompt={options.negative_prompt}",
         "--image_size", str(profile.height), str(profile.width),
         "--infer_steps", str(options.steps), "--guidance_scale", str(options.cfg),
         "--flow_shift", str(options.flow_shift), "--seed", str(options.seed),

@@ -59,6 +59,7 @@ class SettingsTab(QWidget):
         self._idle = True
         self._can_download = False
         self._installing = False
+        self._generating = False
         self.root_picker = PathPicker("Data folder", "folder")
         self.apply_button = QPushButton("Apply")
         self.apply_button.clicked.connect(lambda: self.root_applied.emit(self.root_picker.path()))
@@ -147,6 +148,11 @@ class SettingsTab(QWidget):
         self._checking = checking
         self._update_buttons()
 
+    def set_generating(self, generating: bool) -> None:
+        """An image generation uses the data folder and the models, like a training."""
+        self._generating = generating
+        self._update_buttons()
+
     def show_check(self, checked: int, total: int) -> None:
         self.check_label.setText(check_text(checked, total))
 
@@ -184,7 +190,7 @@ class SettingsTab(QWidget):
             self.link_requested.emit(key, chosen)
 
     def _update_buttons(self) -> None:
-        free = self._idle and not self._installing and not self._checking
+        free = self._idle and not self._installing and not self._checking and not self._generating
         self.root_picker.setEnabled(free)
         self.apply_button.setEnabled(free)
         self.install_button.setEnabled(free)

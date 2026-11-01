@@ -76,6 +76,17 @@ class PreviewController(QObject):
     def preview_settings(self) -> PreviewSettings | tuple[str, ...]:
         return self.previews_tab.settings()
 
+    def previews_enabled(self) -> bool:
+        return self.previews_tab.previews_enabled()
+
+    def saved_settings_turned_off(self) -> PreviewSettings:
+        """The saved settings with previews off, for a form that cannot be read: a later
+        Configure must not turn them back on."""
+        if self._paths is None:
+            return PreviewSettings()
+        saved = load_preview_settings(self._paths.preview_settings_file).settings
+        return saved.with_changes(enabled=False)
+
     def previews_configured(self, previews: PreviewSettings) -> None:
         """After a successful Configure: the gallery columns follow its prompts."""
         self.previews_tab.set_prompt_labels(previews.prompts)
@@ -138,7 +149,7 @@ class PreviewController(QObject):
         self.generator.finished.connect(lambda _ok, message: tab.log.append_line(message))
 
     def _show_project(self) -> None:
-        """Previews of the last run of the project (all of them) and its checkpoints."""
+        """Previews of the last run of the project and its checkpoints."""
         output_dir = self._output_dir()
         if output_dir is None:
             self.watcher.stop()

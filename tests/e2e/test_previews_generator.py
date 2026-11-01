@@ -178,7 +178,7 @@ def test_generator_lists_the_checkpoints_and_generates_with_the_chosen_one(app):
 
     spec = generator_runner.started[0][0]
     assert _option(spec.arguments, "--lora") == str(final)
-    assert _option(spec.arguments, "--prompt") == "a girl"
+    assert "--prompt=a girl" in spec.arguments
     assert _option(spec.arguments, "--margin_mib") == str(IDLE_MARGIN_MIB)
     assert spec.env["CUDA_VISIBLE_DEVICES"] == "1"  # the GPU chosen in the Training tab
     assert not window.training_tab.start_button.isEnabled()
@@ -274,3 +274,69 @@ def test_closing_while_generating_stops_the_generator(app, monkeypatch):
 
     assert asked == [1]
     assert generator_runner.shut_down == 1
+
+
+def test_bad_preview_values_do_not_block_configure_while_previews_are_off(app):
+    window, _, _, paths = app
+    _turn_previews_on(window)
+    window.training_tab.configure_button.click()
+    window.previews_tab.form.field_widget("enabled").setChecked(False)
+    window.previews_tab.form.field_widget("cfg_scale").setText("high")
+
+    window.training_tab.configure_button.click()
+
+    status = window.training_tab.status.text()
+    assert "WARN: Previews are off; these Previews tab values were not saved:" in status
+    assert "WARN: CFG Scale:" in status
+    assert "ERROR:" not in status
+    assert "sample_prompts" not in toml.loads(
+        Path(window.session.settings.last_train_config).read_text()
+    )
+    saved = load_preview_settings(paths.preview_settings_file).settings
+    assert not saved.enabled  # a later Configure must not turn them back on
+    assert saved.prompts == ("a girl", "a cat")
+
+
+def test_preview_settings_are_kept_when_configure_fails(app):
+    window, _, _, paths = app
+    _turn_previews_on(window)
+    window.training_tab.form.field_widget("image_directory").set_path("")
+
+    window.training_tab.configure_button.click()
+
+    assert not window.session.settings.last_train_config
+    saved = load_preview_settings(paths.preview_settings_file).settings
+    assert saved.prompts == ("a girl", "a cat")
+
+
+def test_opening_a_project_shows_only_the_previews_of_its_last_run(app):
+    window, _, _, paths = app
+    sample = paths.root / "out" / "sample"
+    _touch(sample / f"{PROJECT}_e000005_00_20261026090000.png")
+    newest = _touch(sample / f"{PROJECT}_e000001_00_20261026110000.png")
+
+    window.training_tab.configure_button.click()
+
+    gallery = window.previews_tab.gallery
+    assert gallery.rowCount() == 1
+    assert gallery.image_at(0, 0) == newest
+
+
+def test_the_data_folder_and_models_are_locked_while_generating(app, tmp_path):
+    window, _, generator_runner, paths = app
+    tab = window.settings_tab
+    window.generator_tab.prompt.setPlainText("a girl")
+
+    window.generator_tab.generate_button.click()
+
+    assert not tab.apply_button.isEnabled()
+    assert not tab.root_picker.isEnabled()
+    assert not tab.install_button.isEnabled()
+    assert not any(button.isEnabled() for button in tab.link_buttons.values())
+    tab.root_applied.emit(str(tmp_path / "other"))
+    assert window.session.paths.root == paths.root
+
+    generator_runner.finished.emit(RunOutcome(1, crashed=False, stopped=False, log_path=None))
+
+    assert tab.apply_button.isEnabled()
+    assert tab.install_button.isEnabled()

@@ -87,8 +87,9 @@ def build_generation_launch(
         "--vae", str(paths.vae_model),
         *lora,
         "--lora_multiplier", str(request.lora_multiplier),
-        "--prompt", request.prompt,
-        "--negative_prompt", request.negative_prompt,
+        # One item each: as two, argparse takes a prompt starting with "-" for an option.
+        f"--prompt={request.prompt}",
+        f"--negative_prompt={request.negative_prompt}",
         "--steps", str(request.steps),
         "--cfg", str(request.cfg_scale),
         "--flow_shift", str(request.flow_shift),
