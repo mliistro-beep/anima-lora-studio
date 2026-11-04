@@ -40,6 +40,8 @@ where = ["src"]
 [tool.setuptools.package-data]
 # The app icon (window and menu entry).
 "anima_trainer.ui" = ["assets/*.svg"]
+# The built-in training presets.
+"anima_trainer.presets" = ["builtin/*.toml"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

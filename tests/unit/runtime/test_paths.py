@@ -157,3 +157,7 @@ def test_links_are_kept_by_value_and_compared(tmp_path):
     assert not paths.has_broken_link(VAE_FILENAME)
     assert paths != RuntimePaths(tmp_path / "data")
     assert paths.with_links({}) == RuntimePaths(tmp_path / "data")
+
+
+def test_the_user_presets_are_in_the_data_folder(tmp_path):
+    assert RuntimePaths(tmp_path).presets_dir == tmp_path / "presets"

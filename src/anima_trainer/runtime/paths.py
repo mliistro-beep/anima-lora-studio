@@ -58,6 +58,10 @@ class RuntimePaths:
         return self.root / "configs"
 
     @property
+    def presets_dir(self) -> Path:
+        return self.root / "presets"
+
+    @property
     def logs_dir(self) -> Path:
         return self.root / "logs"
 

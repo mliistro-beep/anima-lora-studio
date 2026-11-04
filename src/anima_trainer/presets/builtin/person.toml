@@ -1,0 +1,10 @@
+name = "Person"
+description = "About 60 images, about 6000 samples"
+
+[settings]
+network_dim = 32
+network_alpha = 16
+learning_rate = 0.0001
+max_train_epochs = 10
+caption_dropout = 0.05
+save_last_n_epochs = 4

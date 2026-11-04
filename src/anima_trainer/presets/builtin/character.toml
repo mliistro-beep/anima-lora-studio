@@ -1,0 +1,10 @@
+name = "Character"
+description = "30-150 images, about 3600 samples"
+
+[settings]
+network_dim = 32
+network_alpha = 32
+learning_rate = 0.0001
+max_train_epochs = 12
+caption_dropout = 0.1
+save_last_n_epochs = 4

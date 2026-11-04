@@ -1,0 +1,10 @@
+name = "Style"
+description = "200-300+ images, about 4000 samples"
+
+[settings]
+network_dim = 32
+network_alpha = 32
+learning_rate = 0.0001
+max_train_epochs = 16
+caption_dropout = 0.1
+save_last_n_epochs = 10

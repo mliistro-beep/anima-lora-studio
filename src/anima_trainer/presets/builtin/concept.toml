@@ -1,0 +1,10 @@
+name = "Concept"
+description = "30-100 images, about 2000 samples"
+
+[settings]
+network_dim = 16
+network_alpha = 16
+learning_rate = 0.00008
+max_train_epochs = 10
+caption_dropout = 0.1
+save_last_n_epochs = 5
