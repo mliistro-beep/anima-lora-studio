@@ -5,8 +5,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "anima-trainer"
-version = "0.1.0"
-description = "Desktop LoRA trainer for the Anima diffusion model, based on Citron's Anima LoRA Trainer UI"
+version = "0.2.0"
+description = "Anima LoRA Studio: desktop LoRA trainer for the Anima diffusion model, based on Citron's Anima LoRA Trainer UI"
 readme = "README.md"
 license = "GPL-3.0-or-later"
 license-files = ["LICENSE", "THIRD_PARTY_NOTICES.md"]
@@ -37,12 +37,17 @@ anima-trainer = "anima_trainer.main:main"
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+# The app icon (window and menu entry).
+"anima_trainer.ui" = ["assets/*.svg"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-ra --strict-markers"
 markers = [
     "integration: tests that spawn subprocesses or touch the filesystem",
     "e2e: end-to-end tests driving the Qt UI",
+    "runtime: tests running scripts in an installed training venv (ANIMA_TRAINER_TEST_RUNTIME)",
 ]
 qt_api = "pyside6"
 
@@ -53,12 +58,15 @@ branch = true
 [tool.coverage.report]
 fail_under = 80
 show_missing = true
-omit = ["*/ui/*", "*/main.py"]
+# runtime_scripts run in the training venv (torch); tests/runtime_scripts covers them.
+omit = ["*/ui/*", "*/main.py", "*/runtime_scripts/*"]
 
 [tool.mypy]
 python_version = "3.14"
 plugins = ["pydantic.mypy"]
 files = ["src"]
+# Needs torch and sd-scripts, which only the training venv has.
+exclude = ["src/anima_trainer/runtime_scripts/"]
 strict = true
 warn_unreachable = true
 
@@ -76,3 +84,6 @@ select = ["E", "F", "W", "I", "B", "UP", "SIM", "T20"]
 [tool.ruff.lint.per-file-ignores]
 # Stand-in executables for subprocess tests talk to the runner through stdout.
 "tests/fixtures/*.py" = ["T201"]
+"tests/runtime_scripts/check_*.py" = ["T201"]
+# Scripts run by the training venv report to the app through stdout, like sd-scripts.
+"src/anima_trainer/runtime_scripts/*.py" = ["T201"]

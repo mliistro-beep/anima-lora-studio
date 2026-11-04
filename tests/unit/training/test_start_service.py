@@ -98,3 +98,27 @@ def test_missing_training_script_fails(citron, configured):
 
     assert not plan.success
     assert "Training script not found" in plan.messages[-1]
+
+
+def test_a_training_config_with_previews_starts_the_preview_launcher(citron, configured):
+    from anima_trainer.runtime_scripts import TRAIN_WITH_PREVIEWS
+
+    with open(configured.last_train_config, "w", encoding="utf-8") as handle:
+        handle.write('output_name = "proj"\nsample_prompts = "/data/configs/p.json"\n')
+
+    plan = plan_start(configured, citron, _request(), NOW)
+
+    assert plan.spec is not None
+    assert str(TRAIN_WITH_PREVIEWS) in plan.spec.arguments
+    assert "INFO: Previews on: images in <output_dir>/sample/ during training." in plan.messages
+
+
+def test_a_config_without_previews_or_unreadable_runs_sd_scripts_directly(citron, configured):
+    for content in ('output_name = "proj"\n', "not = [valid toml"):
+        with open(configured.last_train_config, "w", encoding="utf-8") as handle:
+            handle.write(content)
+
+        plan = plan_start(configured, citron, _request(), NOW)
+
+        assert plan.spec is not None
+        assert str(citron.train_script) in plan.spec.arguments

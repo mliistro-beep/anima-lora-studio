@@ -60,8 +60,12 @@ def test_wrong_file_is_rejected_and_not_saved(qtbot, session, store, vae_file):
     assert dict(load_links(store)) == {}
 
 
-def test_cancelled_check_saves_nothing(qtbot, session, store, vae_file):
-    session.progress.connect(lambda *_: session.cancel())
+def test_cancelled_check_saves_nothing(qtbot, session, store, vae_file, paused_file_check):
+    def cancel(*_):
+        session.cancel()
+        paused_file_check.set()
+
+    session.progress.connect(cancel)
 
     with qtbot.waitSignal(session.finished, timeout=TIMEOUT_MS) as blocker:
         session.check(VAE_FILENAME, vae_file)

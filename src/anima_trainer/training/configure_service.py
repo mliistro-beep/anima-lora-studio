@@ -10,6 +10,7 @@ from pathlib import Path
 
 from anima_trainer.dataset.step_estimator import StepEstimate, estimate_steps
 from anima_trainer.dataset.validator import DatasetError, DatasetReport, validate_dataset
+from anima_trainer.preview.preview_plan import PreviewPlan
 from anima_trainer.runtime.paths import RuntimePaths
 from anima_trainer.runtime.venv_info import needs_single_process_loader, read_venv_version
 from anima_trainer.settings.schema import TrainingSettings
@@ -35,12 +36,17 @@ class ConfigureResult:
 
 
 def configure_training(
-    settings: TrainingSettings, paths: RuntimePaths, now: datetime
+    settings: TrainingSettings,
+    paths: RuntimePaths,
+    now: datetime,
+    previews: PreviewPlan = PreviewPlan(),  # noqa: B008 - frozen, shared default is safe
 ) -> ConfigureResult:
     missing = settings.missing_required_fields()
     if missing:
         errors = tuple(f"ERROR: {label} cannot be empty." for label in missing)
         return ConfigureResult(False, errors, settings)
+    if previews.error is not None:
+        return ConfigureResult(False, (f"ERROR: {previews.error}",), settings)
 
     settings = _with_resolved_paths(settings, paths)
     messages = _header(settings)
@@ -71,7 +77,9 @@ def configure_training(
         failure = (*messages, "", f"ERROR: Missing models: {', '.join(missing_models)}")
         return ConfigureResult(False, failure, settings, dataset=report, estimate=estimate)
 
-    return _generate(settings, paths, now, messages, report, estimate)
+    return _generate(
+        settings, paths, now, (*messages, *previews.messages), report, estimate, previews
+    )
 
 
 def _generate(
@@ -81,6 +89,7 @@ def _generate(
     messages: tuple[str, ...],
     report: DatasetReport,
     estimate: StepEstimate,
+    previews: PreviewPlan,
 ) -> ConfigureResult:
     messages = (*messages, "", "Generating TOML configs...")
     venv_version = read_venv_version(paths.venv_dir)
@@ -89,7 +98,7 @@ def _generate(
         version_text = ".".join(map(str, venv_version))
         messages = (*messages, SINGLE_PROCESS_LOADER_NOTE.format(version=version_text))
     try:
-        configs = write_configs(settings, paths, now, single_process_loader)
+        configs = write_configs(settings, paths, now, single_process_loader, previews.request)
     except OSError as error:
         failure = (*messages, f"ERROR: Failed to generate configs: {error}")
         return ConfigureResult(False, failure, settings, dataset=report, estimate=estimate)
@@ -101,6 +110,7 @@ def _generate(
         *messages,
         f"  OK: Training config: {configs.training}",
         f"  OK: Dataset  config: {configs.dataset}",
+        *((f"  OK: Preview prompts: {configs.samples}",) if configs.samples else ()),
     )
     try:
         save_settings(paths.config_file, updated)

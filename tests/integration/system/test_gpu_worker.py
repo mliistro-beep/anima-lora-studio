@@ -88,3 +88,33 @@ def test_shutdown_waits_for_running_detection(qtbot, tmp_path):
 
     assert finished.is_set()
     assert not detector.is_running()
+
+
+def test_reports_the_gpu_memory_read_in_the_same_background_thread(qtbot, tmp_path):
+    from anima_trainer.system.gpu_memory import GpuMemory
+
+    threads = []
+
+    def memory():
+        threads.append(threading.current_thread())
+        return (GpuMemory(0, 12288, 11000),)
+
+    detector = GpuDetector(lambda _paths: ("0",), memory)
+
+    with qtbot.waitSignal(detector.memory_detected, timeout=TIMEOUT_MS) as blocker:
+        detector.start(RuntimePaths(tmp_path))
+
+    assert blocker.args == [(GpuMemory(0, 12288, 11000),)]
+    assert threads[0] is not threading.main_thread()
+
+
+def test_a_memory_read_error_reports_no_memory(qtbot, tmp_path):
+    def memory():
+        raise OSError("no driver")
+
+    detector = GpuDetector(lambda _paths: ("0",), memory)
+
+    with qtbot.waitSignal(detector.memory_detected, timeout=TIMEOUT_MS) as blocker:
+        detector.start(RuntimePaths(tmp_path))
+
+    assert blocker.args == [()]

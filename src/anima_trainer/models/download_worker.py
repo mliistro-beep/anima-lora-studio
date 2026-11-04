@@ -5,6 +5,7 @@ from pathlib import Path
 
 from PySide6.QtCore import QObject
 
+from anima_trainer.models.catalog import ExpectedFile
 from anima_trainer.models.downloader import (
     CHUNK_SIZE,
     DownloadCancelled,
@@ -22,7 +23,7 @@ class ModelDownloader(BackgroundTask):
         super().__init__((DownloadError,), DownloadCancelled, parent)
         self._chunk_size = chunk_size
 
-    def start(self, url: str, destination: Path) -> None:
+    def start(self, url: str, destination: Path, expected: ExpectedFile | None = None) -> None:
         def job(report: Report, is_cancelled: Callable[[], bool]) -> str:
             def on_progress(progress: DownloadProgress) -> None:
                 report(progress.downloaded, progress.total)
@@ -33,6 +34,7 @@ class ModelDownloader(BackgroundTask):
                 on_progress=on_progress,
                 is_cancelled=is_cancelled,
                 chunk_size=self._chunk_size,
+                expected=expected,
             )
             return str(path)
 

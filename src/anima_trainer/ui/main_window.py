@@ -22,6 +22,7 @@ from anima_trainer.about.license import app_version
 from anima_trainer.about.render import credits_html, license_html
 from anima_trainer.models.check_worker import ModelFileChecker
 from anima_trainer.models.status import model_statuses
+from anima_trainer.preview.sample_watcher import SampleWatcher
 from anima_trainer.runtime.data_dir import (
     OpenedRuntime,
     data_dir_problem,
@@ -33,21 +34,29 @@ from anima_trainer.runtime.data_dir import (
 from anima_trainer.settings.field_specs import describe_validation_error
 from anima_trainer.settings.schema import TrainingSettings
 from anima_trainer.system.gpu_worker import GpuDetector
+from anima_trainer.system.memory_safety import warnings_only
+from anima_trainer.training.runner import TrainingRunner
 from anima_trainer.training.start_service import StartRequest
 from anima_trainer.ui.dialogs.text_dialog import TextDialog
+from anima_trainer.ui.preview_controller import PreviewController
 from anima_trainer.ui.tabs.advanced_tab import AdvancedTab
+from anima_trainer.ui.tabs.generator_tab import GeneratorTab
+from anima_trainer.ui.tabs.previews_tab import PreviewsTab
 from anima_trainer.ui.tabs.settings_tab import SettingsTab
 from anima_trainer.ui.tabs.training_tab import TrainingTab
+from anima_trainer.workflow.generator_session import GeneratorSession
 from anima_trainer.workflow.install_session import InstallSession
 from anima_trainer.workflow.link_session import LinkSession
 from anima_trainer.workflow.training_session import SessionState, TrainingSession
 
-APP_NAME = "Anima LoRA Trainer"
+APP_NAME = "Anima LoRA Studio"
 DEFAULT_SIZE = (1200, 800)
 QUIT_QUESTION = (
-    "Training, a model download, a model file check or the install is still running. "
-    "Stop it and quit?"
+    "Training, image generation, a model download, a model file check or the install is "
+    "still running. Stop it and quit?"
 )
+PREVIEWS_NOT_SAVED = "WARN: Previews are off; these Previews tab values were not saved:"
+TRAINING_STATES = (SessionState.TRAINING, SessionState.STOPPING)
 
 
 class MainWindow(QMainWindow):
@@ -60,6 +69,8 @@ class MainWindow(QMainWindow):
         install: InstallSession,
         open_root: Callable[[Path], OpenedRuntime] = open_data_dir,
         links: LinkSession | None = None,
+        generator: GeneratorSession | None = None,
+        memory_check: Callable[[], tuple[str, ...]] = lambda: (),
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
@@ -73,16 +84,30 @@ class MainWindow(QMainWindow):
         self._links = links if links is not None else LinkSession(store, ModelFileChecker())
         self._checking = False
         self._open_root = open_root
+        self._memory_check = memory_check  # swap / OOM daemon lines, see system/memory_safety.py
         self._problems = opened.problems
         self._root_exists = opened.paths.root.is_dir()
         self._shut_down = False
+        self._last_state = SessionState.IDLE
         self.training_tab = TrainingTab()
         self.advanced_tab = AdvancedTab()
+        self.previews_tab = PreviewsTab()
+        self.generator_tab = GeneratorTab()
         self.settings_tab = SettingsTab()
         self.tabs = QTabWidget()
         self.tabs.addTab(self.training_tab, "Training")
         self.tabs.addTab(self.advanced_tab, "Advanced Settings")
+        self.tabs.addTab(self.previews_tab, "Previews")
+        self.tabs.addTab(self.generator_tab, "Generator")
         self.tabs.addTab(self.settings_tab, "Settings")
+        self.previews = PreviewController(
+            self.previews_tab,
+            self.generator_tab,
+            generator if generator is not None else GeneratorSession(TrainingRunner()),
+            SampleWatcher(),
+            self,
+            gpu_index=lambda: str(self.training_tab.form.value("gpu_index")),
+        )
         self.license_button = QPushButton("License")
         self.credits_button = QPushButton("Credits")
         self.about_dialog: TextDialog | None = None
@@ -95,7 +120,7 @@ class MainWindow(QMainWindow):
         self._detector.start(opened.paths)
 
     def closeEvent(self, event: QCloseEvent) -> None:  # noqa: N802 - Qt override
-        if self.session.state is not SessionState.IDLE or self._installing or self._checking:
+        if self._busy():
             answer = QMessageBox.question(
                 self,
                 APP_NAME,
@@ -123,6 +148,7 @@ class MainWindow(QMainWindow):
         self._shut_down = True
         self._install.shutdown()
         self._links.shutdown()
+        self.previews.shutdown()
         self.session.shutdown()
         self._detector.shutdown()
 
@@ -174,7 +200,12 @@ class MainWindow(QMainWindow):
         self.session.download_progress.connect(self.settings_tab.show_download)
         self.session.state_changed.connect(self._apply_state)
         self.session.models_changed.connect(self._refresh_models)
+        self.session.settings_changed.connect(self.previews.set_training_settings)
+        self.previews.generator.running_changed.connect(
+            lambda _running: self._apply_state(self.session.state)
+        )
         self._detector.detected.connect(self._on_gpus_detected)
+        self._detector.memory_detected.connect(self.session.set_gpu_memory)
         self._detector.warning.connect(lambda message: tab.status.append_line(f"WARN: {message}"))
 
     def _show_runtime(self, opened: OpenedRuntime) -> None:
@@ -185,8 +216,12 @@ class MainWindow(QMainWindow):
         self.settings_tab.set_root(str(opened.paths.root))
         self.settings_tab.set_problems(opened.problems)
         self._refresh_models()
+        preview_warnings = self.previews.load(opened.paths, opened.settings)
+        memory_lines = self._memory_check()
+        self.settings_tab.set_system_lines(memory_lines)
         notes = (
-            *(f"WARN: {warning}" for warning in opened.warnings),
+            *warnings_only(memory_lines),
+            *(f"WARN: {warning}" for warning in (*opened.warnings, *preview_warnings)),
             *(f"ERROR: {problem}" for problem in opened.problems),
         )
         self.training_tab.status.set_lines(notes)
@@ -204,8 +239,24 @@ class MainWindow(QMainWindow):
 
     def _configure(self) -> None:
         settings = self._collect_settings()
-        if settings is not None:
-            self.training_tab.status.set_lines(self.session.configure(settings).messages)
+        if settings is None:
+            return
+        previews = self.previews.preview_settings()
+        notes: tuple[str, ...] = ()
+        if isinstance(previews, tuple):
+            if self.previews.previews_enabled():
+                self.training_tab.status.set_lines(("ERROR: Previews tab:", *previews))
+                return
+            # Off: their values are not used, so they do not block the training.
+            notes = (
+                PREVIEWS_NOT_SAVED,
+                *(f"WARN: {line.removeprefix('ERROR: ')}" for line in previews),
+            )
+            previews = self.previews.saved_settings_turned_off()
+        result = self.session.configure(settings, previews)
+        self.training_tab.status.set_lines((*result.messages, *notes))
+        if result.success:
+            self.previews.previews_configured(previews)
 
     def _start(self) -> None:
         # Like Citron, Start reads only these fields; the rest comes from the saved TOMLs,
@@ -220,6 +271,8 @@ class MainWindow(QMainWindow):
         self.session.start(request)
 
     def _apply_root(self, text: str) -> None:
+        if self._busy():
+            return
         if not text.strip():
             self.settings_tab.set_problems(("Choose the data folder first.",))
             return
@@ -317,13 +370,19 @@ class MainWindow(QMainWindow):
         self.session.set_runtime(
             self.session.paths.with_links(self._links.links()), self.session.settings
         )
+        self.previews.set_paths(self.session.paths)
         self._refresh_models()
 
     def _with_links(self, opened: OpenedRuntime) -> OpenedRuntime:
         return replace(opened, paths=opened.paths.with_links(self._links.links()))
 
     def _busy(self) -> bool:
-        return self.session.state is not SessionState.IDLE or self._installing or self._checking
+        return (
+            self.session.state is not SessionState.IDLE
+            or self._installing
+            or self._checking
+            or self.previews.is_generating()
+        )
 
     def _set_checking(self, checking: bool) -> None:
         self._checking = checking
@@ -337,12 +396,28 @@ class MainWindow(QMainWindow):
 
     def _apply_state(self, state: SessionState) -> None:
         ready = not self._problems and not self._installing and not self._checking
-        self.training_tab.set_state(state, ready=ready)
+        generating = self.previews.is_generating()
+        # The generator may join a running training (lighter profile), not the other way:
+        # a training started during a generation could not know how much memory is left.
+        self.training_tab.set_state(state, ready=ready and not generating)
+        self.settings_tab.set_generating(generating)
         self.settings_tab.set_state(state, can_download=self._root_exists)
+        self.previews.set_ready(ready and state is not SessionState.DOWNLOADING)
+        was_training = self._last_state in TRAINING_STATES
+        self._last_state = state
+        if state is SessionState.TRAINING and not was_training:
+            self.previews.training_started()
+        elif was_training and state not in TRAINING_STATES:
+            self.previews.training_finished()
 
     def _on_tab_changed(self, _index: int) -> None:
-        if self.tabs.currentWidget() is self.settings_tab:
+        current = self.tabs.currentWidget()
+        if current is self.settings_tab:
             self._refresh_models()
+        elif current is self.generator_tab:
+            self.previews.refresh_checkpoints()
+        elif current is self.previews_tab:
+            self.previews.watcher.refresh()
 
     def _refresh_models(self) -> None:
         self.settings_tab.set_models(model_statuses(self.session.paths))

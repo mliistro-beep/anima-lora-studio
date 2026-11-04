@@ -4,9 +4,9 @@ from anima_trainer.about.render import credits_html, license_html
 
 
 def test_license_html_shows_name_version_copyright_and_gpl_link():
-    page = license_html("Anima LoRA Trainer", "0.1.0")
+    page = license_html("Anima LoRA Studio", "0.2.0")
 
-    assert "Anima LoRA Trainer 0.1.0" in page
+    assert "Anima LoRA Studio 0.2.0" in page
     assert COPYRIGHT in page
     assert f'href="{GPL_URL}"' in page
 

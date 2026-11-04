@@ -40,7 +40,7 @@ def check_model_file(
                 f"wrong size ({link.size} bytes, expected {expected.size}): "
                 "this is not the expected model file"
             )
-        digest = _sha256(path, link.size, on_progress, is_cancelled, chunk_size)
+        digest = file_sha256(path, on_progress, is_cancelled, chunk_size)
     except OSError as error:
         raise ModelFileRejected(f"cannot read {path}: {error}") from error
     if digest != expected.sha256:
@@ -52,13 +52,14 @@ def check_model_file(
     return link
 
 
-def _sha256(
+def file_sha256(
     path: Path,
-    size: int,
-    on_progress: CheckProgress,
-    is_cancelled: Callable[[], bool],
-    chunk_size: int,
+    on_progress: CheckProgress = lambda _done, _total: None,
+    is_cancelled: Callable[[], bool] = lambda: False,
+    chunk_size: int = CHUNK_SIZE,
 ) -> str:
+    """SHA-256 of the file, read in chunks; raises CheckCancelled or OSError."""
+    size = path.stat().st_size
     digest = hashlib.sha256()
     done = 0
     with open(path, "rb") as file:

@@ -5,9 +5,11 @@ from types import MappingProxyType
 
 import pytest
 
+from anima_trainer.system.resource_monitor import ResourceMonitor
 from anima_trainer.training.command_builder import LaunchSpec
 from anima_trainer.training.log_parser import CheckpointSaved, EpochStarted, StepProgress
 from anima_trainer.training.runner import TrainingRunner
+from tests.fakes import FakeResourceMonitor
 from tests.process_helpers import is_alive
 
 pytestmark = pytest.mark.integration
@@ -228,3 +230,94 @@ def test_unopenable_log_raises_without_leaking_state(tmp_path):
         runner.start(_spec(tmp_path, "env", "X"), blocker / "r.log")
 
     assert not runner.is_running()
+
+
+def test_resource_monitor_runs_with_the_process(qtbot, tmp_path):
+    monitor = FakeResourceMonitor()
+    runner = TrainingRunner(monitor=monitor)
+
+    with qtbot.waitSignal(runner.line_received, timeout=TIMEOUT_MS):
+        runner.start(_spec(tmp_path, "sleep", str(tmp_path / "child.pid")), tmp_path / "r.log")
+    assert (monitor.started, monitor.stopped) == (1, 0)
+
+    with qtbot.waitSignal(runner.finished, timeout=TIMEOUT_MS):
+        runner.stop()
+    assert (monitor.started, monitor.stopped) == (1, 1)
+
+
+def test_resource_lines_go_to_the_log_file_only(qtbot, tmp_path):
+    monitor = FakeResourceMonitor()
+    runner = TrainingRunner(monitor=monitor)
+    lines, _ = _collect(runner)
+    log_path = tmp_path / "r.log"
+    with qtbot.waitSignal(runner.line_received, timeout=TIMEOUT_MS):
+        runner.start(_spec(tmp_path, "sleep", str(tmp_path / "child.pid")), log_path)
+
+    monitor.line_ready.emit("RESOURCES 2026-10-28T19:40:00 | not available")
+    # Written and synced to disk at once, while the run is still going.
+    assert log_path.read_text(encoding="utf-8").splitlines()[-1] == (
+        "RESOURCES 2026-10-28T19:40:00 | not available"
+    )
+
+    with qtbot.waitSignal(runner.finished, timeout=TIMEOUT_MS):
+        runner.stop()
+    assert not any(line.startswith("RESOURCES") for line in lines)
+    assert not any(line.startswith("RESOURCES") for line in runner.log_tail())
+
+
+def test_resource_lines_after_the_run_are_ignored(qtbot, tmp_path):
+    monitor = FakeResourceMonitor()
+    runner = TrainingRunner(monitor=monitor)
+    log_path = tmp_path / "r.log"
+    _run(qtbot, runner, _spec(tmp_path, "text", "done\\n", "0"), log_path)
+    before = log_path.read_text(encoding="utf-8")
+
+    monitor.line_ready.emit("RESOURCES late")
+
+    assert log_path.read_text(encoding="utf-8") == before
+
+
+def test_failed_start_stops_the_resource_monitor(qtbot, tmp_path):
+    monitor = FakeResourceMonitor()
+    runner = TrainingRunner(monitor=monitor)
+    spec = LaunchSpec(Path("/nonexistent/accelerate"), (), MappingProxyType({}), tmp_path)
+
+    with qtbot.waitSignal(runner.failed_to_start, timeout=TIMEOUT_MS):
+        runner.start(spec, tmp_path / "r.log")
+
+    assert monitor.started == monitor.stopped == 1
+
+
+@pytest.mark.skipif(not Path("/dev/full").exists(), reason="needs /dev/full")
+def test_resource_line_on_a_failing_log_warns_once(qtbot, tmp_path):
+    monitor = FakeResourceMonitor()
+    runner = TrainingRunner(monitor=monitor)
+    warnings = []
+    runner.warning.connect(warnings.append)
+    with qtbot.waitSignal(runner.line_received, timeout=TIMEOUT_MS):
+        runner.start(_spec(tmp_path, "sleep", str(tmp_path / "child.pid")), Path("/dev/full"))
+    qtbot.waitUntil(lambda: bool(warnings), timeout=TIMEOUT_MS)
+
+    monitor.line_ready.emit("RESOURCES 2026-10-28T19:40:00 | not available")
+    qtbot.wait(50)
+
+    assert len(warnings) == 1
+    with qtbot.waitSignal(runner.finished, timeout=TIMEOUT_MS):
+        runner.stop()
+
+
+def test_run_ending_with_a_sample_in_flight_stops_the_real_monitor(qtbot, tmp_path):
+    meminfo = tmp_path / "meminfo"
+    meminfo.write_text("MemTotal: 1048576 kB\nMemAvailable: 524288 kB\n", encoding="ascii")
+    monitor = ResourceMonitor(
+        program=sys.executable, arguments=("-c", "import time; time.sleep(30)"), meminfo=meminfo
+    )
+    runner = TrainingRunner(monitor=monitor)
+    log_path = tmp_path / "r.log"
+
+    outcome = _run(qtbot, runner, _spec(tmp_path, "text", "done\\n", "0"), log_path)
+    qtbot.wait(100)
+
+    assert outcome.exit_code == 0
+    assert not monitor.is_sampling()
+    assert "RESOURCES" not in log_path.read_text(encoding="utf-8")

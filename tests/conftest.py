@@ -9,3 +9,8 @@ CITRON_FIXTURES = FIXTURES_DIR / "citron"
 @pytest.fixture
 def citron_fixtures() -> Path:
     return CITRON_FIXTURES
+
+
+@pytest.fixture
+def fixtures_dir() -> Path:
+    return FIXTURES_DIR

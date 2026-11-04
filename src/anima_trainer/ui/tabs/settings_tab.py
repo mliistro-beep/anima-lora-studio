@@ -59,11 +59,15 @@ class SettingsTab(QWidget):
         self._idle = True
         self._can_download = False
         self._installing = False
+        self._generating = False
         self.root_picker = PathPicker("Data folder", "folder")
         self.apply_button = QPushButton("Apply")
         self.apply_button.clicked.connect(lambda: self.root_applied.emit(self.root_picker.path()))
         self.problems_label = QLabel()
         self.problems_label.setWordWrap(True)
+        self.system_label = QLabel()  # swap and out-of-memory daemon (system/memory_safety.py)
+        self.system_label.setWordWrap(True)
+        self.system_label.setHidden(True)
         self.install_button = QPushButton("Install")
         self.install_button.clicked.connect(self.install_requested.emit)
         self.cancel_install_button = QPushButton("Cancel install")
@@ -99,6 +103,11 @@ class SettingsTab(QWidget):
         else:
             self.problems_label.setText("OK: Training runtime installed.")
         self.install_button.setText("Install" if problems else "Repair")
+
+    def set_system_lines(self, lines: tuple[str, ...]) -> None:
+        """OK / WARN lines about the swap and the out-of-memory daemon; hidden when none."""
+        self.system_label.setText("\n".join(lines))
+        self.system_label.setHidden(not lines)
 
     def set_models(self, statuses: tuple[ModelStatus, ...]) -> None:
         self.models_table.setRowCount(len(statuses))
@@ -139,6 +148,11 @@ class SettingsTab(QWidget):
         self._checking = checking
         self._update_buttons()
 
+    def set_generating(self, generating: bool) -> None:
+        """An image generation uses the data folder and the models, like a training."""
+        self._generating = generating
+        self._update_buttons()
+
     def show_check(self, checked: int, total: int) -> None:
         self.check_label.setText(check_text(checked, total))
 
@@ -176,7 +190,7 @@ class SettingsTab(QWidget):
             self.link_requested.emit(key, chosen)
 
     def _update_buttons(self) -> None:
-        free = self._idle and not self._installing and not self._checking
+        free = self._idle and not self._installing and not self._checking and not self._generating
         self.root_picker.setEnabled(free)
         self.apply_button.setEnabled(free)
         self.install_button.setEnabled(free)
@@ -199,6 +213,7 @@ class SettingsTab(QWidget):
         layout.addWidget(help_label)
         layout.addLayout(row)
         layout.addWidget(self.problems_label)
+        layout.addWidget(self.system_label)
         install_help = QLabel(INSTALL_HELP)
         install_help.setWordWrap(True)
         install_row = QHBoxLayout()

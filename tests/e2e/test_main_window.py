@@ -1,7 +1,5 @@
 import hashlib
-import json
 import tomllib
-from datetime import datetime
 from pathlib import Path
 
 import pytest
@@ -12,7 +10,7 @@ from anima_trainer.models.catalog import SUPPORT_MODEL_URLS, VAE_FILENAME, Expec
 from anima_trainer.models.check_worker import ModelFileChecker
 from anima_trainer.models.linked_store import load_links
 from anima_trainer.runtime.data_dir import load_data_dir, open_data_dir
-from anima_trainer.runtime.install_plan import InstallPlan, InstallStep, verified_marker
+from anima_trainer.runtime.install_plan import InstallPlan, verified_marker
 from anima_trainer.settings.store import load_settings
 from anima_trainer.system.gpu_worker import GpuDetector
 from anima_trainer.training.log_parser import EpochStarted
@@ -21,56 +19,10 @@ from anima_trainer.ui.main_window import MainWindow
 from anima_trainer.workflow.install_session import InstallSession
 from anima_trainer.workflow.link_session import LinkSession
 from anima_trainer.workflow.training_session import SessionState, TrainingSession
+from tests.e2e.helpers import GPUS, INSTALL_STEPS, NOW, TIMEOUT_MS, make_runtime
 from tests.fakes import FakeDownloader, FakeInstaller, FakeRunner
-from tests.runtime_helpers import mark_installed
 
 pytestmark = pytest.mark.e2e
-NOW = datetime(2026, 10, 20, 9, 0, 0)
-TIMEOUT_MS = 5000
-GPUS = ("0: NVIDIA A", "1: NVIDIA B")
-INSTALL_STEPS = (InstallStep("venv", "Create the training venv"),)
-
-
-def _make_runtime(root, dataset, config=None):
-    opened = open_data_dir(root)
-    paths = opened.paths
-    for file in (
-        paths.train_script,
-        paths.venv_accelerate,
-        paths.accelerate_config_file,
-        paths.qwen3_model,
-        paths.vae_model,
-        paths.dit_model("anima-base-v1.0"),
-    ):
-        file.parent.mkdir(parents=True, exist_ok=True)
-        file.write_bytes(b"")
-    mark_installed(paths)
-    saved = {
-        "project_name": "saved_proj",
-        "image_directory": str(dataset),
-        "output_directory": str(root / "out"),
-        "network_dim": 16,
-        "gpu_index": "1",
-        "cache_latents": False,
-        **(config or {}),
-    }
-    paths.config_file.write_text(json.dumps(saved))
-    return paths
-
-
-@pytest.fixture
-def dataset(tmp_path):
-    folder = tmp_path / "images"
-    folder.mkdir()
-    (folder / "a.png").write_bytes(b"")
-    (folder / "a.txt").write_text("caption")
-    return folder
-
-
-@pytest.fixture(autouse=True)
-def confirm_quit_at_teardown(monkeypatch):
-    """A real question dialog would block forever when a test ends with work running."""
-    monkeypatch.setattr(QMessageBox, "question", lambda *_a, **_k: QMessageBox.StandardButton.Yes)
 
 
 @pytest.fixture
@@ -89,7 +41,7 @@ def install_plan():
 
 @pytest.fixture
 def make_window(qtbot, tmp_path, installer, install_plan):
-    def build(root, detect=lambda _paths: GPUS, expected=None):
+    def build(root, detect=lambda _paths: GPUS, expected=None, memory_check=lambda: ()):
         store = QSettings(str(tmp_path / "app.ini"), QSettings.Format.IniFormat)
         opened = open_data_dir(root)
         runner, downloader = FakeRunner(), FakeDownloader()
@@ -110,31 +62,60 @@ def make_window(qtbot, tmp_path, installer, install_plan):
         install = InstallSession(installer, plan=plan, clock=lambda: NOW)
         links = None if expected is None else LinkSession(store, ModelFileChecker(), expected)
         with qtbot.waitSignal(detector.detected, timeout=TIMEOUT_MS):
-            window = MainWindow(session, detector, store, opened, install, links=links)
+            window = MainWindow(
+                session, detector, store, opened, install, links=links, memory_check=memory_check
+            )
         qtbot.addWidget(window)
         return window, runner, downloader, store
 
     return build
 
 
-def test_window_has_the_three_tabs_and_saved_values(make_window, tmp_path, dataset):
-    _make_runtime(tmp_path / "data", dataset)
+def test_window_has_the_tabs_and_saved_values(make_window, tmp_path, dataset):
+    make_runtime(tmp_path / "data", dataset)
 
     window, *_ = make_window(tmp_path / "data")
 
     titles = [window.tabs.tabText(i) for i in range(window.tabs.count())]
-    assert titles == ["Training", "Advanced Settings", "Settings"]
+    assert titles == ["Training", "Advanced Settings", "Previews", "Generator", "Settings"]
     basic = window.training_tab.form.values()
     assert (basic["project_name"], basic["network_dim"]) == ("saved_proj", 16)
     assert window.advanced_tab.form.values()["cache_latents"] is False
 
 
 def test_detected_gpus_select_the_saved_index(make_window, tmp_path, dataset):
-    _make_runtime(tmp_path / "data", dataset)
+    make_runtime(tmp_path / "data", dataset)
 
     window, *_ = make_window(tmp_path / "data")
 
     assert window.training_tab.form.field_widget("gpu_index").currentText() == "1: NVIDIA B"
+
+
+MEMORY_LINES = (
+    "WARN: Swap is 0.5 GB; 8-16 GB is recommended.",
+    "OK: Out-of-memory daemon running: earlyoom.",
+)
+
+
+def test_memory_warnings_show_at_start_and_all_lines_in_the_settings_tab(
+    make_window, tmp_path, dataset
+):
+    window, *_ = make_window(
+        make_runtime(tmp_path / "data", dataset).root, memory_check=lambda: MEMORY_LINES
+    )
+
+    status = window.training_tab.status.text()
+    assert MEMORY_LINES[0] in status
+    assert MEMORY_LINES[1] not in status  # only warnings at start
+    assert window.settings_tab.system_label.text() == "\n".join(MEMORY_LINES)
+    assert not window.settings_tab.system_label.isHidden()
+
+
+def test_no_memory_lines_hide_the_system_line(make_window, tmp_path, dataset):
+    window, *_ = make_window(make_runtime(tmp_path / "data", dataset).root)
+
+    assert window.settings_tab.system_label.isHidden()
+    assert "WARN:" not in window.training_tab.status.text()
 
 
 def test_missing_data_dir_opens_settings_and_blocks_training(make_window, tmp_path):
@@ -147,7 +128,7 @@ def test_missing_data_dir_opens_settings_and_blocks_training(make_window, tmp_pa
 
 
 def test_configure_writes_tomls_and_saves_form_values(make_window, tmp_path, dataset):
-    paths = _make_runtime(tmp_path / "data", dataset)
+    paths = make_runtime(tmp_path / "data", dataset)
     window, *_ = make_window(paths.root)
     window.training_tab.form.field_widget("network_dim").setValue(8)
 
@@ -160,7 +141,7 @@ def test_configure_writes_tomls_and_saves_form_values(make_window, tmp_path, dat
 
 
 def test_invalid_form_value_is_reported_without_configuring(make_window, tmp_path, dataset):
-    paths = _make_runtime(tmp_path / "data", dataset)
+    paths = make_runtime(tmp_path / "data", dataset)
     window, *_ = make_window(paths.root)
     window.training_tab.form.field_widget("learning_rate").setText("abc")
 
@@ -171,7 +152,7 @@ def test_invalid_form_value_is_reported_without_configuring(make_window, tmp_pat
 
 
 def _configured_window(make_window, tmp_path, dataset):
-    paths = _make_runtime(tmp_path / "data", dataset)
+    paths = make_runtime(tmp_path / "data", dataset)
     window, runner, downloader, store = make_window(paths.root)
     window.training_tab.configure_button.click()
     return window, runner, downloader, paths
@@ -212,8 +193,8 @@ def test_stop_button_stops_the_run(make_window, tmp_path, dataset):
 
 
 def test_apply_data_dir_saves_it_and_reloads_settings(make_window, tmp_path, dataset):
-    _make_runtime(tmp_path / "data", dataset)
-    other = _make_runtime(tmp_path / "other", dataset, {"project_name": "other_proj"})
+    make_runtime(tmp_path / "data", dataset)
+    other = make_runtime(tmp_path / "other", dataset, {"project_name": "other_proj"})
     window, _, _, store = make_window(tmp_path / "data")
 
     window.settings_tab.root_picker.set_path(str(other.root))
@@ -225,7 +206,7 @@ def test_apply_data_dir_saves_it_and_reloads_settings(make_window, tmp_path, dat
 
 
 def test_download_button_downloads_missing_dit(make_window, tmp_path, dataset):
-    paths = _make_runtime(tmp_path / "data", dataset)
+    paths = make_runtime(tmp_path / "data", dataset)
     window, _, downloader, _ = make_window(paths.root)
 
     window.settings_tab.download_buttons["anima-preview"].click()
@@ -237,7 +218,7 @@ def test_download_button_downloads_missing_dit(make_window, tmp_path, dataset):
 
 
 def test_present_dit_cannot_be_downloaded_again(make_window, tmp_path, dataset):
-    _make_runtime(tmp_path / "data", dataset)
+    make_runtime(tmp_path / "data", dataset)
 
     window, *_ = make_window(tmp_path / "data")
 
@@ -265,7 +246,7 @@ def test_close_while_training_shuts_down_when_confirmed(
 
 
 def test_close_when_idle_does_not_ask(make_window, tmp_path, dataset, monkeypatch):
-    _make_runtime(tmp_path / "data", dataset)
+    make_runtime(tmp_path / "data", dataset)
     window, runner, _, _ = make_window(tmp_path / "data")
 
     def fail(*args, **kwargs):
@@ -288,7 +269,7 @@ def test_start_ignores_invalid_fields_it_does_not_use(make_window, tmp_path, dat
 
 
 def test_progress_panel_is_reset_when_a_download_ends(make_window, tmp_path, dataset):
-    _make_runtime(tmp_path / "data", dataset)
+    make_runtime(tmp_path / "data", dataset)
     window, _, downloader, _ = make_window(tmp_path / "data")
     window.settings_tab.download_buttons["anima-preview"].click()
     downloader.progress.emit(10, None)
@@ -307,7 +288,7 @@ def test_downloads_are_disabled_without_a_data_folder(make_window, tmp_path):
 
 
 def test_gpu_detection_failure_is_shown(make_window, tmp_path, dataset):
-    _make_runtime(tmp_path / "data", dataset)
+    make_runtime(tmp_path / "data", dataset)
 
     def broken(_paths):
         raise ValueError("no torch")
@@ -318,7 +299,7 @@ def test_gpu_detection_failure_is_shown(make_window, tmp_path, dataset):
 
 
 def test_shutdown_runs_once(make_window, tmp_path, dataset):
-    _make_runtime(tmp_path / "data", dataset)
+    make_runtime(tmp_path / "data", dataset)
     window, runner, downloader, _ = make_window(tmp_path / "data")
 
     window.shutdown()
@@ -328,7 +309,7 @@ def test_shutdown_runs_once(make_window, tmp_path, dataset):
 
 
 def test_download_button_downloads_a_missing_vae(make_window, tmp_path, dataset):
-    paths = _make_runtime(tmp_path / "data", dataset)
+    paths = make_runtime(tmp_path / "data", dataset)
     paths.vae_model.unlink()
     window, _, downloader, _ = make_window(paths.root)
     button = window.settings_tab.download_buttons[VAE_FILENAME]
@@ -381,7 +362,7 @@ def test_successful_install_enables_training_and_saves_the_folder(
 
     window, _, _, store = make_window(root, detect=detect)
     window.settings_tab.install_button.click()
-    _make_runtime(root, dataset)  # what a real install leaves behind
+    make_runtime(root, dataset)  # what a real install leaves behind
 
     installer.finish(True, "Installation completed.")
 
@@ -532,7 +513,7 @@ def test_failed_install_over_a_complete_runtime_is_not_reported_as_installed(
 ):
     # The files of an earlier install are there; only the last step failed.
     root = tmp_path / "data"
-    paths = _make_runtime(root, dataset)
+    paths = make_runtime(root, dataset)
     window, *_ = make_window(root)
     window.settings_tab.install_button.click()
     verified_marker(paths).unlink()
@@ -587,7 +568,7 @@ def _row_status(window, key):
 def test_linked_dit_with_the_right_hash_is_used_in_the_toml(
     qtbot, make_window, tmp_path, dataset, monkeypatch
 ):
-    paths = _make_runtime(tmp_path / "data", dataset, {"base_model": "anima-preview"})
+    paths = make_runtime(tmp_path / "data", dataset, {"base_model": "anima-preview"})
     window, _, _, store = make_window(paths.root, expected=PREVIEW_EXPECTED)
     own = _own_dit(tmp_path)
 
@@ -606,7 +587,7 @@ def test_linked_dit_with_the_right_hash_is_used_in_the_toml(
 
 
 def test_file_with_a_different_hash_is_rejected(qtbot, make_window, tmp_path, dataset, monkeypatch):
-    paths = _make_runtime(tmp_path / "data", dataset)
+    paths = make_runtime(tmp_path / "data", dataset)
     window, _, _, store = make_window(paths.root, expected=PREVIEW_EXPECTED)
     own = _own_dit(tmp_path, bytes(reversed(DIT_WEIGHTS)))
 
@@ -621,7 +602,7 @@ def test_file_with_a_different_hash_is_rejected(qtbot, make_window, tmp_path, da
 def test_linked_file_survives_a_restart_until_it_changes(
     qtbot, make_window, tmp_path, dataset, monkeypatch
 ):
-    paths = _make_runtime(tmp_path / "data", dataset)
+    paths = make_runtime(tmp_path / "data", dataset)
     window, *_ = make_window(paths.root, expected=PREVIEW_EXPECTED)
     own = _own_dit(tmp_path)
     _use_file(qtbot, window, monkeypatch, "anima-preview", own)
@@ -639,7 +620,7 @@ def test_linked_file_survives_a_restart_until_it_changes(
 
 
 def test_unlink_goes_back_to_the_data_folder(qtbot, make_window, tmp_path, dataset, monkeypatch):
-    paths = _make_runtime(tmp_path / "data", dataset)
+    paths = make_runtime(tmp_path / "data", dataset)
     window, _, _, store = make_window(paths.root, expected=PREVIEW_EXPECTED)
     _use_file(qtbot, window, monkeypatch, "anima-preview", _own_dit(tmp_path))
 
@@ -651,7 +632,7 @@ def test_unlink_goes_back_to_the_data_folder(qtbot, make_window, tmp_path, datas
 
 
 def test_training_is_blocked_while_a_file_is_checked(qtbot, make_window, tmp_path, dataset):
-    paths = _make_runtime(tmp_path / "data", dataset)
+    paths = make_runtime(tmp_path / "data", dataset)
     window, *_ = make_window(paths.root, expected=PREVIEW_EXPECTED)
 
     window._set_checking(True)
@@ -664,7 +645,7 @@ def test_training_is_blocked_while_a_file_is_checked(qtbot, make_window, tmp_pat
 
 
 def test_unknown_model_check_error_is_shown(qtbot, make_window, tmp_path, dataset):
-    paths = _make_runtime(tmp_path / "data", dataset)
+    paths = make_runtime(tmp_path / "data", dataset)
     window, *_ = make_window(paths.root, expected=PREVIEW_EXPECTED)
 
     window.settings_tab.link_requested.emit(VAE_FILENAME, str(tmp_path / "x"))

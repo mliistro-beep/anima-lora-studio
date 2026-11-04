@@ -1,4 +1,4 @@
-<!-- Generated: 2026-10-26 | Files scanned: 129 (62 src, 67 tests) | Token estimate: ~330 -->
+<!-- Generated: 2026-10-28 | Files scanned: 199 (95 src, 104 tests) | Token estimate: ~330 -->
 # Data
 
 No database. All state is files inside the app's data folder (<data>, default
@@ -11,14 +11,21 @@ key: path, size, mtime_ns).
 | Settings | <data>/config.json | settings/store.py save_settings | JSON, 35 keys, Citron order, indent 2 |
 | Training config | <data>/configs/<proj>_training_<ts>.toml | toml_builder.write_configs | TOML (toml lib, byte-identical to Citron) |
 | Dataset config | <data>/configs/<proj>_dataset_<ts>.toml | toml_builder.write_configs | TOML |
-| Training log | <data>/logs/<proj>_<ts>.log | training/runner.py | "Command:", "Started:", blank, raw lines |
-| DiT model | <data>/models/anima/dit/<base>.safetensors | models/downloader.py | via .part, renamed when complete |
-| Qwen3 / VAE | <data>/models/anima/{text_encoder,vae}/<file>.safetensors | models/downloader.py | via .part |
+| Training log | <data>/logs/<proj>_<ts>.log | training/runner.py | "Command:", "Started:", blank, raw lines; a "RESOURCES ..." line at the start and every minute |
+| DiT model | <data>/models/anima/dit/<base>.safetensors | models/downloader.py | via .part, renamed when complete and size + SHA-256 match |
+| Qwen3 / VAE | <data>/models/anima/{text_encoder,vae}/<file>.safetensors | models/downloader.py | via .part, checked like the DiT |
 | Linked model | anywhere chosen by the user | never written | used in place while size and mtime are unchanged |
 | Install state | <data>/.install/{venv,sd-scripts,requirements,verified}.commit | runtime/installer.py | one-line stamp: "ready" (venv), pinned commit, commit + "+torchvision" (requirements) |
 | Install log | <data>/logs/install_<ts>.log | workflow/install_session.py | step titles and output |
 | Checkpoints | <output_dir>/<proj>-NNNNNN.safetensors, <proj>.safetensors | sd-scripts | read by log_parser (CheckpointSaved) |
-| Samples (M5) | <output_dir>/sample/*.png | sd-scripts | planned gallery source |
+| Preview prompts | <data>/configs/<proj>_samples_<ts>.json | toml_builder.write_configs | JSON list for sd-scripts, only with previews on |
+| Preview settings | <data>/preview.json | preview/settings.py save_preview_settings | JSON (PreviewSettings) |
+| Generator settings | <data>/generator.json | preview/generator_settings.py | JSON (GeneratorSettings) |
+| Samples | <output_dir>/sample/<proj>_eNNNNNN_PP_<YYYYmmddHHMMSS>[_seed].png | sd-scripts (train_with_previews.py) | PNG, gallery source (sample_files.py) |
+| Generated images | <output_dir>/generated/<proj>_<label>_<time>_<seed>[_N].png | runtime_scripts/generate.py | PNG, never overwritten |
+| App venv stamp | <checkout>/.venv/.anima-pyproject.sha256 | run_linux.sh | "<sha256 of pyproject.toml> <checkout path>" |
+| Launcher log | ~/.local/state/anima-trainer/launcher.log | run_linux.sh (no terminal only) | launcher lines, appended |
+| Menu entry, icon | ~/.local/share/applications/anima-lora-studio.desktop, icons/hicolor/scalable/apps/anima-lora-studio.svg | run_linux.sh --install-desktop | Desktop Entry 1.5, SVG |
 
 <ts> = %Y-%m-%d_%H%M%S (toml_builder.FILE_TIMESTAMP_FORMAT)
 

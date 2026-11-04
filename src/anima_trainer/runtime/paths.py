@@ -46,6 +46,14 @@ class RuntimePaths:
         return self.root / "config.json"
 
     @property
+    def preview_settings_file(self) -> Path:
+        return self.root / "preview.json"
+
+    @property
+    def generator_settings_file(self) -> Path:
+        return self.root / "generator.json"
+
+    @property
     def configs_dir(self) -> Path:
         return self.root / "configs"
 
@@ -72,10 +80,6 @@ class RuntimePaths:
     @property
     def train_script(self) -> Path:
         return self.sd_scripts_dir / "anima_train_network.py"
-
-    @property
-    def inference_script(self) -> Path:
-        return self.sd_scripts_dir / "anima_minimal_inference.py"
 
     @property
     def accelerate_config(self) -> Path:

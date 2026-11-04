@@ -143,3 +143,68 @@ def test_sends_user_agent(file_server, tmp_path):
     download_file(url, tmp_path / "m.safetensors")
 
     assert state.requests[0]["User-Agent"].startswith("anima-trainer/")
+
+
+def _expected(payload=PAYLOAD):
+    import hashlib
+
+    from anima_trainer.models.catalog import ExpectedFile
+
+    return ExpectedFile(hashlib.sha256(payload).hexdigest(), len(payload))
+
+
+def test_download_matching_the_expected_sha256_is_kept(file_server, tmp_path):
+    state, url = file_server
+    state.payload = PAYLOAD
+    target = tmp_path / "model.safetensors"
+
+    assert download_file(url, target, expected=_expected()) == target
+    assert target.read_bytes() == PAYLOAD
+
+
+def test_download_with_a_different_sha256_is_deleted(file_server, tmp_path):
+    state, url = file_server
+    state.payload = PAYLOAD
+    target = tmp_path / "model.safetensors"
+    damaged = bytes([PAYLOAD[0] ^ 1]) + PAYLOAD[1:]
+
+    with pytest.raises(DownloadError, match="SHA-256 does not match"):
+        download_file(url, target, expected=_expected(damaged))
+
+    assert not target.exists()
+    assert not partial_path(target).exists()
+
+
+def test_download_with_a_different_size_is_deleted(file_server, tmp_path):
+    state, url = file_server
+    state.payload = PAYLOAD
+    target = tmp_path / "model.safetensors"
+
+    with pytest.raises(DownloadError, match="wrong size"):
+        download_file(url, target, expected=_expected(PAYLOAD + b"x"))
+
+    assert not target.exists() and not partial_path(target).exists()
+
+
+def test_complete_partial_file_is_checked_before_it_is_finalized(file_server, tmp_path):
+    state, url = file_server
+    state.payload = PAYLOAD
+    target = tmp_path / "model.safetensors"
+    partial_path(target).write_bytes(bytes(len(PAYLOAD)))  # right size, wrong content
+
+    with pytest.raises(DownloadError, match="SHA-256 does not match"):
+        download_file(url, target, expected=_expected())
+
+    assert not target.exists() and not partial_path(target).exists()
+
+
+def test_cancel_during_the_check_keeps_the_partial_file(file_server, tmp_path):
+    state, url = file_server
+    state.payload = PAYLOAD
+    target = tmp_path / "model.safetensors"
+    partial_path(target).write_bytes(PAYLOAD)  # complete: only the check is left
+
+    with pytest.raises(DownloadCancelled):
+        download_file(url, target, is_cancelled=lambda: True, expected=_expected())
+
+    assert partial_path(target).read_bytes() == PAYLOAD and not target.exists()

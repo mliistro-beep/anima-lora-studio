@@ -2,6 +2,7 @@ import pytest
 
 from anima_trainer.models.catalog import (
     BASE_MODEL_URLS,
+    EXPECTED_FILES,
     QWEN3_FILENAME,
     SUPPORT_MODEL_URLS,
     VAE_FILENAME,
@@ -14,10 +15,13 @@ def test_qwen3_and_vae_come_from_the_support_urls(tmp_path):
     paths = RuntimePaths(tmp_path)
 
     assert model_download(paths, QWEN3_FILENAME) == ModelDownload(
-        "Qwen3", SUPPORT_MODEL_URLS[QWEN3_FILENAME], paths.qwen3_model
+        "Qwen3",
+        SUPPORT_MODEL_URLS[QWEN3_FILENAME],
+        paths.qwen3_model,
+        EXPECTED_FILES[QWEN3_FILENAME],
     )
     assert model_download(paths, VAE_FILENAME) == ModelDownload(
-        "VAE", SUPPORT_MODEL_URLS[VAE_FILENAME], paths.vae_model
+        "VAE", SUPPORT_MODEL_URLS[VAE_FILENAME], paths.vae_model, EXPECTED_FILES[VAE_FILENAME]
     )
 
 
@@ -28,6 +32,7 @@ def test_a_base_model_downloads_its_dit_with_the_citron_wording(tmp_path):
         "base model 'anima-preview'",
         BASE_MODEL_URLS["anima-preview"],
         paths.dit_model("anima-preview"),
+        EXPECTED_FILES["anima-preview"],
     )
 
 

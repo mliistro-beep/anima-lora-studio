@@ -3,6 +3,8 @@
 Builders are pure (settings in, dict out); only write_configs() touches the filesystem.
 """
 
+import json
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import date, datetime
 from pathlib import Path
@@ -10,6 +12,11 @@ from typing import Any
 
 import toml
 
+from anima_trainer.preview.sample_prompts import (
+    SampleRequest,
+    build_sample_prompts,
+    sample_config_keys,
+)
 from anima_trainer.runtime.paths import RuntimePaths
 from anima_trainer.settings.schema import TrainingSettings
 
@@ -22,6 +29,7 @@ MAX_TOKEN_LENGTH = 512
 class GeneratedConfigs:
     training: Path
     dataset: Path
+    samples: Path | None = None  # preview prompts, only when previews are on
 
 
 def build_training_config(
@@ -29,8 +37,10 @@ def build_training_config(
     paths: RuntimePaths,
     today: date,
     single_process_loader: bool = False,
+    sample_keys: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Citron's training config; single_process_loader adds the Python 3.14 workaround."""
+    """Citron's training config; single_process_loader adds the Python 3.14 workaround and
+    sample_keys the previews (without them the config is exactly Citron's)."""
     s = settings
     config = {
         "pretrained_model_name_or_path": str(paths.dit_model(s.base_model)),
@@ -72,6 +82,7 @@ def build_training_config(
         "noise_offset": s.noise_offset,
         "multires_noise_discount": s.multires_noise_discount,
         "training_comment": f"Anima LoRA - {today.isoformat()}",
+        **(sample_keys or {}),
     }
     if single_process_loader:
         return {**config, "max_data_loader_n_workers": 0}
@@ -118,15 +129,28 @@ def write_configs(
     paths: RuntimePaths,
     now: datetime,
     single_process_loader: bool = False,
+    samples: SampleRequest | None = None,
 ) -> GeneratedConfigs:
-    """Write both TOML files into the configs dir of the data folder and create the output dir."""
+    """Write both TOML files (and the preview prompts, if any) into the configs dir of the
+    data folder and create the output dir."""
     Path(settings.output_directory).mkdir(parents=True, exist_ok=True)
     paths.configs_dir.mkdir(parents=True, exist_ok=True)
     training = paths.configs_dir / config_file_name(settings.project_name, "training", now)
     dataset = paths.configs_dir / config_file_name(settings.project_name, "dataset", now)
-    training.write_text(
-        render_toml(build_training_config(settings, paths, now.date(), single_process_loader)),
-        encoding="utf-8",
-    )
+    prompts_file, sample_keys = _write_sample_prompts(settings, paths, now, samples)
+    config = build_training_config(settings, paths, now.date(), single_process_loader, sample_keys)
+    training.write_text(render_toml(config), encoding="utf-8")
     dataset.write_text(render_toml(build_dataset_config(settings)), encoding="utf-8")
-    return GeneratedConfigs(training, dataset)
+    return GeneratedConfigs(training, dataset, prompts_file)
+
+
+def _write_sample_prompts(
+    settings: TrainingSettings, paths: RuntimePaths, now: datetime, samples: SampleRequest | None
+) -> tuple[Path | None, dict[str, Any] | None]:
+    if samples is None:
+        return None, None
+    name = config_file_name(settings.project_name, "samples", now).removesuffix(".toml")
+    prompts_file = paths.configs_dir / f"{name}.json"
+    prompts = build_sample_prompts(samples.settings, samples.size)
+    prompts_file.write_text(json.dumps(list(prompts), indent=2), encoding="utf-8")
+    return prompts_file, sample_config_keys(samples.settings, prompts_file)

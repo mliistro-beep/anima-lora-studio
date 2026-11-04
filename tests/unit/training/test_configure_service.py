@@ -228,3 +228,41 @@ def test_older_venv_keeps_citron_toml(citron, dataset, tmp_path):
     written = toml.loads(result.configs.training.read_text())
     assert "max_data_loader_n_workers" not in written
     assert "DataLoader workers disabled" not in _text(result)
+
+
+def _preview_plan(total_mib=12288, **changes):
+    from anima_trainer.preview.preview_plan import plan_previews
+    from anima_trainer.preview.settings import PreviewSettings
+
+    settings = PreviewSettings(enabled=True, prompts=("a girl",)).with_changes(**changes)
+    return plan_previews(settings, total_mib)
+
+
+def test_previews_write_the_prompt_file_and_report_the_plan(citron, dataset, tmp_path):
+    result = configure_training(_settings(dataset, tmp_path), citron, NOW, _preview_plan())
+
+    assert result.success
+    assert result.configs is not None and result.configs.samples is not None
+    training = toml.loads(result.configs.training.read_text())
+    assert training["sample_prompts"] == str(result.configs.samples)
+    text = _text(result)
+    assert "Previews:" in text and "Preview size 1024x1024" in text
+    assert f"  OK: Preview prompts: {result.configs.samples}" in result.messages
+
+
+def test_preview_error_fails_before_writing_anything(citron, dataset, tmp_path):
+    plan = _preview_plan(prompts=())
+
+    result = configure_training(_settings(dataset, tmp_path), citron, NOW, plan)
+
+    assert not result.success
+    assert result.messages[-1] == "ERROR: Previews are on but there is no preview prompt."
+    assert not citron.configs_dir.exists()
+
+
+def test_previews_turned_off_for_memory_still_configure_without_samples(citron, dataset, tmp_path):
+    result = configure_training(_settings(dataset, tmp_path), citron, NOW, _preview_plan(4096))
+
+    assert result.success
+    assert result.configs is not None and result.configs.samples is None
+    assert "WARN: Previews turned off" in _text(result)

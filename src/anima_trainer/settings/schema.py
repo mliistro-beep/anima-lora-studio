@@ -30,7 +30,8 @@ REQUIRED_TEXT_FIELDS = (
 
 
 def _reject_bool(value: Any) -> Any:
-    # Lax mode would turn True/False into 1/0; a checkbox value in a number field is a bug.
+    # Lax mode would turn True/False into 1/0 (or 1.0/0.0); a checkbox value in a number
+    # field is a bug.
     if isinstance(value, bool):
         raise ValueError("a number is required, not a boolean")
     return value
@@ -51,6 +52,7 @@ def _check_project_name(value: str) -> str:
 
 
 WholeNumber = Annotated[int, BeforeValidator(_reject_bool)]
+DecimalNumber = Annotated[float, BeforeValidator(_reject_bool)]
 GpuIndex = Annotated[str, BeforeValidator(_gpu_index_to_str), Field(pattern=GPU_INDEX_PATTERN)]
 ProjectName = Annotated[str, AfterValidator(_check_project_name)]
 
@@ -67,11 +69,11 @@ class TrainingSettings(BaseModel):
     output_directory: str = DEFAULTS["output_directory"]
     network_dim: WholeNumber = Field(DEFAULTS["network_dim"], ge=1)
     network_alpha: WholeNumber = Field(DEFAULTS["network_alpha"], ge=1)
-    learning_rate: float = Field(DEFAULTS["learning_rate"], gt=0)
+    learning_rate: DecimalNumber = Field(DEFAULTS["learning_rate"], gt=0)
     max_train_epochs: WholeNumber = Field(DEFAULTS["max_train_epochs"], ge=1)
     resolution: WholeNumber = Field(DEFAULTS["resolution"], ge=64)
     repeats: WholeNumber = Field(DEFAULTS["repeats"], ge=1)
-    caption_dropout: float = Field(DEFAULTS["caption_dropout"], ge=0.0, le=1.0)
+    caption_dropout: DecimalNumber = Field(DEFAULTS["caption_dropout"], ge=0.0, le=1.0)
     gpu_index: GpuIndex = DEFAULTS["gpu_index"]
     # Advanced
     optimizer_type: OptimizerType = DEFAULTS["optimizer_type"]
@@ -80,16 +82,16 @@ class TrainingSettings(BaseModel):
     lr_warmup_steps: WholeNumber = Field(DEFAULTS["lr_warmup_steps"], ge=0)
     train_batch_size: WholeNumber = Field(DEFAULTS["train_batch_size"], ge=1)
     gradient_accumulation_steps: WholeNumber = Field(DEFAULTS["gradient_accumulation_steps"], ge=1)
-    max_grad_norm: float = Field(DEFAULTS["max_grad_norm"], ge=0)
+    max_grad_norm: DecimalNumber = Field(DEFAULTS["max_grad_norm"], ge=0)
     save_every_n_epochs: WholeNumber = Field(DEFAULTS["save_every_n_epochs"], ge=1)
     save_last_n_epochs: WholeNumber = Field(DEFAULTS["save_last_n_epochs"], ge=1)
     mixed_precision: MixedPrecision = DEFAULTS["mixed_precision"]
     gradient_checkpointing: bool = DEFAULTS["gradient_checkpointing"]
     seed: WholeNumber = DEFAULTS["seed"]
-    noise_offset: float = Field(DEFAULTS["noise_offset"], ge=0)
-    multires_noise_discount: float = Field(DEFAULTS["multires_noise_discount"], ge=0, le=1)
+    noise_offset: DecimalNumber = Field(DEFAULTS["noise_offset"], ge=0)
+    multires_noise_discount: DecimalNumber = Field(DEFAULTS["multires_noise_discount"], ge=0, le=1)
     timestep_sampling: TimestepSampling = DEFAULTS["timestep_sampling"]
-    discrete_flow_shift: float = Field(DEFAULTS["discrete_flow_shift"], gt=0)
+    discrete_flow_shift: DecimalNumber = Field(DEFAULTS["discrete_flow_shift"], gt=0)
     cache_latents: bool = DEFAULTS["cache_latents"]
     cache_text_encoder_outputs: bool = DEFAULTS["cache_text_encoder_outputs"]
     vae_chunk_size: WholeNumber = Field(DEFAULTS["vae_chunk_size"], ge=1)

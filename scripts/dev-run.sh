@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Start the app from the source tree, for development only.
 #
-# Not a release launcher: the release launcher (M6, run_linux.sh and the .desktop entry) will be
-# designed for an installed app. This one assumes the repository checkout and its .venv.
+# Not the release launcher: users start the app with ./run_linux.sh (which also installs the menu
+# entry). This one adds the dev tools (--setup) and the scratch folders (--scratch).
 #
 # Usage: scripts/dev-run.sh [--setup] [--scratch [DIR]] [-- QT_ARGS...]
 #   --setup          create .venv and install the app with the dev tools if .venv is missing
