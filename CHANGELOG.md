@@ -5,9 +5,7 @@ All notable changes to Anima LoRA Studio are listed here. The format follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html). The milestones (M0-M7) are
 described in [DOCS/milestones.md](DOCS/milestones.md).
 
-<!-- When v0.2.0 is tagged: replace "Unreleased" with the date and point the [0.2.0] link
-     at compare/v0.1.0...v0.2.0. -->
-## [0.2.0] - Unreleased
+## [0.2.0] - 2026-11-04
 
 The release name is now Anima LoRA Studio. The package (`anima_trainer`), the command
 (`anima-trainer`), the data folder (`~/.local/share/anima-trainer`) and the settings
@@ -69,5 +67,5 @@ Anima LoRA Trainer UI, independent from Citron.
 - GPL-3.0-or-later license, License and Credits dialogs, `THIRD_PARTY_NOTICES.md` and the
   development launcher `scripts/dev-run.sh` (M4c).
 
-[0.2.0]: https://github.com/mliistro-beep/anima-lora-studio/compare/v0.1.0...feat/desktop-app
+[0.2.0]: https://github.com/mliistro-beep/anima-lora-studio/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/mliistro-beep/anima-lora-studio/releases/tag/v0.1.0
