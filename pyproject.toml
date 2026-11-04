@@ -32,7 +32,7 @@ dev = [
 ]
 
 [project.scripts]
-anima-trainer = "anima_trainer.main:main"
+anima-trainer = "anima_trainer.cli.entry:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

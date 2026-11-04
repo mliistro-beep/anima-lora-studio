@@ -17,7 +17,7 @@ run_linux.sh  finds Python >= 3.12, creates <checkout>/.venv, pip install -e . w
               --install-desktop / --uninstall-desktop: anima-lora-studio.desktop + hicolor SVG icon
 src/anima_trainer/main.py  main() -> int (window icon, setDesktopFileName("anima-lora-studio"));
                            create_window(store, detect) -> MainWindow
-console script: anima-trainer = anima_trainer.main:main
+console script: anima-trainer = anima_trainer.cli.entry:main (train -> cli/train_command.py, QtCore only; otherwise main.main)
 
 ## Layers (feature packages)
 runtime/   data folder (QSettings key runtime/data_dir, default ~/.local/share/anima-trainer), RuntimePaths,

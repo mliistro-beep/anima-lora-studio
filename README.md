@@ -65,7 +65,8 @@ at scratch folders first, or it uses your real data folder.
 | Command | Description |
 |---------|-------------|
 | `./run_linux.sh` | Start the app, creating or updating `.venv` when needed; `--install-desktop` / `--uninstall-desktop` add or remove the menu entry |
-| `.venv/bin/anima-trainer` | Start the desktop app (`anima_trainer.main:main`) |
+| `.venv/bin/anima-trainer` | Start the desktop app (`anima_trainer.cli.entry:main`, then `anima_trainer.main:main`) |
+| `.venv/bin/anima-trainer train` | Train with the settings saved by the last Configure, without a window |
 | `scripts/dev-run.sh` | Development only: start the app from the checkout (`--setup` creates `.venv`, `--scratch [DIR]` uses scratch XDG folders, default `~/anima-dev-scratch`) |
 | `.venv/bin/pytest` | Run all tests (`tests/`), markers `integration`, `e2e` and `runtime` available (`runtime` tests are skipped unless `ANIMA_TRAINER_TEST_RUNTIME` is set) |
 | `.venv/bin/pytest --cov` | Run tests with coverage; fails under 80% (UI and `main.py` excluded) |

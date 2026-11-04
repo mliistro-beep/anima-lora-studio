@@ -1,0 +1,44 @@
+"""The `anima-trainer` command: the graphical app, or a terminal command.
+
+Decides before importing anything graphical, so a terminal command starts on a machine without
+display libraries. Unknown arguments go to the graphical app, which passes them to Qt.
+"""
+
+import sys
+from collections.abc import Sequence
+
+from anima_trainer.cli.train_plan import EXIT_STOPPED
+
+USAGE = """\
+usage: anima-trainer [Qt arguments]
+       anima-trainer COMMAND [--help]
+
+Without a command, opens the graphical app.
+
+commands:
+  train    train a LoRA with the settings saved by the last Configure
+"""
+HELP_FLAGS = {"-h", "--help"}
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    """`argv` picks the command; the graphical app always reads its Qt arguments from sys.argv."""
+    arguments = list(sys.argv[1:] if argv is None else argv)
+    command = arguments[0] if arguments else None
+    if command in HELP_FLAGS:
+        sys.stdout.write(USAGE)
+        return 0
+    if command == "train":
+        from anima_trainer.cli.train_command import run_train  # noqa: PLC0415
+
+        try:
+            return run_train(arguments[1:])
+        except KeyboardInterrupt:  # Ctrl+C before the training started
+            return EXIT_STOPPED
+    from anima_trainer.main import main as open_window  # noqa: PLC0415
+
+    return open_window()
+
+
+if __name__ == "__main__":
+    sys.exit(main())
