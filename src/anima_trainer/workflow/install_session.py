@@ -17,6 +17,7 @@ from PySide6.QtCore import QObject, Signal, SignalInstance
 from anima_trainer.runtime.install_plan import InstallPlan, InstallStep, needs_venv, plan_install
 from anima_trainer.runtime.paths import RuntimePaths
 from anima_trainer.runtime.python_finder import find_python
+from anima_trainer.system.gpu_lock import INSTALL_JOB, GpuLock
 from anima_trainer.training.runner import log_file_path
 
 INSTALL_LOG_NAME = "install"
@@ -57,11 +58,13 @@ class InstallSession(QObject):
         plan: Callable[[RuntimePaths], InstallPlan] = plan_for,
         clock: Callable[[], datetime] = datetime.now,
         parent: QObject | None = None,
+        lock: GpuLock | None = None,
     ) -> None:
         super().__init__(parent)
         self._installer = installer
         self._plan = plan
         self._clock = clock
+        self._lock = lock
         self._log: TextIO | None = None
         self._log_path: Path | None = None
         installer.step_started.connect(self._on_step_started)
@@ -79,6 +82,11 @@ class InstallSession(QObject):
         plan = self._plan(paths)
         if not plan.ready:
             return plan.problems
+        # The install rewrites the venv that a training of another process is running from.
+        if self._lock is not None:
+            refusal = self._lock.acquire(INSTALL_JOB, paths.gpu_lock_file)
+            if refusal is not None:
+                return (refusal,)
         now = self._clock()
         log_path = log_file_path(paths.logs_dir, INSTALL_LOG_NAME, now)
         try:
@@ -87,6 +95,7 @@ class InstallSession(QObject):
             self._log = open(log_path, "w", encoding="utf-8", errors="replace")  # noqa: SIM115
             self._log_path = log_path
         except OSError as error:
+            self._release_lock()
             return (f"Could not write the install log {log_path}: {error}",)
         self.log_line.emit(f"Install log: {log_path}")
         self._write(f"Started: {now.isoformat()}")
@@ -94,6 +103,7 @@ class InstallSession(QObject):
             self._installer.start(plan.steps)
         except Exception:
             self._close_log()  # no finished will come to close it
+            self._release_lock()
             raise
         return ()
 
@@ -104,6 +114,11 @@ class InstallSession(QObject):
     def shutdown(self) -> None:
         """Block until the running install command has exited."""
         self._installer.shutdown()
+        self._release_lock()
+
+    def _release_lock(self) -> None:
+        if self._lock is not None:
+            self._lock.release(INSTALL_JOB)
 
     def _on_step_started(self, position: int, total: int, step: InstallStep) -> None:
         text = f"Step {position}/{total}: {step.title}"
@@ -113,6 +128,7 @@ class InstallSession(QObject):
     def _on_finished(self, ok: bool, message: str) -> None:
         self._emit_line(f"{'OK' if ok else 'ERROR'}: {message}")
         self._close_log()
+        self._release_lock()
         self.finished.emit(ok, message)
 
     def _emit_line(self, line: str) -> None:

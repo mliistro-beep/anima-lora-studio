@@ -14,6 +14,7 @@ from pathlib import Path
 import pytest
 
 from tests.e2e.helpers import make_runtime
+from tests.lock_helpers import held_by_another_process
 from tests.process_helpers import is_alive, wait_until_dead
 
 pytestmark = [
@@ -204,3 +205,37 @@ def test_help_lists_the_commands(setup):
     result = _run(env, "-m", "anima_trainer.cli.entry", "--help")
     assert result.returncode == 0
     assert "train" in result.stdout
+
+
+def test_a_training_of_another_process_stops_the_command_before_writing_anything(setup):
+    paths, env = setup
+    _accelerate(paths, "train", "0")
+    before = paths.config_file.read_text()
+    with held_by_another_process(paths.gpu_lock_file) as pid:
+        result = _run(env, *ENTRY)
+    assert result.returncode == 2, result.stdout + result.stderr
+    assert "ERROR: " in result.stdout
+    assert str(pid) in result.stdout
+    assert paths.config_file.read_text() == before
+    assert list(paths.configs_dir.glob("*.toml")) == []
+
+
+def test_a_running_command_stops_another_command(setup, tmp_path):
+    paths, env = setup
+    pid_file = tmp_path / "child.pid"
+    _accelerate(paths, "sleep", str(pid_file))
+    first = subprocess.Popen(
+        [sys.executable, *ENTRY],
+        env=env,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    try:
+        _wait_for_file(pid_file)
+        second = _run(env, *ENTRY)
+        assert second.returncode == 2, second.stdout + second.stderr
+        assert str(first.pid) in second.stdout
+    finally:
+        first.send_signal(signal.SIGINT)
+        first.wait(timeout=TIMEOUT_S)
+        _kill_group_of(pid_file)

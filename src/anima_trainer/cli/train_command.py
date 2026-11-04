@@ -28,6 +28,7 @@ from anima_trainer.runtime.data_dir import (
     load_data_dir,
     open_data_dir,
 )
+from anima_trainer.system.gpu_lock import TERMINAL_JOB, GpuLock
 from anima_trainer.system.gpu_memory import read_all_gpu_memory
 from anima_trainer.system.memory_safety import read_memory_safety, warnings_only
 from anima_trainer.system.process_group import KILL_GRACE_MS
@@ -97,14 +98,23 @@ def _train(app: QCoreApplication, output: TerminalOutput) -> int:
     if blockers:
         return EXIT_NOT_STARTED
 
-    runner = TrainingRunner(monitor=ResourceMonitor())
-    session = TrainingSession(paths, opened.settings, runner, ModelDownloader())
-    session.set_gpu_memory(read_all_gpu_memory())
-    result = session.configure(opened.settings, previews.settings)
-    _print(output, *result.messages, "")
-    if not result.success:
+    lock = GpuLock()
+    # Before Configure: a refused command leaves the configs and the settings as they were.
+    refusal = lock.acquire(TERMINAL_JOB, paths.gpu_lock_file)
+    if refusal is not None:
+        _print(output, f"ERROR: {refusal}")
         return EXIT_NOT_STARTED
-    return _run(app, session, runner, output)
+    try:
+        runner = TrainingRunner(monitor=ResourceMonitor())
+        session = TrainingSession(paths, opened.settings, runner, ModelDownloader(), lock=lock)
+        session.set_gpu_memory(read_all_gpu_memory())
+        result = session.configure(opened.settings, previews.settings)
+        _print(output, *result.messages, "")
+        if not result.success:
+            return EXIT_NOT_STARTED
+        return _run(app, session, runner, output)
+    finally:
+        lock.release(TERMINAL_JOB)
 
 
 def _run(

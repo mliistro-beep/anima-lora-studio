@@ -15,6 +15,7 @@ from PySide6.QtCore import QObject, Signal
 from anima_trainer.preview.inference_command import GenerationRequest, build_generation_launch
 from anima_trainer.preview.vram_profile import PROFILES
 from anima_trainer.runtime.paths import RuntimePaths
+from anima_trainer.system.gpu_lock import GENERATOR_JOB, GpuLock
 from anima_trainer.training.runner import RunOutcome
 from anima_trainer.training.toml_builder import FILE_TIMESTAMP_FORMAT
 from anima_trainer.workflow.training_session import Runner
@@ -37,10 +38,12 @@ class GeneratorSession(QObject):
         runner: Runner,
         clock: Callable[[], datetime] = datetime.now,
         parent: QObject | None = None,
+        lock: GpuLock | None = None,
     ) -> None:
         super().__init__(parent)
         self._runner = runner
         self._clock = clock
+        self._lock = lock
         self._queue: tuple[GenerationRequest, ...] = ()
         self._paths: RuntimePaths | None = None
         self._gpu_index = ""
@@ -71,6 +74,10 @@ class GeneratorSession(QObject):
         problem = _model_problem(paths, requests)
         if problem is not None:
             return problem
+        if self._lock is not None:
+            refusal = self._lock.acquire(GENERATOR_JOB, paths.gpu_lock_file)
+            if refusal is not None:
+                return refusal
         self._queue, self._paths, self._gpu_index = requests, paths, gpu_index
         self._training, self._done = training, 0
         self._set_running(True)
@@ -85,6 +92,7 @@ class GeneratorSession(QObject):
     def shutdown(self) -> None:
         self._queue = ()
         self._runner.shutdown()
+        self._release_lock()
 
     def _start_next(self) -> None:
         if self._paths is None or not self._queue:
@@ -147,8 +155,13 @@ class GeneratorSession(QObject):
 
     def _finish(self, ok: bool, message: str) -> None:
         self._queue = ()
+        self._release_lock()
         self._set_running(False)
         self.finished.emit(ok, message)
+
+    def _release_lock(self) -> None:
+        if self._lock is not None:
+            self._lock.release(GENERATOR_JOB)
 
     def _set_running(self, running: bool) -> None:
         if running != self._running:

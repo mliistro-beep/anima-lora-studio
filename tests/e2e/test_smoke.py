@@ -59,3 +59,16 @@ def test_terminal_signals_quit_the_app_through_the_given_callback():
 
     assert calls == ["quit", "quit"]
     assert signal.getsignal(signal.SIGTERM) == before
+
+
+@pytest.mark.e2e
+def test_the_window_shares_one_gpu_lock_among_training_generator_and_install(qtbot, tmp_path):
+    store = QSettings(str(tmp_path / "app.ini"), QSettings.Format.IniFormat)
+    store.setValue(DATA_DIR_KEY, str(tmp_path / "data"))
+    window = create_window(store, detect=lambda _paths: ("0",))
+    qtbot.addWidget(window)
+
+    lock = window.session._lock
+    assert lock is not None
+    assert window.previews.generator._lock is lock
+    assert window._install._lock is lock

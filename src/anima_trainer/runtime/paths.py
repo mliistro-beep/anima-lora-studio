@@ -58,6 +58,10 @@ class RuntimePaths:
         return self.root / "configs"
 
     @property
+    def gpu_lock_file(self) -> Path:
+        return self.root / "gpu.lock"
+
+    @property
     def presets_dir(self) -> Path:
         return self.root / "presets"
 
