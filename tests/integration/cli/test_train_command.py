@@ -1,14 +1,15 @@
 """`anima-trainer train` as a user runs it: a real process, no display, a fake accelerate."""
 
 import contextlib
-import json
 import os
 import pty
+import select
 import shlex
 import signal
 import subprocess
 import sys
 import time
+import tomllib
 from pathlib import Path
 
 import pytest
@@ -25,6 +26,20 @@ FAKE = Path(__file__).parents[2] / "fixtures" / "fake_accelerate.py"
 TIMEOUT_S = 30
 PROJECT = "cli_run"
 ENTRY = ("-m", "anima_trainer.cli.entry", "train")
+PRESET = "Person"
+
+
+def _options(paths, *extra):
+    """A complete command line for the runtime `setup` made."""
+    return (
+        "--preset", PRESET, "--project", PROJECT,
+        "--dataset", str(paths.root.parents[1] / "images"),
+        "--output", str(paths.root / "out"), "--epochs", "2", "--repeats", "1", *extra,
+    )  # fmt: skip
+
+
+def _train(paths, *extra):
+    return (*ENTRY, *_options(paths, "--yes", *extra))
 
 
 @pytest.fixture
@@ -78,7 +93,7 @@ def _kill_group_of(pid_file):
 def test_a_saved_configuration_trains_to_the_end_without_a_display(setup):
     paths, env = setup
     _accelerate(paths, "train", "0")
-    result = _run(env, *ENTRY)
+    result = _run(env, *_train(paths))
     assert result.returncode == 0, result.stdout + result.stderr
     assert "OK: Training completed successfully!" in result.stdout
     assert (paths.root / "out" / f"{PROJECT}.safetensors").exists()
@@ -92,7 +107,7 @@ def test_no_graphical_qt_module_is_loaded(setup):
     code = (
         "import json, sys\n"
         "from anima_trainer.cli.entry import main\n"
-        "code = main(['train'])\n"
+        f"code = main({['train', *_options(paths, '--yes')]!r})\n"
         "loaded = [m for m in sys.modules if m in ('PySide6.QtGui', 'PySide6.QtWidgets')]\n"
         "sys.stderr.write('LOADED=' + json.dumps(loaded))\n"
         "sys.exit(code)\n"
@@ -105,7 +120,7 @@ def test_no_graphical_qt_module_is_loaded(setup):
 def test_a_failed_run_exits_with_failure_and_reports_it(setup):
     paths, env = setup
     _accelerate(paths, "train", "3")
-    result = _run(env, *ENTRY)
+    result = _run(env, *_train(paths))
     assert result.returncode == 1
     assert "exit code: 3" in result.stdout
 
@@ -113,7 +128,7 @@ def test_a_failed_run_exits_with_failure_and_reports_it(setup):
 def test_a_missing_model_stops_before_writing_any_config(setup):
     paths, env = setup
     paths.vae_model.unlink()
-    result = _run(env, *ENTRY)
+    result = _run(env, *_train(paths))
     assert result.returncode == 2
     assert "ERROR: Missing models: VAE" in result.stdout
     assert "graphical app" in result.stdout
@@ -123,7 +138,7 @@ def test_a_missing_model_stops_before_writing_any_config(setup):
 def test_a_missing_base_model_is_not_downloaded(setup):
     paths, env = setup
     paths.dit_model("anima-base-v1.0").unlink()
-    result = _run(env, *ENTRY)
+    result = _run(env, *_train(paths))
     assert result.returncode == 2
     assert "anima-base-v1.0" in result.stdout
     assert "Downloading" not in result.stdout
@@ -132,17 +147,9 @@ def test_a_missing_base_model_is_not_downloaded(setup):
 def test_a_runtime_that_is_not_installed_is_reported(setup):
     paths, env = setup
     paths.train_script.unlink()
-    result = _run(env, *ENTRY)
+    result = _run(env, *_train(paths))
     assert result.returncode == 2
     assert "Training script not found" in result.stdout
-
-
-def test_settings_never_configured_are_reported(setup):
-    paths, env = setup
-    paths.config_file.write_text(json.dumps({"project_name": PROJECT}))
-    result = _run(env, *ENTRY)
-    assert result.returncode == 2
-    assert "ERROR: Image directory cannot be empty." in result.stdout
 
 
 def test_ctrl_c_stops_the_training_and_its_children(setup, tmp_path):
@@ -150,7 +157,7 @@ def test_ctrl_c_stops_the_training_and_its_children(setup, tmp_path):
     pid_file = tmp_path / "child.pid"
     _accelerate(paths, "sleep", str(pid_file))
     process = subprocess.Popen(
-        [sys.executable, *ENTRY],
+        [sys.executable, *_train(paths)],
         env=env,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
@@ -174,9 +181,7 @@ def test_a_lost_terminal_stops_the_training_and_leaves_no_process(setup, tmp_pat
     paths, env = setup
     pid_file = tmp_path / "child.pid"
     _accelerate(paths, "sleep", str(pid_file))
-    pid, terminal = pty.fork()
-    if pid == 0:  # the child: becomes the command on the new terminal
-        os.execve(sys.executable, [sys.executable, *ENTRY], env)
+    pid, terminal = _fork_on_a_terminal(env, *_train(paths))
     finished = 0
     terminal_open = True
     try:
@@ -212,7 +217,7 @@ def test_a_training_of_another_process_stops_the_command_before_writing_anything
     _accelerate(paths, "train", "0")
     before = paths.config_file.read_text()
     with held_by_another_process(paths.gpu_lock_file) as pid:
-        result = _run(env, *ENTRY)
+        result = _run(env, *_train(paths))
     assert result.returncode == 2, result.stdout + result.stderr
     assert "ERROR: " in result.stdout
     assert str(pid) in result.stdout
@@ -225,17 +230,177 @@ def test_a_running_command_stops_another_command(setup, tmp_path):
     pid_file = tmp_path / "child.pid"
     _accelerate(paths, "sleep", str(pid_file))
     first = subprocess.Popen(
-        [sys.executable, *ENTRY],
+        [sys.executable, *_train(paths)],
         env=env,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
     )
     try:
         _wait_for_file(pid_file)
-        second = _run(env, *ENTRY)
+        second = _run(env, *_train(paths))
         assert second.returncode == 2, second.stdout + second.stderr
         assert str(first.pid) in second.stdout
     finally:
         first.send_signal(signal.SIGINT)
         first.wait(timeout=TIMEOUT_S)
         _kill_group_of(pid_file)
+
+
+def test_the_settings_of_the_window_are_left_as_they_were(setup):
+    paths, env = setup
+    _accelerate(paths, "train", "0")
+    paths.preview_settings_file.write_text('{"enabled": false}')
+    before = paths.config_file.read_text(), paths.preview_settings_file.read_text()
+    result = _run(env, *_train(paths))
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert (paths.config_file.read_text(), paths.preview_settings_file.read_text()) == before
+
+
+def test_the_training_config_has_the_preset_and_the_options(setup):
+    paths, env = setup
+    _accelerate(paths, "train", "0")
+    result = _run(env, *_train(paths, "--resolution", "1024"))
+    assert result.returncode == 0, result.stdout + result.stderr
+    training = tomllib.loads(next(paths.configs_dir.glob("*_training_*.toml")).read_text())
+    dataset = next(paths.configs_dir.glob("*_dataset_*.toml")).read_text()
+    assert training["network_dim"] == 32
+    assert training["network_alpha"] == 16
+    assert training["max_train_epochs"] == 2
+    assert "resolution = 1024" in dataset
+    assert "num_repeats = 1" in dataset
+    assert "caption_dropout_rate = 0.05" in dataset
+
+
+def test_a_relative_dataset_is_found_from_where_the_command_runs(setup):
+    paths, env = setup
+    _accelerate(paths, "train", "0")
+    arguments = list(_train(paths))
+    arguments[arguments.index("--dataset") + 1] = "images"
+    result = subprocess.run(
+        [sys.executable, *arguments],
+        env=env,
+        cwd=paths.root.parents[1],
+        capture_output=True,
+        text=True,
+        timeout=TIMEOUT_S,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_without_a_terminal_and_without_yes_nothing_starts(setup):
+    paths, env = setup
+    _accelerate(paths, "train", "0")
+    result = subprocess.run(
+        [sys.executable, *ENTRY, *_options(paths)],
+        env=env,
+        stdin=subprocess.DEVNULL,
+        capture_output=True,
+        text=True,
+        timeout=TIMEOUT_S,
+    )
+    assert result.returncode == 2
+    assert "--yes" in result.stdout
+    assert list(paths.configs_dir.glob("*.toml")) == []
+
+
+def _fork_on_a_terminal(env, *arguments):
+    """Start the command on a new terminal; returns its pid and the terminal's other end."""
+    pid, terminal = pty.fork()
+    if pid == 0:  # the child must never return into the test run, even if exec fails
+        try:
+            os.execve(sys.executable, [sys.executable, *arguments], env)
+        finally:
+            os._exit(127)
+    return pid, terminal
+
+
+def _reap(pid):
+    """The exit code of `pid`, killing it if it has not ended within the time limit."""
+    deadline = time.monotonic() + TIMEOUT_S
+    while time.monotonic() < deadline:
+        finished, status = os.waitpid(pid, os.WNOHANG)
+        if finished:
+            return os.waitstatus_to_exitcode(status)
+        time.sleep(0.05)
+    os.kill(pid, signal.SIGKILL)
+    os.waitpid(pid, 0)
+    raise AssertionError("the command did not exit")
+
+
+def _answer_at_the_prompt(paths, env, answer):
+    """Run the command on a real terminal and answer its question; returns its output and code."""
+    pid, terminal = _fork_on_a_terminal(env, *ENTRY, *_options(paths))
+    output = b""
+    answered = False
+    deadline = time.monotonic() + TIMEOUT_S
+    try:
+        while (remaining := deadline - time.monotonic()) > 0:
+            readable, _, _ = select.select([terminal], [], [], remaining)
+            if not readable:
+                break
+            try:
+                chunk = os.read(terminal, 4096)
+            except OSError:  # the command has ended
+                break
+            if not chunk:
+                break
+            output += chunk
+            if not answered and b"[y/N]" in output:
+                os.write(terminal, answer)
+                answered = True
+    finally:
+        if time.monotonic() >= deadline:
+            os.kill(pid, signal.SIGKILL)
+        code = _reap(pid)
+        os.close(terminal)
+    return output.decode(errors="replace"), code
+
+
+def test_answering_yes_on_a_terminal_starts_the_training(setup):
+    paths, env = setup
+    _accelerate(paths, "train", "0")
+    output, code = _answer_at_the_prompt(paths, env, b"y\n")
+    assert code == 0, output
+    assert "OK: Training completed successfully!" in output
+
+
+@pytest.mark.parametrize("answer", [b"n\n", b"\n", b"maybe\n", b"\x04"])
+def test_any_other_answer_does_not_start_it(setup, answer):
+    paths, env = setup
+    _accelerate(paths, "train", "0")
+    output, code = _answer_at_the_prompt(paths, env, answer)
+    assert code == 2, output
+    assert "INFO: Training not started." in output
+    assert list(paths.configs_dir.glob("*.toml")) == []
+    assert not paths.gpu_lock_file.exists()
+
+
+def test_ctrl_c_at_the_question_starts_nothing(setup):
+    paths, env = setup
+    _accelerate(paths, "train", "0")
+    output, code = _answer_at_the_prompt(paths, env, b"\x03")
+    assert code == 130, output
+    assert "INFO: Training not started." in output
+    assert list(paths.configs_dir.glob("*.toml")) == []
+
+
+def test_output_sent_to_a_file_does_not_hide_the_question(setup):
+    """stdin is a terminal but the question would go into the file: refuse, do not wait."""
+    paths, env = setup
+    _accelerate(paths, "train", "0")
+    controller, terminal = pty.openpty()
+    try:
+        result = subprocess.run(
+            [sys.executable, *ENTRY, *_options(paths)],
+            env=env,
+            stdin=terminal,
+            capture_output=True,
+            text=True,
+            timeout=TIMEOUT_S,
+        )
+    finally:
+        os.close(terminal)
+        os.close(controller)
+    assert result.returncode == 2
+    assert "--yes" in result.stdout
+    assert "[y/N]" not in result.stdout

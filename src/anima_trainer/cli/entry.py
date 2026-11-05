@@ -16,7 +16,7 @@ usage: anima-trainer [Qt arguments]
 Without a command, opens the graphical app.
 
 commands:
-  train    train a LoRA with the settings saved by the last Configure
+  train    train a LoRA from a preset, without a window
 """
 HELP_FLAGS = {"-h", "--help"}
 

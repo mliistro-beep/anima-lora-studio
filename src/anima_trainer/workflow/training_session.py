@@ -122,20 +122,24 @@ class TrainingSession(QObject):
         self._settings = settings
 
     def configure(
-        self, settings: TrainingSettings, previews: PreviewSettings | None = None
+        self,
+        settings: TrainingSettings,
+        previews: PreviewSettings | None = None,
+        persist: bool = True,
     ) -> ConfigureResult:
         """Write the training configs; with previews on, their size is fitted to the GPU.
 
         The preview settings are saved to preview.json also when Configure fails: the problem
         is in the training settings, and the edits in the Previews tab must not be lost.
+        With `persist` off nothing is saved but the configs (a training from the terminal).
         """
         self._require_idle()
-        warnings = () if previews is None else self._save_previews(previews)
+        warnings = () if previews is None or not persist else self._save_previews(previews)
         plan = PreviewPlan()
         if previews is not None and previews.enabled:
             memory = memory_of(self._gpu_memory, settings.gpu_index)
             plan = plan_previews(previews, memory.total_mib if memory else None)
-        result = configure_training(settings, self._paths, self._clock(), plan)
+        result = configure_training(settings, self._paths, self._clock(), plan, persist)
         if result.success:
             self._settings = result.settings
             self.settings_changed.emit(result.settings)
