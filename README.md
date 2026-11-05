@@ -12,6 +12,20 @@ Operations and troubleshooting: [DOCS/RUNBOOK.md](DOCS/RUNBOOK.md).
 Swap and earlyoom before the first training: [DOCS/SYSTEM_SETUP.md](DOCS/SYSTEM_SETUP.md).
 Architecture codemaps: [DOCS/CODEMAPS/](DOCS/CODEMAPS/architecture.md).
 
+## Screenshots
+
+The Training tab, with example values:
+
+![Training tab with project, paths, network and dataset settings](DOCS/images/training-tab.png)
+
+| Previews during training | Generator |
+| --- | --- |
+| ![Previews tab with the preview prompts and settings](DOCS/images/previews-tab.png) | ![Generator tab with prompt and image settings](DOCS/images/generator-tab.png) |
+
+Training from the terminal (`anima-trainer tui`) with the Person preset:
+
+![Terminal interface with the Person preset selected](DOCS/images/terminal-interface.png)
+
 ## Requirements
 
 - Python 3.12 or newer (developed on 3.14)
