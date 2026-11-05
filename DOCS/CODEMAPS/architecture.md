@@ -20,6 +20,9 @@ src/anima_trainer/main.py  main() -> int (window icon, setDesktopFileName("anima
 console script: anima-trainer = anima_trainer.cli.entry:main (train -> cli/train_command.py, QtCore only; otherwise main.main)
 
 ## Layers (feature packages)
+cli/       anima-trainer entry (no graphical import), train (train_options, train_summary, train_command),
+           tui/ (Textual; Qt events pumped from an interval), shared: train_preparation, terminal_run
+presets/   preset file format, built-in TOMLs, catalog with the user's folder, apply on the defaults
 runtime/   data folder (QSettings key runtime/data_dir, default ~/.local/share/anima-trainer), RuntimePaths,
            install plan and QProcess installer
 settings/  validated immutable TrainingSettings, config.json store, field specs for the forms

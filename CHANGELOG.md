@@ -2,8 +2,29 @@
 
 All notable changes to Anima LoRA Studio are listed here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the versions follow
-[Semantic Versioning](https://semver.org/spec/v2.0.0.html). The milestones (M0-M7) are
+[Semantic Versioning](https://semver.org/spec/v2.0.0.html). The milestones (M0-M8) are
 described in [DOCS/milestones.md](DOCS/milestones.md).
+
+## [Unreleased]
+
+### Added
+
+- Training from the terminal, also over SSH with no display (M8): `anima-trainer tui`, a terminal
+  interface built with Textual, and `anima-trainer train`, with `--yes` for scripts. Both show the
+  samples and total steps to approve before starting.
+- Presets: Style, Character, Concept and Person built in, your own as TOML files in
+  `<data folder>/presets/`. Used from the terminal for now.
+- A lock between processes on the GPU of a data folder: a training from the terminal refuses Start,
+  Generate and Install in the window, and the other way round.
+
+### Changed
+
+- The `anima-trainer` command starts from `cli/entry.py`; without a command it opens the app as before.
+
+### Fixed
+
+- Closing the terminal the app was started from no longer leaves the training running without a
+  parent: SIGHUP now stops it. A signal already ignored stays ignored, so `nohup` keeps working.
 
 ## [0.2.0] - 2026-11-04
 
@@ -67,5 +88,6 @@ Anima LoRA Trainer UI, independent from Citron.
 - GPL-3.0-or-later license, License and Credits dialogs, `THIRD_PARTY_NOTICES.md` and the
   development launcher `scripts/dev-run.sh` (M4c).
 
+[Unreleased]: https://github.com/mliistro-beep/anima-lora-studio/compare/v0.2.0...HEAD
 [0.2.0]: https://github.com/mliistro-beep/anima-lora-studio/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/mliistro-beep/anima-lora-studio/releases/tag/v0.1.0

@@ -4,6 +4,7 @@
 ## Runtime (pyproject.toml)
 PySide6>=6.8 (6.12 installed)  GUI, QProcess, QThread, signals
 pydantic>=2.7,<3 (2.14)        settings validation
+textual>=8.2,<9 (8.2)          terminal interface (anima-trainer tui)
 toml>=0.10.2                   TOML writer, same lib as Citron for identical output
 
 ## Dev

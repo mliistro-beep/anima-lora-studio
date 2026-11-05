@@ -50,6 +50,13 @@ QT = Credit(
     "LGPL-3.0",
 )
 
+TEXTUAL = Credit(
+    "Textual, by Textualize",
+    "Terminal interface toolkit",
+    "https://textual.textualize.io/",
+    "MIT",
+)
+
 MODELS = (
     Credit(
         "Anima, by CircleStone Labs and Comfy Org",
@@ -87,5 +94,5 @@ CREDIT_SECTIONS = (
     CreditSection("Author", (AUTHOR,)),
     CreditSection("Based on", (CITRON,)),
     CreditSection("Models downloaded by the app", MODELS),
-    CreditSection("Software", (SD_SCRIPTS, QT)),
+    CreditSection("Software", (SD_SCRIPTS, QT, TEXTUAL)),
 )

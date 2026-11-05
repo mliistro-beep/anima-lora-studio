@@ -61,6 +61,65 @@ The choice is saved in `~/.config/anima-trainer/anima-trainer.conf` (group
 `linked_models`) and is kept when the data folder changes. "Use file..." is disabled for a
 model already present in the data folder.
 
+## Train from the terminal
+
+`anima-trainer tui` and `anima-trainer train` need the runtime and the models set up in the graphical
+app (they never download); after that they use only QtCore, so no display is needed. Both train
+on `anima-base-v1.0` only for now. They do not write `config.json` or `preview.json`: the window
+finds its settings as you left them. Previews follow what is saved in `preview.json`, and the
+summary says whether they are on. GPU, CPU threads and cache settings come from `config.json`.
+
+### Remote use: tmux
+
+Quitting the interface stops the training, and so does losing the connection, unless it runs
+inside tmux (`nohup` also works for `train --yes`):
+
+```bash
+tmux new -s lora                  # after connecting with SSH
+.venv/bin/anima-trainer tui       # inside tmux
+# Ctrl+B, then D: detach; the training goes on. Connection lost: the same.
+tmux attach -t lora               # back to it later
+```
+
+### Presets
+
+Built in: Style, Character, Concept, Person. Your own are TOML files in `<data folder>/presets/`,
+and only the values that differ from the defaults are needed:
+
+```toml
+name = "My preset"
+description = "One line, shown when choosing"
+
+[settings]
+network_dim = 24
+network_alpha = 24
+learning_rate = 0.0001
+max_train_epochs = 12   # only a suggestion
+```
+
+A preset always starts from the defaults, not from the last training. It cannot hold what is chosen
+for each training (project, folders, repeats, resolution) or what belongs to one machine (GPU, CPU
+threads, cache settings). A file with such a value, an unknown name, a multi-line description or
+the name of another preset is ignored with a `WARN:` line, and the others still load.
+
+If the VRAM is not enough, use a preset with `network_dim = 8` or lower the resolution.
+
+### Exit codes of `train` and `tui`
+
+| Code | Meaning |
+|------|---------|
+| 0 | Training completed (or nothing to do) |
+| 1 | Training failed, or the interface crashed |
+| 2 | Not started: wrong options, a problem in the data folder, declined, or the GPU is in use |
+| 130 | Stopped: Stop, Ctrl+C, SIGTERM, or a lost terminal |
+
+### One process at a time
+
+`<data folder>/gpu.lock` lets one process use the GPU of a data folder: a training from the
+terminal refuses Start, Generate and Install in the window, and the other way round, naming the
+process that holds it. A lock left by a process that died does not block. If that process was
+killed with SIGKILL its training may still be running: check `nvidia-smi` before starting another.
+
 ## Where things are
 
 All paths are inside the app's data folder (`<data>`, default `~/.local/share/anima-trainer`,
