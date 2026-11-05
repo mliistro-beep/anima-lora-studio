@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "anima-trainer"
-version = "0.2.0"
+version = "0.3.0"
 description = "Anima LoRA Studio: desktop LoRA trainer for the Anima diffusion model, based on Citron's Anima LoRA Trainer UI"
 readme = "README.md"
 license = "GPL-3.0-or-later"

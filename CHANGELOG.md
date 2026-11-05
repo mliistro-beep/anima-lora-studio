@@ -7,6 +7,8 @@ described in [DOCS/milestones.md](DOCS/milestones.md).
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-05
+
 ### Added
 
 - Training from the terminal, also over SSH with no display (M8): `anima-trainer tui`, a terminal
@@ -23,6 +25,7 @@ described in [DOCS/milestones.md](DOCS/milestones.md).
 
 ### Fixed
 
+- Group titles such as "Project & Paths" show the `&` instead of an underscore.
 - Closing the terminal the app was started from no longer leaves the training running without a
   parent: SIGHUP now stops it. A signal already ignored stays ignored, so `nohup` keeps working.
 
@@ -88,6 +91,7 @@ Anima LoRA Trainer UI, independent from Citron.
 - GPL-3.0-or-later license, License and Credits dialogs, `THIRD_PARTY_NOTICES.md` and the
   development launcher `scripts/dev-run.sh` (M4c).
 
-[Unreleased]: https://github.com/mliistro-beep/anima-lora-studio/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/mliistro-beep/anima-lora-studio/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/mliistro-beep/anima-lora-studio/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/mliistro-beep/anima-lora-studio/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/mliistro-beep/anima-lora-studio/releases/tag/v0.1.0
