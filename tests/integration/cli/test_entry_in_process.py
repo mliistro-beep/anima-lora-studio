@@ -271,3 +271,36 @@ def test_the_gpu_memory_is_read_again_after_the_confirmation(runtime, monkeypatc
 def test_the_tui_needs_a_terminal(capsys):
     assert entry.main(["tui"]) == EXIT_NOT_STARTED
     assert "anima-trainer train" in capsys.readouterr().out
+
+
+def _no_display(monkeypatch):
+    for name in ("DISPLAY", "WAYLAND_DISPLAY", "QT_QPA_PLATFORM"):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setattr(sys, "platform", "linux")
+    monkeypatch.setattr("anima_trainer.main.main", lambda: 42)
+
+
+def test_without_a_display_the_app_points_to_the_terminal_commands(monkeypatch, capsys):
+    _no_display(monkeypatch)
+    assert entry.main([]) == EXIT_NOT_STARTED
+    output = capsys.readouterr().out
+    assert "ERROR: " in output
+    assert "anima-trainer tui" in output
+
+
+@pytest.mark.parametrize("name", ["DISPLAY", "WAYLAND_DISPLAY", "QT_QPA_PLATFORM"])
+def test_any_way_to_show_a_window_opens_the_app(monkeypatch, name):
+    _no_display(monkeypatch)
+    monkeypatch.setenv(name, "x")
+    assert entry.main([]) == 42
+
+
+def test_a_platform_given_to_qt_opens_the_app(monkeypatch):
+    _no_display(monkeypatch)
+    assert entry.main(["-platform", "offscreen"]) == 42
+
+
+def test_the_terminal_commands_do_not_need_a_display(monkeypatch, capsys):
+    _no_display(monkeypatch)
+    assert entry.main(["--help"]) == 0
+    assert "tui" in capsys.readouterr().out

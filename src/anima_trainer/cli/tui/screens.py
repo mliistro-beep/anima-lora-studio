@@ -1,6 +1,7 @@
 """The screens of the TUI: the choices, the summary to approve, the training."""
 
 import re
+from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, cast
 
 from rich.text import Text
@@ -29,6 +30,7 @@ from anima_trainer.cli.train_preparation import (
     plan_lines,
     prepare_training,
 )
+from anima_trainer.cli.tui.folder_picker import FolderPicker, start_folder
 from anima_trainer.cli.tui_values import load_tui_values
 from anima_trainer.presets.catalog import find_preset
 from anima_trainer.training.progress import ProgressState
@@ -40,6 +42,9 @@ MAX_LOG_LINES = 5000
 SCREEN_CSS = """
 .field-label { margin-top: 0; color: $text-muted; }
 .buttons { height: auto; margin-top: 1; }
+.folder-row { height: auto; }
+.folder-row Input { width: 1fr; }
+.folder-row Button { width: auto; margin-left: 2; }
 .buttons Button { margin-right: 2; }
 #errors, #preset-about { height: auto; }
 #errors { color: $error; }
@@ -50,6 +55,7 @@ QuitDialog { align: center middle; }
 """
 # An option named at the start of a word; the dashes inside a path are left alone.
 _OPTION_DASHES = re.compile(r"(?<!\S)--(?=[a-z])")
+BROWSE_BUTTONS = {"browse-dataset": "dataset", "browse-output": "output"}
 NOT_STARTED_STATUS = "Training not started."
 END_STATUS = {
     EXIT_OK: "Training completed.",
@@ -80,8 +86,8 @@ class FormScreen(Screen[None]):
         yield Header()
         with VerticalScroll():
             yield from _field("Project name", Input(values.project, id="project", compact=True))
-            yield from _field("Dataset folder", Input(values.dataset, id="dataset", compact=True))
-            yield from _field("Output folder", Input(values.output, id="output", compact=True))
+            yield from _folder_field("Dataset folder", values.dataset, "dataset")
+            yield from _folder_field("Output folder", values.output, "output")
             yield Label("Preset", classes="field-label")
             yield Select(
                 options,
@@ -137,6 +143,16 @@ class FormScreen(Screen[None]):
             self._continue()
         elif event.button.id == "quit-form":
             cast("TrainerApp", self.app).exit()
+        elif event.button.id in BROWSE_BUTTONS:
+            self._browse(self.query_one(f"#{BROWSE_BUTTONS[event.button.id]}", Input))
+
+    def _browse(self, field: Input) -> None:
+        def fill(folder: str | None) -> None:
+            if folder is not None:
+                field.value = folder
+            field.focus()
+
+        self.app.push_screen(FolderPicker(start_folder(field.value, Path.home())), fill)
 
     def _continue(self) -> None:
         options = self._options()
@@ -284,6 +300,13 @@ class QuitDialog(ModalScreen[bool]):
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         self.dismiss(event.button.id == "quit-yes")
+
+
+def _folder_field(label: str, value: str, name: str) -> ComposeResult:
+    yield Label(label, classes="field-label")
+    with Horizontal(classes="folder-row"):
+        yield Input(value, id=name, compact=True)
+        yield Button("Browse", id=f"browse-{name}", compact=True)
 
 
 def _field(label: str, field: Input) -> ComposeResult:

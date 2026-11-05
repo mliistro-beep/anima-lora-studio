@@ -61,7 +61,7 @@ SSH on a machine with no display. Run these from the checkout (or with the full 
     --output ~/loras --epochs 10 --repeats 10   # add --yes to skip the confirmation
 ```
 
-Project, folders, epochs and repeats are chosen for each training; the resolution starts at 768.
+In the interface, Browse picks a folder without writing its path. Project, folders, epochs and repeats are chosen for each training; the resolution starts at 768.
 Epochs depend on how large the dataset is: the preset only suggests a value. **For remote use, run
 it inside `tmux`**: quitting the interface or losing the connection without tmux stops the training.
 Details, your own presets and exit codes are in [DOCS/RUNBOOK.md](DOCS/RUNBOOK.md).

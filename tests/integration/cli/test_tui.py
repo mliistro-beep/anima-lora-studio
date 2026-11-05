@@ -15,6 +15,7 @@ from textual.widgets import Button, Input, RichLog, Select, Static
 from anima_trainer.cli.train_plan import EXIT_FAILED
 from anima_trainer.cli.train_preparation import terminal_context
 from anima_trainer.cli.tui.app import TrainerApp
+from anima_trainer.cli.tui.folder_picker import FolderPicker, FoldersOnly, start_folder
 from anima_trainer.cli.tui.screens import FormScreen, QuitDialog, SummaryScreen, TrainingScreen
 from anima_trainer.runtime.data_dir import open_data_dir
 from tests.e2e.helpers import make_runtime
@@ -492,3 +493,84 @@ def test_a_preset_name_with_brackets_is_plain_text_in_the_list(paths):
         assert "[wip] x" in [label.plain for label in labels]
 
     _play(app, scenario)
+
+
+def _tree_child(tree, name):
+    return next((n for n in tree.root.children if str(n.label) == name), None)
+
+
+def test_a_folder_is_chosen_by_browsing_and_fills_the_field(paths):
+    app = _app(paths)
+    home = paths.root.parent
+
+    async def scenario(pilot):
+        _input(app, "dataset").value = str(home)
+        await pilot.click("#browse-dataset")
+        await _until(pilot, lambda: isinstance(app.screen, FolderPicker))
+        tree = app.screen.query_one(FoldersOnly)
+        await _until(pilot, lambda: _tree_child(tree, "images") is not None)
+        tree.select_node(_tree_child(tree, "images"))
+        await _until(pilot, lambda: _text(app, "folder-current") == str(home / "images"))
+        await pilot.click("#folder-use")
+        await _until(pilot, lambda: isinstance(app.screen, FormScreen))
+        assert _input(app, "dataset").value == str(home / "images")
+
+    _play(app, scenario)
+
+
+def test_files_and_hidden_folders_are_not_listed(paths):
+    home = paths.root.parent
+    (home / ".hidden").mkdir()
+    (home / "file.txt").write_text("")
+    app = _app(paths)
+
+    async def scenario(pilot):
+        _input(app, "output").value = str(home)
+        await pilot.click("#browse-output")
+        await _until(pilot, lambda: isinstance(app.screen, FolderPicker))
+        tree = app.screen.query_one(FoldersOnly)
+        await _until(pilot, lambda: _tree_child(tree, "images") is not None)
+        assert _tree_child(tree, ".hidden") is None
+        assert _tree_child(tree, "file.txt") is None
+
+    _play(app, scenario)
+
+
+def test_up_moves_to_the_parent_folder(paths):
+    app = _app(paths)
+    home = paths.root.parent
+
+    async def scenario(pilot):
+        _input(app, "dataset").value = str(home / "images")
+        await pilot.click("#browse-dataset")
+        await _until(pilot, lambda: isinstance(app.screen, FolderPicker))
+        await pilot.click("#folder-up")
+        await _until(pilot, lambda: _text(app, "folder-current") == str(home))
+        tree = app.screen.query_one(FoldersOnly)
+        await _until(pilot, lambda: _tree_child(tree, "images") is not None)
+
+    _play(app, scenario)
+
+
+def test_cancel_leaves_the_field_as_it_was(paths):
+    app = _app(paths)
+
+    async def scenario(pilot):
+        _input(app, "dataset").value = "/typed/by/hand"
+        await pilot.click("#browse-dataset")
+        await _until(pilot, lambda: isinstance(app.screen, FolderPicker))
+        await pilot.press("escape")
+        await _until(pilot, lambda: isinstance(app.screen, FormScreen))
+        assert _input(app, "dataset").value == "/typed/by/hand"
+
+    _play(app, scenario)
+
+
+def test_browsing_starts_from_the_nearest_folder_that_exists(tmp_path):
+    (tmp_path / "a").mkdir()
+    assert start_folder(str(tmp_path / "a"), tmp_path / "home") == tmp_path / "a"
+    assert start_folder(str(tmp_path / "a" / "b" / "c"), tmp_path / "home") == tmp_path / "a"
+
+
+def test_browsing_a_blank_field_starts_from_home(tmp_path):
+    assert start_folder("  ", tmp_path) == tmp_path
