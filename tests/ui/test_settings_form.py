@@ -1,5 +1,13 @@
 import pytest
-from PySide6.QtWidgets import QCheckBox, QComboBox, QDoubleSpinBox, QLineEdit, QSpinBox
+from PySide6.QtGui import QKeySequence
+from PySide6.QtWidgets import (
+    QCheckBox,
+    QComboBox,
+    QDoubleSpinBox,
+    QGroupBox,
+    QLineEdit,
+    QSpinBox,
+)
 
 from anima_trainer.settings.field_specs import ADVANCED_FIELDS, BASIC_FIELDS
 from anima_trainer.settings.schema import TrainingSettings
@@ -90,3 +98,12 @@ def test_single_value_reads_one_field(basic):
     basic.field_widget("network_dim").setValue(12)
 
     assert basic.value("network_dim") == 12
+
+
+def test_ampersand_in_a_group_title_is_shown_and_makes_no_shortcut(basic, advanced):
+    boxes = (*basic.findChildren(QGroupBox), *advanced.findChildren(QGroupBox))
+    titles = [box.title() for box in boxes]
+
+    assert "Project && Paths" in titles
+    assert "Noise && Flow" in titles
+    assert [title for title in titles if QKeySequence.mnemonic(title).count()] == []

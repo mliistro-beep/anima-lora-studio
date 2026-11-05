@@ -122,7 +122,7 @@ class SettingsForm(QWidget):
         fields: dict[str, _Field] = {}
         for spec in specs:
             if spec.group not in forms:
-                box = QGroupBox(spec.group)
+                box = QGroupBox(spec.group.replace("&", "&&"))  # a lone & is a Qt shortcut marker
                 forms[spec.group] = QFormLayout(box)
                 layout.addWidget(box)
             field = _BUILDERS[spec.kind](spec)
