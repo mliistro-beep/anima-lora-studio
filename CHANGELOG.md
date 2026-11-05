@@ -2,8 +2,7 @@
 
 All notable changes to Anima LoRA Studio are listed here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the versions follow
-[Semantic Versioning](https://semver.org/spec/v2.0.0.html). The milestones (M0-M8) are
-described in [DOCS/milestones.md](DOCS/milestones.md).
+[Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 

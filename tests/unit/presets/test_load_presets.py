@@ -9,7 +9,7 @@ from anima_trainer.presets.catalog import find_preset, load_presets
 from anima_trainer.settings.schema import TrainingSettings
 
 BUILTIN = {
-    # The user's note of 2026-11-04, see M8 in DOCS/milestones.md.
+    # Values chosen by the author on 2026-11-04 (M8).
     "Style": (32, 32, 0.0001, 16, 0.1, 10),
     "Character": (32, 32, 0.0001, 12, 0.1, 4),
     "Concept": (16, 16, 0.00008, 10, 0.1, 5),

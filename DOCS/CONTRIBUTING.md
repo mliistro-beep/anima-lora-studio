@@ -1,8 +1,7 @@
 # Contributing
 
 How to set up, test and submit changes for the Anima LoRA Studio desktop app.
-Project rules come from [CLAUDE.md](../CLAUDE.md); progress is tracked in
-[milestones.md](milestones.md).
+Changes per version are listed in [CHANGELOG.md](../CHANGELOG.md).
 
 ## Development environment
 
@@ -130,6 +129,5 @@ There are no repository pre-commit hooks; run the checks below by hand.
    - `.venv/bin/ruff check src tests` and `.venv/bin/ruff format --check src tests`
    - `.venv/bin/mypy`
    - `.venv/bin/bandit -c pyproject.toml -r src`
-4. Update the component checklist in [milestones.md](milestones.md) when a component
-   is added, changed or finished.
+4. Record user-visible changes in [CHANGELOG.md](../CHANGELOG.md) under Unreleased.
 5. PRs need a review before merge.

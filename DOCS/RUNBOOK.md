@@ -9,8 +9,7 @@ tab, and model files already on disk used after a SHA-256 check. M4c added the L
 Credits buttons. M5 added previews during training (Previews tab) and the image generator
 (Generator tab), verified from the real UI with a training running. M6 (release 0.2.0) adds
 the `run_linux.sh` launcher with the applications menu entry, the swap / out-of-memory daemon
-warning and the new display name. See [milestones.md](milestones.md) and
-[CHANGELOG.md](../CHANGELOG.md).
+warning and the new display name. See [CHANGELOG.md](../CHANGELOG.md).
 
 ## Install and launch
 
