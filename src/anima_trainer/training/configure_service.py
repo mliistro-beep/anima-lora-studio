@@ -40,7 +40,9 @@ def configure_training(
     paths: RuntimePaths,
     now: datetime,
     previews: PreviewPlan = PreviewPlan(),  # noqa: B008 - frozen, shared default is safe
+    persist: bool = True,
 ) -> ConfigureResult:
+    """`persist` saves the settings to config.json; the terminal leaves them to the window."""
     missing = settings.missing_required_fields()
     if missing:
         errors = tuple(f"ERROR: {label} cannot be empty." for label in missing)
@@ -78,7 +80,7 @@ def configure_training(
         return ConfigureResult(False, failure, settings, dataset=report, estimate=estimate)
 
     return _generate(
-        settings, paths, now, (*messages, *previews.messages), report, estimate, previews
+        settings, paths, now, (*messages, *previews.messages), report, estimate, previews, persist
     )
 
 
@@ -90,6 +92,7 @@ def _generate(
     report: DatasetReport,
     estimate: StepEstimate,
     previews: PreviewPlan,
+    persist: bool,
 ) -> ConfigureResult:
     messages = (*messages, "", "Generating TOML configs...")
     venv_version = read_venv_version(paths.venv_dir)
@@ -112,10 +115,12 @@ def _generate(
         f"  OK: Dataset  config: {configs.dataset}",
         *((f"  OK: Preview prompts: {configs.samples}",) if configs.samples else ()),
     )
-    try:
-        save_settings(paths.config_file, updated)
-    except OSError as error:
-        messages = (*messages, f"WARN: Settings could not be saved to {paths.config_file}: {error}")
+    if persist:
+        try:
+            save_settings(paths.config_file, updated)
+        except OSError as error:
+            file = paths.config_file
+            messages = (*messages, f"WARN: Settings could not be saved to {file}: {error}")
     messages = (*messages, "", "OK: Configuration complete, ready to train.")
     return ConfigureResult(True, messages, updated, configs, report, estimate)
 

@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "anima-trainer"
-version = "0.2.0"
+version = "0.3.0"
 description = "Anima LoRA Studio: desktop LoRA trainer for the Anima diffusion model, based on Citron's Anima LoRA Trainer UI"
 readme = "README.md"
 license = "GPL-3.0-or-later"
@@ -17,6 +17,8 @@ dependencies = [
     "pydantic>=2.7,<3",
     # Same writer as Citron, so generated TOML files match byte for byte.
     "toml>=0.10.2",
+    # The terminal interface (anima-trainer tui); pure Python, no display needed.
+    "textual>=8.2,<9",
 ]
 
 [project.optional-dependencies]
@@ -32,7 +34,7 @@ dev = [
 ]
 
 [project.scripts]
-anima-trainer = "anima_trainer.main:main"
+anima-trainer = "anima_trainer.cli.entry:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
@@ -40,6 +42,8 @@ where = ["src"]
 [tool.setuptools.package-data]
 # The app icon (window and menu entry).
 "anima_trainer.ui" = ["assets/*.svg"]
+# The built-in training presets.
+"anima_trainer.presets" = ["builtin/*.toml"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

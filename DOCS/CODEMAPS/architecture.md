@@ -17,9 +17,12 @@ run_linux.sh  finds Python >= 3.12, creates <checkout>/.venv, pip install -e . w
               --install-desktop / --uninstall-desktop: anima-lora-studio.desktop + hicolor SVG icon
 src/anima_trainer/main.py  main() -> int (window icon, setDesktopFileName("anima-lora-studio"));
                            create_window(store, detect) -> MainWindow
-console script: anima-trainer = anima_trainer.main:main
+console script: anima-trainer = anima_trainer.cli.entry:main (train -> cli/train_command.py, QtCore only; otherwise main.main)
 
 ## Layers (feature packages)
+cli/       anima-trainer entry (no graphical import), train (train_options, train_summary, train_command),
+           tui/ (Textual; Qt events pumped from an interval), shared: train_preparation, terminal_run
+presets/   preset file format, built-in TOMLs, catalog with the user's folder, apply on the defaults
 runtime/   data folder (QSettings key runtime/data_dir, default ~/.local/share/anima-trainer), RuntimePaths,
            install plan and QProcess installer
 settings/  validated immutable TrainingSettings, config.json store, field specs for the forms

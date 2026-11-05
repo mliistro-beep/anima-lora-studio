@@ -58,6 +58,18 @@ class RuntimePaths:
         return self.root / "configs"
 
     @property
+    def tui_values_file(self) -> Path:
+        return self.root / "tui.json"
+
+    @property
+    def gpu_lock_file(self) -> Path:
+        return self.root / "gpu.lock"
+
+    @property
+    def presets_dir(self) -> Path:
+        return self.root / "presets"
+
+    @property
     def logs_dir(self) -> Path:
         return self.root / "logs"
 

@@ -14,6 +14,9 @@ from anima_trainer.runtime.paths import RuntimePaths
 from anima_trainer.settings.schema import TrainingSettings
 from anima_trainer.settings.store import load_settings
 
+# QSettings file: ~/.config/anima-trainer/anima-trainer.conf on Linux.
+SETTINGS_ORGANIZATION = "anima-trainer"
+SETTINGS_APPLICATION = "anima-trainer"
 DATA_DIR_KEY = "runtime/data_dir"
 DATA_DIR_NAME = "anima-trainer"
 REPAIR_MESSAGE = "Training runtime incomplete or out of date: press Repair in Settings"

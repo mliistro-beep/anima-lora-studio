@@ -6,7 +6,7 @@ keeps its own training runtime (venv, sd-scripts, models) in its data folder, ca
 files you already have (accepted after a SHA-256 check), shows epoch previews during training
 and has a simple image generator to try or compare the checkpoints.
 
-Version 0.2.0, Linux. Changes per version: [CHANGELOG.md](CHANGELOG.md).
+Version 0.3.0, Linux. Changes per version: [CHANGELOG.md](CHANGELOG.md).
 Status and the per-component checklist: [DOCS/milestones.md](DOCS/milestones.md).
 Contributor setup: [DOCS/CONTRIBUTING.md](DOCS/CONTRIBUTING.md).
 Operations and troubleshooting: [DOCS/RUNBOOK.md](DOCS/RUNBOOK.md).
@@ -48,6 +48,24 @@ notification while it installs, and its output is in `~/.local/state/anima-train
 `./run_linux.sh --uninstall-desktop` removes the menu entry. More in
 [DOCS/RUNBOOK.md](DOCS/RUNBOOK.md).
 
+## Train from the terminal
+
+After the runtime and the models are set up in the app, you can train without a window, also over
+SSH on a machine with no display. Run these from the checkout (or with the full path of
+`.venv/bin/anima-trainer`):
+
+```bash
+.venv/bin/anima-trainer tui                     # choose, approve or change a summary, follow progress
+.venv/bin/anima-trainer train --list-presets    # the presets available
+.venv/bin/anima-trainer train --preset Person --project my_lora --dataset ~/images \
+    --output ~/loras --epochs 10 --repeats 10   # add --yes to skip the confirmation
+```
+
+In the interface, Browse picks a folder without writing its path. Project, folders, epochs and repeats are chosen for each training; the resolution starts at 768.
+Epochs depend on how large the dataset is: the preset only suggests a value. **For remote use, run
+it inside `tmux`**: quitting the interface or losing the connection without tmux stops the training.
+Details, your own presets and exit codes are in [DOCS/RUNBOOK.md](DOCS/RUNBOOK.md).
+
 ## Development
 
 ```bash
@@ -65,7 +83,8 @@ at scratch folders first, or it uses your real data folder.
 | Command | Description |
 |---------|-------------|
 | `./run_linux.sh` | Start the app, creating or updating `.venv` when needed; `--install-desktop` / `--uninstall-desktop` add or remove the menu entry |
-| `.venv/bin/anima-trainer` | Start the desktop app (`anima_trainer.main:main`) |
+| `.venv/bin/anima-trainer` | Start the desktop app (`anima_trainer.cli.entry:main`, then `anima_trainer.main:main`) |
+| `.venv/bin/anima-trainer train --help` | Train from a preset, without a window (`--list-presets` shows them) |
 | `scripts/dev-run.sh` | Development only: start the app from the checkout (`--setup` creates `.venv`, `--scratch [DIR]` uses scratch XDG folders, default `~/anima-dev-scratch`) |
 | `.venv/bin/pytest` | Run all tests (`tests/`), markers `integration`, `e2e` and `runtime` available (`runtime` tests are skipped unless `ANIMA_TRAINER_TEST_RUNTIME` is set) |
 | `.venv/bin/pytest --cov` | Run tests with coverage; fails under 80% (UI and `main.py` excluded) |

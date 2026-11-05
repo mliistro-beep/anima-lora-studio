@@ -19,6 +19,7 @@ from anima_trainer.preview.preview_plan import PreviewPlan, plan_previews
 from anima_trainer.preview.settings import PreviewSettings, save_preview_settings
 from anima_trainer.runtime.paths import RuntimePaths
 from anima_trainer.settings.schema import TrainingSettings
+from anima_trainer.system.gpu_lock import TRAINING_JOB, GpuLock
 from anima_trainer.system.gpu_memory import GpuMemory, memory_of
 from anima_trainer.training.command_builder import LaunchSpec
 from anima_trainer.training.configure_service import ConfigureResult, configure_training
@@ -83,6 +84,7 @@ class TrainingSession(QObject):
         clock: Callable[[], datetime] = datetime.now,
         kernel_log: Callable[[], str | None] = read_kernel_log,
         parent: QObject | None = None,
+        lock: GpuLock | None = None,
     ) -> None:
         super().__init__(parent)
         self._paths = paths
@@ -91,6 +93,7 @@ class TrainingSession(QObject):
         self._downloader = downloader
         self._clock = clock
         self._kernel_log = kernel_log
+        self._lock = lock
         self._gpu_memory: tuple[GpuMemory, ...] = ()  # from the GPU detection thread
         self._state = SessionState.IDLE
         self._progress = ProgressState()
@@ -119,20 +122,24 @@ class TrainingSession(QObject):
         self._settings = settings
 
     def configure(
-        self, settings: TrainingSettings, previews: PreviewSettings | None = None
+        self,
+        settings: TrainingSettings,
+        previews: PreviewSettings | None = None,
+        persist: bool = True,
     ) -> ConfigureResult:
         """Write the training configs; with previews on, their size is fitted to the GPU.
 
         The preview settings are saved to preview.json also when Configure fails: the problem
         is in the training settings, and the edits in the Previews tab must not be lost.
+        With `persist` off nothing is saved but the configs (a training from the terminal).
         """
         self._require_idle()
-        warnings = () if previews is None else self._save_previews(previews)
+        warnings = () if previews is None or not persist else self._save_previews(previews)
         plan = PreviewPlan()
         if previews is not None and previews.enabled:
             memory = memory_of(self._gpu_memory, settings.gpu_index)
             plan = plan_previews(previews, memory.total_mib if memory else None)
-        result = configure_training(settings, self._paths, self._clock(), plan)
+        result = configure_training(settings, self._paths, self._clock(), plan, persist)
         if result.success:
             self._settings = result.settings
             self.settings_changed.emit(result.settings)
@@ -141,6 +148,14 @@ class TrainingSession(QObject):
     def start(self, request: StartRequest) -> None:
         self._require_idle()
         self.log_cleared.emit()
+        refusal = (
+            None
+            if self._lock is None
+            else self._lock.acquire(TRAINING_JOB, self._paths.gpu_lock_file)
+        )
+        if refusal is not None:
+            self._log(f"ERROR: {refusal}")
+            return
         download = dit_model_download(self._paths, request.base_model)
         if download is None:
             self._launch(request)
@@ -168,6 +183,7 @@ class TrainingSession(QObject):
         self._pending = None
         self._runner.shutdown()
         self._downloader.shutdown()
+        self._release_lock()
 
     def _save_previews(self, previews: PreviewSettings) -> tuple[str, ...]:
         try:
@@ -267,7 +283,13 @@ class TrainingSession(QObject):
         for line in lines:
             self.log_line.emit(line)
 
+    def _release_lock(self) -> None:
+        if self._lock is not None:
+            self._lock.release(TRAINING_JOB)
+
     def _set_state(self, state: SessionState) -> None:
+        if state is SessionState.IDLE:
+            self._release_lock()
         if state is not self._state:
             self._state = state
             self.state_changed.emit(state)
