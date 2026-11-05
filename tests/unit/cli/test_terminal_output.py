@@ -2,7 +2,7 @@
 
 import io
 
-from anima_trainer.cli.terminal_output import TerminalOutput, progress_text
+from anima_trainer.cli.terminal_output import TerminalOutput, progress_text, silence_if_lost
 from anima_trainer.training.progress import ProgressState
 
 TQDM_LINE = "steps:  10%|#  | 2/20 [00:04<00:36,  2.10s/it, avr_loss=0.105]"
@@ -147,3 +147,25 @@ def test_a_closed_stream_counts_as_a_lost_terminal():
     output.line("lost")
     output.detach()
     assert output.terminal_lost
+
+
+def test_a_stream_that_still_works_is_left_alone(tmp_path):
+    with (tmp_path / "out.txt").open("w", encoding="utf-8") as stream:
+        silence_if_lost(stream)
+        stream.write("kept")
+    assert (tmp_path / "out.txt").read_text() == "kept"
+
+
+def test_a_stream_of_a_lost_terminal_goes_to_dev_null(tmp_path):
+    file = (tmp_path / "out.txt").open("w", encoding="utf-8")
+
+    class Lost:
+        fileno = file.fileno
+
+        def flush(self):
+            raise OSError(5, "Input/output error")
+
+    silence_if_lost(Lost())
+    file.write("goes to /dev/null")
+    file.close()
+    assert (tmp_path / "out.txt").read_text() == ""

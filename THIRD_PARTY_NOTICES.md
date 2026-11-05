@@ -51,4 +51,5 @@ model license before using a LoRA trained on them.
 | --- | --- |
 | PySide6 (Qt for Python) | LGPL-3.0 |
 | pydantic | MIT |
+| Textual | MIT |
 | toml | MIT |

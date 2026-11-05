@@ -17,6 +17,8 @@ dependencies = [
     "pydantic>=2.7,<3",
     # Same writer as Citron, so generated TOML files match byte for byte.
     "toml>=0.10.2",
+    # The terminal interface (anima-trainer tui); pure Python, no display needed.
+    "textual>=8.2,<9",
 ]
 
 [project.optional-dependencies]

@@ -15,6 +15,29 @@ REPORTS_PER_RUN = 20
 CLEAR_TO_END_OF_LINE = "\x1b[K"
 
 
+def silence_if_lost(stream: TextIO) -> None:
+    """Point a stream whose terminal has gone at /dev/null, or Python exits with code 120 when it
+    flushes what is left in it."""
+    try:
+        stream.flush()
+    except (OSError, ValueError):  # ValueError: closed stream
+        _point_at_dev_null(stream)
+
+
+def _point_at_dev_null(stream: TextIO) -> None:
+    try:
+        devnull = os.open(os.devnull, os.O_WRONLY)
+        os.dup2(devnull, stream.fileno())
+        os.close(devnull)
+    except (OSError, ValueError):  # ValueError: closed stream
+        return  # no file descriptor to replace: nothing will flush to the lost terminal
+
+
+def is_progress_line(text: str) -> bool:
+    """A tqdm line of the training: shown as progress, not as a line of the log."""
+    return isinstance(parse_line(text), StepProgress)
+
+
 def progress_text(state: ProgressState) -> str:
     total = state.total_steps
     parts = [f"steps {state.step}/{total if total else '?'}"]
@@ -43,7 +66,7 @@ class TerminalOutput:
         return self._terminal_lost
 
     def line(self, text: str) -> None:
-        if isinstance(parse_line(text), StepProgress):
+        if is_progress_line(text):
             return
         prefix = "\n" if self._on_progress_line else ""
         self._on_progress_line = False
@@ -61,14 +84,8 @@ class TerminalOutput:
 
     def detach(self) -> None:
         """After a lost terminal, point stdout at /dev/null so the exit flush cannot fail."""
-        if not self._terminal_lost:
-            return
-        try:
-            devnull = os.open(os.devnull, os.O_WRONLY)
-            os.dup2(devnull, self._stream.fileno())
-            os.close(devnull)
-        except (OSError, ValueError):  # ValueError: closed stream
-            return  # no file descriptor to replace: nothing will flush to the lost terminal
+        if self._terminal_lost:
+            _point_at_dev_null(self._stream)
 
     def _is_report_due(self, state: ProgressState) -> bool:
         report = state.step * REPORTS_PER_RUN // state.total_steps if state.total_steps else 0

@@ -11,7 +11,7 @@ from typing import get_args
 import pytest
 from PySide6.QtCore import QCoreApplication, QTimer
 
-from anima_trainer.cli import entry, train_command
+from anima_trainer.cli import entry, terminal_run, train_command, train_preparation
 from anima_trainer.cli.train_plan import EXIT_NOT_STARTED, EXIT_OK, EXIT_STOPPED
 from anima_trainer.settings.choices import BaseModelName
 from anima_trainer.workflow.training_session import TrainingSession
@@ -33,9 +33,10 @@ def runtime(qapp, tmp_path, monkeypatch):
     (images / "a.txt").write_text("caption")
     settings = {"project_name": "in_process", "max_train_epochs": 2, "gpu_index": "0"}
     paths = make_runtime(tmp_path / "data", images, settings)
-    monkeypatch.setattr(train_command, "load_data_dir", lambda _store, _default: paths.root)
-    monkeypatch.setattr(train_command, "load_links", lambda _store: {})
-    monkeypatch.setattr(train_command, "read_all_gpu_memory", lambda: ())
+    monkeypatch.setattr(train_preparation, "load_data_dir", lambda _store, _default: paths.root)
+    monkeypatch.setattr(train_preparation, "load_links", lambda _store: {})
+    monkeypatch.setattr(train_preparation, "read_all_gpu_memory", lambda: ())
+    monkeypatch.setattr(terminal_run, "read_all_gpu_memory", lambda: ())
     names = qapp.organizationName(), qapp.applicationName()
     yield paths
     qapp.setOrganizationName(names[0])
@@ -59,6 +60,19 @@ def _accelerate(paths, *mode):
 def test_help_is_written_without_opening_the_app(capsys):
     assert entry.main(["--help"]) == 0
     assert "train" in capsys.readouterr().out
+
+
+def test_the_tui_command_is_started(monkeypatch):
+    monkeypatch.setattr("anima_trainer.cli.tui.command.run_tui", lambda arguments: 7)
+    assert entry.main(["tui"]) == 7
+
+
+def test_ctrl_c_before_the_tui_opens_is_a_stop(monkeypatch):
+    def interrupted(_arguments):
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr("anima_trainer.cli.tui.command.run_tui", interrupted)
+    assert entry.main(["tui"]) == EXIT_STOPPED
 
 
 def test_no_command_opens_the_graphical_app(monkeypatch):
@@ -247,7 +261,13 @@ def test_a_dataset_without_images_is_reported_before_anything_is_written(runtime
 def test_the_gpu_memory_is_read_again_after_the_confirmation(runtime, monkeypatch):
     """Time can pass at the question, and previews are sized from what is free when it starts."""
     reads = []
-    monkeypatch.setattr(train_command, "read_all_gpu_memory", lambda: reads.append(1) or ())
+    monkeypatch.setattr(train_preparation, "read_all_gpu_memory", lambda: reads.append(1) or ())
+    monkeypatch.setattr(terminal_run, "read_all_gpu_memory", lambda: reads.append(2) or ())
     _accelerate(runtime, "train", "0")
     assert entry.main(_train(runtime)) == EXIT_OK
-    assert len(reads) == 2
+    assert reads == [1, 2]
+
+
+def test_the_tui_needs_a_terminal(capsys):
+    assert entry.main(["tui"]) == EXIT_NOT_STARTED
+    assert "anima-trainer train" in capsys.readouterr().out

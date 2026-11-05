@@ -17,6 +17,7 @@ Without a command, opens the graphical app.
 
 commands:
   train    train a LoRA from a preset, without a window
+  tui      the same in a terminal interface, with a summary to approve or change
 """
 HELP_FLAGS = {"-h", "--help"}
 
@@ -34,6 +35,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         try:
             return run_train(arguments[1:])
         except KeyboardInterrupt:  # Ctrl+C before the training started
+            return EXIT_STOPPED
+    if command == "tui":
+        from anima_trainer.cli.tui.command import run_tui  # noqa: PLC0415
+
+        try:
+            return run_tui(arguments[1:])
+        except KeyboardInterrupt:  # Ctrl+C before the interface took over the terminal
             return EXIT_STOPPED
     from anima_trainer.main import main as open_window  # noqa: PLC0415
 
