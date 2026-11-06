@@ -6,7 +6,7 @@ keeps its own training runtime (venv, sd-scripts, models) in its data folder, ca
 files you already have (accepted after a SHA-256 check), shows epoch previews during training
 and has a simple image generator to try or compare the checkpoints.
 
-Version 0.3.0, Linux. Changes per version: [CHANGELOG.md](CHANGELOG.md).
+Version 0.3.1, Linux. Changes per version: [CHANGELOG.md](CHANGELOG.md).
 Contributor setup: [DOCS/CONTRIBUTING.md](DOCS/CONTRIBUTING.md).
 Operations and troubleshooting: [DOCS/RUNBOOK.md](DOCS/RUNBOOK.md).
 Swap and earlyoom before the first training: [DOCS/SYSTEM_SETUP.md](DOCS/SYSTEM_SETUP.md).

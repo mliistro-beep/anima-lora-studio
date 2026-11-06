@@ -6,6 +6,8 @@ All notable changes to Anima LoRA Studio are listed here. The format follows
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-11-06
+
 ### Added
 
 - `./run_linux.sh --install-desktop` also adds the menu entry Anima LoRA Studio (terminal), which
@@ -97,7 +99,8 @@ Anima LoRA Trainer UI, independent from Citron.
 - GPL-3.0-or-later license, License and Credits dialogs, `THIRD_PARTY_NOTICES.md` and the
   development launcher `scripts/dev-run.sh` (M4c).
 
-[Unreleased]: https://github.com/mliistro-beep/anima-lora-studio/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/mliistro-beep/anima-lora-studio/compare/v0.3.1...HEAD
+[0.3.1]: https://github.com/mliistro-beep/anima-lora-studio/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/mliistro-beep/anima-lora-studio/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/mliistro-beep/anima-lora-studio/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/mliistro-beep/anima-lora-studio/releases/tag/v0.1.0
