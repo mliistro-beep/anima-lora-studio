@@ -6,7 +6,18 @@ All notable changes to Anima LoRA Studio are listed here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- The Generator works without a training project: a base model of the catalog or a model file of
+  yours, up to 8 LoRAs with their strength and an on/off switch (kohya, or PEFT renamed in memory),
+  and its own output folder, with Use project folder and Open folder. A LoRA that cannot be applied
+  (LoHa, LoKr, DoRA, a larger model...) stops the generation with a clear error.
+
 ### Changed
+
+- Generated images go to `<data folder>/generated` unless a folder is chosen (before: the
+  project's `<output>/generated`, still one click away with Use project folder).
+- In the Generator, the project checkpoint's strength is called Checkpoint Strength.
 
 - `anima-trainer train` checks that the GPU is free before asking for confirmation, and the terminal
   interface before showing the summary to approve, so a busy GPU no longer refuses the start only

@@ -44,8 +44,8 @@ PREVIEW_FIELDS: tuple[FieldSpec, ...] = (
 GENERATOR_FIELDS: tuple[FieldSpec, ...] = (
     FieldSpec("negative_prompt", "Negative Prompt", "text", _IMAGE),
     FieldSpec(
-        "lora_multiplier", "LoRA Strength", "float", _IMAGE,
-        tooltip="0 to 2; 1 is the trained strength.",
+        "lora_multiplier", "Checkpoint Strength", "float", _IMAGE,
+        tooltip="Strength of the project checkpoint, 0 to 2; 1 is the trained strength.",
     ),
     *_sampling(_IMAGE, GENERATOR_SIDE_STEP),
 )  # fmt: skip

@@ -5,22 +5,21 @@ from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
 
-from PySide6.QtCore import QObject
+from PySide6.QtCore import QObject, QUrl
+from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import QWidget
 
-from anima_trainer.preview.checkpoints import Checkpoint, list_checkpoints
+from anima_trainer.preview.checkpoints import list_checkpoints
+from anima_trainer.preview.generation_plan import GenerationTarget, plan_generation
 from anima_trainer.preview.generator_settings import (
-    GeneratorSettings,
     load_generator_settings,
     save_generator_settings,
 )
 from anima_trainer.preview.inference_command import (
     GenerationRequest,
-    LoraUse,
-    output_image_path,
+    default_generated_folder,
     project_generated_folder,
 )
-from anima_trainer.preview.sample_prompts import SampleSize
 from anima_trainer.preview.sample_watcher import SampleWatcher
 from anima_trainer.preview.settings import PreviewSettings, load_preview_settings
 from anima_trainer.runtime.paths import RuntimePaths
@@ -71,12 +70,14 @@ class PreviewController(QObject):
         generator = load_generator_settings(paths.generator_settings_file)
         self.previews_tab.set_settings(previews.settings)
         self.generator_tab.set_settings(generator.settings)
+        self.generator_tab.set_default_folder(default_generated_folder(paths))
         self._show_project()
         return (*previews.warnings, *generator.warnings)
 
     def set_paths(self, paths: RuntimePaths) -> None:
         """After a model file was linked or unlinked: the generator uses the new model paths."""
         self._paths = paths
+        self.generator_tab.set_default_folder(default_generated_folder(paths))
 
     def preview_settings(self) -> PreviewSettings | tuple[str, ...]:
         return self.previews_tab.settings()
@@ -146,6 +147,8 @@ class PreviewController(QObject):
         tab.compare_requested.connect(lambda: self._generate(compare=True))
         tab.stop_requested.connect(self.generator.stop)
         tab.refresh_requested.connect(self.refresh_checkpoints)
+        tab.use_project_folder_requested.connect(self._use_project_folder)
+        tab.open_folder_requested.connect(self._open_folder)
         tab.image_activated.connect(self._show_image)
         self.generator.log_line.connect(tab.log.append_line)
         self.generator.step_progress.connect(tab.show_step)
@@ -170,51 +173,42 @@ class PreviewController(QObject):
         if isinstance(settings, tuple):
             tab.log.set_lines(settings)
             return
-        output_dir = self._output_dir()
-        problems = (*settings.problems(), *(() if output_dir is not None else (NO_OUTPUT_DIR,)))
-        if problems or self._paths is None or output_dir is None:
-            tab.log.set_lines(tuple(f"ERROR: {problem}" for problem in problems))
+        if self._paths is None:
             return
         try:
             save_generator_settings(self._paths.generator_settings_file, settings)
         except OSError as error:
             tab.log.append_line(f"WARN: Generator settings could not be saved: {error}")
         checkpoints = tab.checkpoints() if compare else (tab.selected_checkpoint(),)
-        requests = tuple(
-            self._request(self._paths, settings, checkpoint, output_dir)
-            for checkpoint in checkpoints
-        )
+        target = GenerationTarget(self._settings.project_name, checkpoints)
+        plan = plan_generation(settings, self._paths, target, self._clock())
+        if not plan or isinstance(plan[0], str):
+            tab.log.set_lines(tuple(line for line in plan if isinstance(line, str)))
+            return
+        requests = tuple(request for request in plan if isinstance(request, GenerationRequest))
         refused = self.generator.generate(self._paths, requests, self._gpu_index(), self._training)
         if refused is not None:
             tab.log.append_line(f"ERROR: {refused}")
 
-    def _request(
-        self,
-        paths: RuntimePaths,
-        settings: GeneratorSettings,
-        checkpoint: Checkpoint | None,
-        output_dir: Path,
-    ) -> GenerationRequest:
-        label = checkpoint.label if checkpoint is not None else "No LoRA"
-        project = self._settings.project_name or "image"
-        folder = project_generated_folder(output_dir)
-        output = output_image_path(folder, project, label, settings.seed, self._clock())
-        loras = (
-            (LoraUse(checkpoint.path, settings.lora_multiplier),) if checkpoint is not None else ()
-        )
-        return GenerationRequest(
-            dit=paths.dit_model(self._settings.base_model),
-            loras=loras,
-            prompt=settings.prompt,
-            negative_prompt=settings.negative_prompt,
-            size=SampleSize(settings.width, settings.height),
-            steps=settings.steps,
-            cfg_scale=settings.cfg_scale,
-            flow_shift=settings.flow_shift,
-            seed=settings.seed,
-            sampler=settings.sampler,
-            output=output,
-        )
+    def _use_project_folder(self) -> None:
+        output_dir = self._output_dir()
+        if output_dir is None:
+            self.generator_tab.log.append_line(f"ERROR: {NO_OUTPUT_DIR}")
+            return
+        self.generator_tab.output_folder.set_path(str(project_generated_folder(output_dir)))
+
+    def _open_folder(self) -> None:
+        if self._paths is None:
+            return
+        chosen = self.generator_tab.output_folder.path().strip()
+        folder = Path(chosen) if chosen else default_generated_folder(self._paths)
+        try:
+            folder.mkdir(parents=True, exist_ok=True)
+        except OSError as error:
+            self.generator_tab.log.append_line(f"ERROR: Could not create {folder}: {error}")
+            return
+        if not QDesktopServices.openUrl(QUrl.fromLocalFile(str(folder))):
+            self.generator_tab.log.append_line(f"WARN: No program could open {folder}.")
 
     def _update_generator_state(self) -> None:
         note = TRAINING_NOTE if self._training else "" if self._ready else NO_RUNTIME_NOTE

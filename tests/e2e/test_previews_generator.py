@@ -170,7 +170,7 @@ def test_generator_lists_the_checkpoints_and_generates_with_the_chosen_one(app):
     window.tabs.setCurrentWidget(window.generator_tab)
     tab = window.generator_tab
     combo_items = [tab.checkpoint.itemText(i) for i in range(tab.checkpoint.count())]
-    assert combo_items == ["No LoRA (base model only)", "Epoch 1", "Final"]
+    assert combo_items == ["No checkpoint", "Epoch 1", "Final"]
     assert tab.checkpoint.currentText() == "Final"
     tab.prompt.setPlainText("a girl")
 
@@ -193,7 +193,7 @@ def test_generator_lists_the_checkpoints_and_generates_with_the_chosen_one(app):
     assert tab.progress.value() == 25
     assert window.training_tab.start_button.isEnabled()
     assert tab.generate_button.isEnabled()
-    assert (paths.root / "out" / "generated").as_posix() in output
+    assert (paths.root / "generated").as_posix() in output  # the generator's default folder
 
 
 def test_generator_uses_a_model_file_linked_while_the_app_is_open(app, qtbot, monkeypatch):

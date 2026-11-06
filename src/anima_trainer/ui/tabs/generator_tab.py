@@ -1,5 +1,6 @@
-"""Generator tab: one image with a checkpoint of the current project (or the base model
-alone), or the same prompt and seed on every checkpoint to compare the epochs."""
+"""Generator tab: images from a base model (catalog or a file of the user's), the user's LoRAs
+and, when a project has them, one of its checkpoints; or the same prompt and seed on every
+checkpoint to compare the epochs. Images go to the chosen folder (blank: the default one)."""
 
 from pathlib import Path
 
@@ -24,11 +25,19 @@ from PySide6.QtWidgets import (
 from anima_trainer.preview.checkpoints import Checkpoint
 from anima_trainer.preview.form_fields import GENERATOR_FIELDS, GENERATOR_LABELS
 from anima_trainer.preview.generator_settings import GeneratorSettings
+from anima_trainer.settings.choices import BASE_MODELS
 from anima_trainer.settings.field_specs import describe_validation_error
 from anima_trainer.ui.widgets.log_view import LogView
+from anima_trainer.ui.widgets.lora_table import LoraTable
+from anima_trainer.ui.widgets.path_picker import PathPicker
 from anima_trainer.ui.widgets.settings_form import SettingsForm
 
-NO_LORA = "No LoRA (base model only)"
+NO_LORA = "No checkpoint"
+MODEL_FILE_FILTER = "Model files (*.safetensors);;All files (*)"
+SETTINGS_LABELS = GENERATOR_LABELS | {
+    "base_model": "Base Model", "model_file": "Model file", "loras": "LoRAs",
+    "output_folder": "Output folder",
+}  # fmt: skip
 RESULT_SIDE = 512
 SETTINGS_STRETCH, OUTPUT_STRETCH = 2, 3
 
@@ -38,12 +47,28 @@ class GeneratorTab(QWidget):
     compare_requested = Signal()
     stop_requested = Signal()
     refresh_requested = Signal()
+    use_project_folder_requested = Signal()
+    open_folder_requested = Signal()
     image_activated = Signal(object)  # Path
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
+        self.base_model = QComboBox()
+        self.base_model.setAccessibleName("Base Model")
+        self.base_model.addItems(BASE_MODELS)
+        self.model_file = PathPicker(
+            "Model file", "file", "Blank: the base model above", MODEL_FILE_FILTER
+        )
+        self.model_file.setToolTip("A DiT file of yours (for example a merge); it wins when set.")
         self.checkpoint = QComboBox()
         self.checkpoint.setAccessibleName("Checkpoint")
+        self.loras = LoraTable()
+        self.output_folder = PathPicker("Output folder", "folder")
+        self.use_project_button = QPushButton("Use project folder")
+        self.use_project_button.setToolTip(
+            "The generated folder of the project's Output Directory."
+        )
+        self.open_folder_button = QPushButton("Open folder")
         self.refresh_button = QPushButton("Refresh")
         self.prompt = QPlainTextEdit()
         self.prompt.setAccessibleName("Prompt")
@@ -73,15 +98,30 @@ class GeneratorTab(QWidget):
         self.set_running(False, can_generate=False, note="")
 
     def settings(self) -> GeneratorSettings | tuple[str, ...]:
-        values = {**self.form.values(), "prompt": self.prompt.toPlainText()}
+        values = {
+            **self.form.values(),
+            "prompt": self.prompt.toPlainText(),
+            "base_model": self.base_model.currentText(),
+            "model_file": self.model_file.path(),
+            "loras": self.loras.entries(),
+            "output_folder": self.output_folder.path(),
+        }
         try:
             return GeneratorSettings.model_validate(values)
         except ValidationError as error:
-            return describe_validation_error(error, GENERATOR_LABELS)
+            return describe_validation_error(error, SETTINGS_LABELS)
 
     def set_settings(self, settings: GeneratorSettings) -> None:
         self.form.set_values(settings)
         self.prompt.setPlainText(settings.prompt)
+        self.base_model.setCurrentText(settings.base_model)
+        self.model_file.set_path(settings.model_file)
+        self.loras.set_entries(settings.loras)
+        self.output_folder.set_path(settings.output_folder)
+
+    def set_default_folder(self, folder: Path) -> None:
+        """Shown while no folder is chosen."""
+        self.output_folder.edit.setPlaceholderText(f"Blank: {folder}")
 
     def set_checkpoints(self, checkpoints: tuple[Checkpoint, ...]) -> None:
         """Keeps the chosen checkpoint when it is still there (by default the newest)."""
@@ -109,7 +149,10 @@ class GeneratorTab(QWidget):
         self.stop_button.setEnabled(running)
         self.form.setEnabled(not running)
         self.prompt.setReadOnly(running)
-        self.checkpoint.setEnabled(not running)
+        for widget in (self.checkpoint, self.base_model, self.model_file, self.output_folder):
+            widget.setEnabled(not running)
+        self.use_project_button.setEnabled(not running)
+        self.loras.set_editable(not running)
         self.state_note.setText(note)
         self.state_note.setVisible(bool(note))
         if running:
@@ -142,6 +185,8 @@ class GeneratorTab(QWidget):
         self.compare_button.clicked.connect(self.compare_requested.emit)
         self.stop_button.clicked.connect(self.stop_requested.emit)
         self.refresh_button.clicked.connect(self.refresh_requested.emit)
+        self.use_project_button.clicked.connect(self.use_project_folder_requested.emit)
+        self.open_folder_button.clicked.connect(self.open_folder_requested.emit)
         self.open_button.clicked.connect(self._open_image)
         self.open_button.setEnabled(False)
 
@@ -150,12 +195,31 @@ class GeneratorTab(QWidget):
             self.image_activated.emit(self._image)
 
     def _settings_column(self) -> QWidget:
-        lora = QGroupBox("LoRA")
-        lora_row = QHBoxLayout()
-        lora_row.addWidget(self.checkpoint, 1)
-        lora_row.addWidget(self.refresh_button)
-        lora_form = QFormLayout(lora)
-        lora_form.addRow("Checkpoint", lora_row)
+        model = QGroupBox("Model")
+        model_form = QFormLayout(model)
+        model_form.addRow("Base Model", self.base_model)
+        model_form.addRow("Model file", self.model_file)
+        lora = QGroupBox("LoRAs")
+        lora_layout = QVBoxLayout(lora)
+        checkpoint_row = QHBoxLayout()
+        checkpoint_row.addWidget(QLabel("Project checkpoint"))
+        checkpoint_row.addWidget(self.checkpoint, 1)
+        checkpoint_row.addWidget(self.refresh_button)
+        lora_layout.addLayout(checkpoint_row)
+        lora_layout.addWidget(self.loras)
+        lora_buttons = QHBoxLayout()
+        lora_buttons.addWidget(self.loras.add_button)
+        lora_buttons.addWidget(self.loras.remove_button)
+        lora_buttons.addStretch(1)
+        lora_layout.addLayout(lora_buttons)
+        output = QGroupBox("Output")
+        output_layout = QVBoxLayout(output)
+        output_layout.addWidget(self.output_folder)
+        output_buttons = QHBoxLayout()
+        output_buttons.addWidget(self.use_project_button)
+        output_buttons.addWidget(self.open_folder_button)
+        output_buttons.addStretch(1)
+        output_layout.addLayout(output_buttons)
         prompt_box = QGroupBox("Prompt")
         QVBoxLayout(prompt_box).addWidget(self.prompt)
         buttons = QHBoxLayout()
@@ -163,7 +227,7 @@ class GeneratorTab(QWidget):
             buttons.addWidget(button)
         content = QWidget()
         column = QVBoxLayout(content)
-        for widget in (lora, prompt_box, self.form):
+        for widget in (model, lora, prompt_box, self.form, output):
             column.addWidget(widget)
         column.addLayout(buttons)
         column.addWidget(self.state_note)

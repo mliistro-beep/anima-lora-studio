@@ -4,7 +4,8 @@ LoRA trainer for the Anima image model: a desktop (PySide6) version of Citron's 
 Trainer UI, with the same settings and identical TOML configs. It does not need Citron: it
 keeps its own training runtime (venv, sd-scripts, models) in its data folder, can use model
 files you already have (accepted after a SHA-256 check), shows epoch previews during training
-and has a simple image generator to try or compare the checkpoints.
+and has an image generator to try or compare the checkpoints, also on its own: any Anima model,
+up to 8 LoRAs (kohya or PEFT) with their strength, and its own output folder.
 
 Version 0.3.1, Linux. Changes per version: [CHANGELOG.md](CHANGELOG.md).
 Contributor setup: [DOCS/CONTRIBUTING.md](DOCS/CONTRIBUTING.md).
