@@ -16,6 +16,8 @@ REPO = Path(__file__).resolve().parents[3]
 LAUNCHER = "run_linux.sh"
 ICON = Path("src/anima_trainer/ui/assets/anima-lora-studio.svg")
 DESKTOP_FILE = "anima-lora-studio.desktop"
+TERMINAL_DESKTOP_FILE = "anima-lora-studio-terminal.desktop"
+COMMAND = Path(".local/bin/anima-trainer")
 TOOLS = (
     "bash",
     "env",
@@ -31,6 +33,7 @@ TOOLS = (
     "sed",
     "tee",
     "flock",
+    "ln",
 )
 BASH = shutil.which("bash")
 
@@ -283,11 +286,12 @@ def test_install_desktop_without_xdg_data_home_uses_the_home_folder(run, tmp_pat
 
 
 @pytest.mark.skipif(not shutil.which("desktop-file-validate"), reason="desktop-file-validate")
-def test_the_desktop_entry_is_valid(run, tmp_path):
+@pytest.mark.parametrize("entry_name", [DESKTOP_FILE, TERMINAL_DESKTOP_FILE])
+def test_the_desktop_entries_are_valid(run, tmp_path, entry_name):
     run("--install-desktop")
 
     check = subprocess.run(
-        [shutil.which("desktop-file-validate"), str(_desktop_entry(tmp_path))],
+        [shutil.which("desktop-file-validate"), str(tmp_path / "share/applications" / entry_name)],
         capture_output=True,
         text=True,
         check=False,
@@ -297,7 +301,74 @@ def test_the_desktop_entry_is_valid(run, tmp_path):
     assert check.stdout == ""
 
 
-def test_uninstall_desktop_removes_the_entry_and_the_icon_and_can_run_twice(run, tmp_path):
+def _terminal_entry(tmp_path):
+    return tmp_path / "share" / "applications" / TERMINAL_DESKTOP_FILE
+
+
+def _command(tmp_path):
+    return tmp_path / "home" / COMMAND
+
+
+def test_install_desktop_adds_a_terminal_entry_that_opens_the_tui(run, tmp_path, checkout):
+    result, _ = run("--install-desktop")
+
+    assert result.returncode == 0, result.stderr
+    entry = _terminal_entry(tmp_path).read_text()
+    assert "Name=Anima LoRA Studio (terminal)\n" in entry
+    assert f'Exec="{checkout}/run_linux.sh" tui\n' in entry
+    assert "Icon=anima-lora-studio\n" in entry
+    assert "Terminal=true\n" in entry
+
+
+def test_install_desktop_links_the_command_into_the_users_bin_folder(run, tmp_path, checkout):
+    result, _ = run("--install-desktop")
+
+    assert result.returncode == 0, result.stderr
+    command = _command(tmp_path)
+    assert command.is_symlink()
+    assert command.readlink() == checkout / ".venv/bin/anima-trainer"
+    assert f"OK: Command installed: {command}" in result.stdout
+
+
+def test_a_bin_folder_missing_from_path_is_reported(run, tmp_path, fake_bin):
+    outside, _ = run("--install-desktop")
+    inside, _ = run("--install-desktop", PATH=f"{fake_bin}:{tmp_path / 'home/.local/bin'}")
+
+    assert "is not in PATH" in outside.stdout
+    assert "is not in PATH" not in inside.stdout
+
+
+def test_a_command_file_that_is_not_ours_is_kept(run, tmp_path):
+    command = _command(tmp_path)
+    command.parent.mkdir(parents=True)
+    command.write_text("#!/bin/sh\necho mine\n")
+
+    result, _ = run("--install-desktop")
+
+    assert result.returncode == 0, result.stderr
+    assert "WARN:" in result.stderr
+    assert str(command) in result.stderr
+    assert _terminal_entry(tmp_path).is_file()
+
+    run("--uninstall-desktop")
+
+    assert command.read_text() == "#!/bin/sh\necho mine\n"
+
+
+def test_a_command_link_to_another_checkout_is_replaced(run, tmp_path, checkout):
+    command = _command(tmp_path)
+    command.parent.mkdir(parents=True)
+    command.symlink_to(tmp_path / "old checkout/.venv/bin/anima-trainer")
+
+    result, _ = run("--install-desktop")
+
+    assert result.returncode == 0, result.stderr
+    assert command.readlink() == checkout / ".venv/bin/anima-trainer"
+
+
+def test_uninstall_desktop_removes_the_entries_the_icon_and_the_command_and_can_run_twice(
+    run, tmp_path
+):
     run("--install-desktop")
 
     first, calls = run("--uninstall-desktop")
@@ -306,8 +377,22 @@ def test_uninstall_desktop_removes_the_entry_and_the_icon_and_can_run_twice(run,
     assert first.returncode == 0, first.stderr
     assert second.returncode == 0, second.stderr
     assert not _desktop_entry(tmp_path).exists()
+    assert not _terminal_entry(tmp_path).exists()
     assert not _installed_icon(tmp_path).exists()
+    assert not _command(tmp_path).is_symlink()
     assert _pip_installs(calls) == []
+
+
+def test_uninstall_desktop_keeps_a_command_link_to_another_checkout(run, tmp_path):
+    command = _command(tmp_path)
+    command.parent.mkdir(parents=True)
+    other = tmp_path / "other checkout/.venv/bin/anima-trainer"
+    command.symlink_to(other)
+
+    result, _ = run("--uninstall-desktop")
+
+    assert result.returncode == 0, result.stderr
+    assert command.readlink() == other
 
 
 def test_a_checkout_path_that_cannot_be_written_in_exec_is_refused(run, tmp_path, checkout):

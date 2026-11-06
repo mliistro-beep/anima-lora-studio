@@ -14,7 +14,8 @@ M6 (release 0.2.0): run_linux.sh launcher and menu entry, app icon, swap / OOM d
 ## Entry point
 run_linux.sh  finds Python >= 3.12, creates <checkout>/.venv, pip install -e . when the stamp
               (sha256 of pyproject.toml + checkout path) changed, exec .venv/bin/anima-trainer;
-              --install-desktop / --uninstall-desktop: anima-lora-studio.desktop + hicolor SVG icon
+              --install-desktop / --uninstall-desktop: anima-lora-studio.desktop, the terminal entry
+              anima-lora-studio-terminal.desktop (tui), hicolor SVG icon, ~/.local/bin/anima-trainer link
 src/anima_trainer/main.py  main() -> int (window icon, setDesktopFileName("anima-lora-studio"));
                            create_window(store, detect) -> MainWindow
 console script: anima-trainer = anima_trainer.cli.entry:main (train -> cli/train_command.py, QtCore only; otherwise main.main)

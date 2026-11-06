@@ -24,14 +24,25 @@ warning and the new display name. See [CHANGELOG.md](../CHANGELOG.md).
    git clone https://github.com/mliistro-beep/anima-lora-studio.git
    cd anima-lora-studio
    ./run_linux.sh                    # first start: creates .venv and installs the app (network)
-   ./run_linux.sh --install-desktop  # optional: add Anima LoRA Studio to the applications menu
+   ./run_linux.sh --install-desktop  # optional: menu entries and the anima-trainer command
    ```
 
    Later starts reinstall only when `pyproject.toml` changed (for example after `git pull`)
    or the checkout was moved; otherwise they start the app right away. Run the first start
    from a terminal, or use `--install-desktop` first: started from the menu, the install
-   has no window, only a notification. `./run_linux.sh --uninstall-desktop` removes the menu
-   entry and its icon.
+   has no window, only a notification.
+
+   `--install-desktop` adds two menu entries: Anima LoRA Studio (the window) and Anima LoRA
+   Studio (terminal), which opens `anima-trainer tui` in your terminal emulator (closing that
+   window stops a training, as quitting the interface does). It also links
+   `~/.local/bin/anima-trainer` to the app in `.venv`, so `anima-trainer tui` and
+   `anima-trainer train` work from any folder; a link from another checkout is replaced, any
+   other file there is kept with a `WARN:`. If `~/.local/bin` was not in `PATH` yet, an
+   `INFO:` line says so: most distributions add it at the next login once the folder exists.
+   The link starts the app directly, without the launcher: after a `git pull`, start
+   `./run_linux.sh` or one of the menu entries once, so new dependencies are installed.
+   `./run_linux.sh --uninstall-desktop` removes the menu entries, the icon and the link (only
+   a link to this checkout).
 
    For development use `scripts/dev-run.sh` (dev tools, `--scratch`). Trying a development
    build with `./run_linux.sh` uses your real data folder and settings: point
@@ -257,7 +268,8 @@ answered (runtime not installed, driver problem). Training can still be started 
   `./run_linux.sh` (it reinstalls when `pyproject.toml` differs). Versions before 0.2.0 have
   no `run_linux.sh`: there, run `.venv/bin/pip install -e .` and `.venv/bin/anima-trainer`.
   The data folder and the settings are shared, and 0.1.0 reads them as they are.
-- To remove the app: `./run_linux.sh --uninstall-desktop`, then delete the checkout. The
+- To remove the app: `./run_linux.sh --uninstall-desktop` (menu entries, icon and the
+  `anima-trainer` link), then delete the checkout. The
   data folder (`~/.local/share/anima-trainer`, several GB) and
   `~/.config/anima-trainer/` are kept until you delete them.
 - Citron's own web UI is independent of this app and keeps working. To reuse settings

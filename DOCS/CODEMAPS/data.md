@@ -25,7 +25,8 @@ key: path, size, mtime_ns).
 | Generated images | <output_dir>/generated/<proj>_<label>_<time>_<seed>[_N].png | runtime_scripts/generate.py | PNG, never overwritten |
 | App venv stamp | <checkout>/.venv/.anima-pyproject.sha256 | run_linux.sh | "<sha256 of pyproject.toml> <checkout path>" |
 | Launcher log | ~/.local/state/anima-trainer/launcher.log | run_linux.sh (no terminal only) | launcher lines, appended |
-| Menu entry, icon | ~/.local/share/applications/anima-lora-studio.desktop, icons/hicolor/scalable/apps/anima-lora-studio.svg | run_linux.sh --install-desktop | Desktop Entry 1.5, SVG |
+| Menu entries, icon | ~/.local/share/applications/anima-lora-studio.desktop and anima-lora-studio-terminal.desktop (Exec run_linux.sh tui, Terminal=true), icons/hicolor/scalable/apps/anima-lora-studio.svg | run_linux.sh --install-desktop | Desktop Entry 1.5, SVG |
+| Command link | ~/.local/bin/anima-trainer -> <checkout>/.venv/bin/anima-trainer | run_linux.sh --install-desktop (replaces only a link to some .venv/bin/anima-trainer) | symlink |
 
 <ts> = %Y-%m-%d_%H%M%S (toml_builder.FILE_TIMESTAMP_FORMAT)
 

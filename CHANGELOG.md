@@ -6,6 +6,13 @@ All notable changes to Anima LoRA Studio are listed here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- `./run_linux.sh --install-desktop` also adds the menu entry Anima LoRA Studio (terminal), which
+  opens the terminal interface, and links `~/.local/bin/anima-trainer`, so `anima-trainer tui` and
+  `anima-trainer train` work from any folder. A file there that is not such a link is kept.
+  `--uninstall-desktop` removes both.
+
 ## [0.3.0] - 2026-11-05
 
 ### Added

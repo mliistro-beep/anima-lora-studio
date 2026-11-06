@@ -47,7 +47,7 @@ Check the requirements above first, in particular the swap and the out-of-memory
 git clone https://github.com/mliistro-beep/anima-lora-studio.git
 cd anima-lora-studio
 ./run_linux.sh                    # first start: creates .venv and installs the app (needs the network)
-./run_linux.sh --install-desktop  # optional: add Anima LoRA Studio to the applications menu
+./run_linux.sh --install-desktop  # optional: menu entries and the anima-trainer command
 ```
 
 Then, in the app's Settings tab, press **Install** to set up the training runtime (torch and
@@ -58,14 +58,17 @@ with **Use file...**. The app keeps all of it in its data folder,
 Later starts reinstall only when `pyproject.toml` changed (for example after `git pull`).
 Do the first start from a terminal or with `--install-desktop`: from the menu it shows only a
 notification while it installs, and its output is in `~/.local/state/anima-trainer/launcher.log`.
-`./run_linux.sh --uninstall-desktop` removes the menu entry. More in
+`--install-desktop` adds two menu entries, Anima LoRA Studio and Anima LoRA Studio (terminal),
+the second opening the terminal interface, and links the `anima-trainer` command into
+`~/.local/bin` (it does not replace a file there that is not its own link).
+`./run_linux.sh --uninstall-desktop` removes them. More in
 [DOCS/RUNBOOK.md](DOCS/RUNBOOK.md).
 
 ## Train from the terminal
 
 After the runtime and the models are set up in the app, you can train without a window, also over
-SSH on a machine with no display. Run these from the checkout (or with the full path of
-`.venv/bin/anima-trainer`):
+SSH on a machine with no display. Run these from the checkout, or after `--install-desktop` as
+plain `anima-trainer ...` from any folder (or from the menu entry Anima LoRA Studio (terminal)):
 
 ```bash
 .venv/bin/anima-trainer tui                     # choose, approve or change a summary, follow progress
@@ -95,7 +98,7 @@ at scratch folders first, or it uses your real data folder.
 <!-- AUTO-GENERATED: commands (source: pyproject.toml, scripts/) -->
 | Command | Description |
 |---------|-------------|
-| `./run_linux.sh` | Start the app, creating or updating `.venv` when needed; `--install-desktop` / `--uninstall-desktop` add or remove the menu entry |
+| `./run_linux.sh` | Start the app, creating or updating `.venv` when needed; `--install-desktop` / `--uninstall-desktop` add or remove the menu entries and the `anima-trainer` command in `~/.local/bin` |
 | `.venv/bin/anima-trainer` | Start the desktop app (`anima_trainer.cli.entry:main`, then `anima_trainer.main:main`) |
 | `.venv/bin/anima-trainer train --help` | Train from a preset, without a window (`--list-presets` shows them) |
 | `scripts/dev-run.sh` | Development only: start the app from the checkout (`--setup` creates `.venv`, `--scratch [DIR]` uses scratch XDG folders, default `~/anima-dev-scratch`) |

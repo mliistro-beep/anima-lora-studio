@@ -8,7 +8,10 @@
 #
 # Usage: ./run_linux.sh [--install-desktop | --uninstall-desktop] [APP_ARGS...]
 #   --install-desktop    set up .venv, then add Anima LoRA Studio to the applications menu
-#   --uninstall-desktop  remove the menu entry and its icon (.venv and the data stay)
+#                        (the app and its terminal interface) and the anima-trainer command
+#                        to ~/.local/bin
+#   --uninstall-desktop  remove the menu entries, their icon and the command (.venv and the
+#                        data stay)
 #   -h, --help           show this help
 
 set -euo pipefail
@@ -30,6 +33,11 @@ readonly APP_TITLE="Anima LoRA Studio"
 readonly ICON_SOURCE="$REPO_DIR/src/anima_trainer/ui/assets/$APP_ID.svg"
 readonly DATA_HOME="${XDG_DATA_HOME:-$HOME/.local/share}"
 readonly DESKTOP_ENTRY="$DATA_HOME/applications/$APP_ID.desktop"
+readonly TERMINAL_ENTRY="$DATA_HOME/applications/$APP_ID-terminal.desktop"
+# The command for a terminal, as a link to the app in .venv (most distributions put this folder
+# in PATH when it exists at login).
+readonly BIN_DIR="$HOME/.local/bin"
+readonly COMMAND_LINK="$BIN_DIR/anima-trainer"
 readonly ICON_TARGET="$DATA_HOME/icons/hicolor/scalable/apps/$APP_ID.svg"
 # Started from the menu there is no terminal: the launcher's own output goes to this log too.
 readonly LOG_FILE="${XDG_STATE_HOME:-$HOME/.local/state}/anima-trainer/launcher.log"
@@ -155,34 +163,68 @@ check_exec_path() {
     esac
 }
 
+# write_entry FILE NAME COMMENT EXEC_ARGS TERMINAL KEYWORDS
+write_entry() {
+    cat > "$1" <<EOF
+[Desktop Entry]
+Type=Application
+Version=1.5
+Name=$2
+GenericName=LoRA Trainer
+Comment=$3
+Exec="$LAUNCHER"$4
+Icon=$APP_ID
+Terminal=$5
+Categories=Graphics;
+Keywords=$6
+EOF
+    if command -v desktop-file-validate >/dev/null && ! desktop-file-validate "$1"; then
+        echo "WARN: desktop-file-validate reported the problems above in $1;" \
+            "the entry is installed anyway." >&2
+    fi
+    echo "OK: Menu entry installed: $1"
+}
+
+# A link this launcher made, for this checkout or another one.
+is_app_link() {
+    [[ -L "$1" && "$(readlink "$1")" == */.venv/bin/anima-trainer ]]
+}
+
+install_command_link() {
+    if [[ -e "$COMMAND_LINK" || -L "$COMMAND_LINK" ]] && ! is_app_link "$COMMAND_LINK"; then
+        echo "WARN: $COMMAND_LINK already exists and is not a link to this app; it is kept." \
+            "Use $APP instead." >&2
+        return
+    fi
+    mkdir -p "$BIN_DIR"
+    ln -sfn "$APP" "$COMMAND_LINK"
+    echo "OK: Command installed: $COMMAND_LINK"
+    case ":$PATH:" in
+        *":$BIN_DIR:"*) ;;
+        *) echo "INFO: $BIN_DIR is not in PATH yet: log out and in again, or add it to PATH." ;;
+    esac
+}
+
 install_desktop() {
     check_exec_path
     locked_setup_venv
     mkdir -p "$(dirname "$DESKTOP_ENTRY")" "$(dirname "$ICON_TARGET")"
     cp "$ICON_SOURCE" "$ICON_TARGET"
-    cat > "$DESKTOP_ENTRY" <<EOF
-[Desktop Entry]
-Type=Application
-Version=1.5
-Name=$APP_TITLE
-GenericName=LoRA Trainer
-Comment=Train LoRAs for the Anima image model and preview them
-Exec="$LAUNCHER"
-Icon=$APP_ID
-Terminal=false
-Categories=Graphics;
-Keywords=LoRA;Anima;training;diffusion;
-EOF
-    if command -v desktop-file-validate >/dev/null && ! desktop-file-validate "$DESKTOP_ENTRY"; then
-        echo "WARN: desktop-file-validate reported the problems above in $DESKTOP_ENTRY;" \
-            "the entry is installed anyway." >&2
-    fi
-    echo "OK: Menu entry installed: $DESKTOP_ENTRY"
+    write_entry "$DESKTOP_ENTRY" "$APP_TITLE" \
+        "Train LoRAs for the Anima image model and preview them" "" false \
+        "LoRA;Anima;training;diffusion;"
+    write_entry "$TERMINAL_ENTRY" "$APP_TITLE (terminal)" \
+        "Train a LoRA from a preset in a terminal; closing the window stops the training" \
+        " tui" true "LoRA;Anima;training;terminal;"
+    install_command_link
 }
 
 uninstall_desktop() {
-    rm -f "$DESKTOP_ENTRY" "$ICON_TARGET"
-    echo "OK: Menu entry removed (the .venv and the data folder are kept)."
+    rm -f "$DESKTOP_ENTRY" "$TERMINAL_ENTRY" "$ICON_TARGET"
+    if [[ -L "$COMMAND_LINK" && "$(readlink "$COMMAND_LINK")" == "$APP" ]]; then
+        rm -f "$COMMAND_LINK"
+    fi
+    echo "OK: Menu entries and command removed (the .venv and the data folder are kept)."
 }
 
 case "${1:-}" in
