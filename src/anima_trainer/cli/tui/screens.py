@@ -33,6 +33,7 @@ from anima_trainer.cli.train_preparation import (
 from anima_trainer.cli.tui.folder_picker import FolderPicker, start_folder
 from anima_trainer.cli.tui_values import load_tui_values
 from anima_trainer.presets.catalog import find_preset
+from anima_trainer.system.gpu_lock import lock_refusal
 from anima_trainer.training.progress import ProgressState
 
 if TYPE_CHECKING:
@@ -162,6 +163,11 @@ class FormScreen(Screen[None]):
         plan = prepare_training(options, self._terminal)
         if isinstance(plan, tuple):
             self._show_errors(plan)
+            return
+        # Before the summary to approve; Start takes the lock again (see TerminalRun.begin).
+        refusal = lock_refusal(self._terminal.paths.gpu_lock_file)
+        if refusal is not None:
+            self._show_errors((f"ERROR: {refusal}",))
             return
         self._show_errors(())
         self.app.push_screen(SummaryScreen(plan, self._terminal))

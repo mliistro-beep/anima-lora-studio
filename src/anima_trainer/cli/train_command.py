@@ -22,6 +22,7 @@ from anima_trainer.cli.train_preparation import (
 )
 from anima_trainer.cli.train_summary import preset_list_lines
 from anima_trainer.runtime.data_dir import SETTINGS_APPLICATION, SETTINGS_ORGANIZATION
+from anima_trainer.system.gpu_lock import lock_refusal
 from anima_trainer.system.process_group import KILL_GRACE_MS
 from anima_trainer.system.quit_signals import SIGNAL_POLL_MS, install_quit_signals
 
@@ -79,6 +80,12 @@ def _train(app: QCoreApplication, options: TrainOptions, output: TerminalOutput)
         _print(output, *plan)
         return EXIT_NOT_STARTED
     _print(output, *plan_lines(plan, context), "")
+    # Before the question: a busy GPU would refuse the start only after the user said yes. The
+    # start takes the lock again, since another process can take it during the question.
+    refusal = lock_refusal(context.paths.gpu_lock_file)
+    if refusal is not None:
+        _print(output, f"ERROR: {refusal}", NOT_STARTED_NOTE)
+        return EXIT_NOT_STARTED
     if not _confirmed(options.yes, output):
         return EXIT_NOT_STARTED
     return _run(app, plan, context, output)

@@ -6,6 +6,12 @@ All notable changes to Anima LoRA Studio are listed here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- `anima-trainer train` checks that the GPU is free before asking for confirmation, and the terminal
+  interface before showing the summary to approve, so a busy GPU no longer refuses the start only
+  after the answer.
+
 ## [0.3.1] - 2026-11-06
 
 ### Added

@@ -16,6 +16,7 @@ from anima_trainer.cli.train_plan import EXIT_NOT_STARTED, EXIT_OK, EXIT_STOPPED
 from anima_trainer.settings.choices import BaseModelName
 from anima_trainer.workflow.training_session import TrainingSession
 from tests.e2e.helpers import make_runtime
+from tests.lock_helpers import held_by_another_process
 
 pytestmark = [
     pytest.mark.integration,
@@ -109,6 +110,19 @@ def test_a_blocked_training_is_reported(runtime, capsys):
     runtime.vae_model.unlink()
     assert entry.main(_train(runtime)) == EXIT_NOT_STARTED
     assert "ERROR: Missing models: VAE" in capsys.readouterr().out
+
+
+def test_a_gpu_in_use_is_reported_before_the_confirmation(runtime, capsys, monkeypatch):
+    asked = []
+    monkeypatch.setattr(train_command, "_confirmed", lambda *_args: asked.append(1) or True)
+    arguments = [part for part in _train(runtime) if part != "--yes"]
+    with held_by_another_process(runtime.gpu_lock_file) as pid:
+        assert entry.main(arguments) == EXIT_NOT_STARTED
+    output = capsys.readouterr().out
+    assert asked == []
+    assert f"pid {pid}" in output
+    assert "INFO: Training not started." in output
+    assert list(runtime.configs_dir.glob("*.toml")) == []
 
 
 def test_an_incomplete_runtime_is_reported_before_the_models(runtime, capsys):

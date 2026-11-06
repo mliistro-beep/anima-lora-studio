@@ -50,6 +50,18 @@ class GpuLock:
             self._file, self._lock = None, None
 
 
+def lock_refusal(file: Path) -> str | None:
+    """Why the lock of `file` cannot be taken right now, or None.
+
+    A check, not a reservation: the lock is taken and given back at once, so a job still has to
+    acquire it. Inside a process that holds the lock it is a refusal too (QLockFile does not nest).
+    """
+    lock = GpuLock()
+    refusal = lock.acquire(TERMINAL_JOB, file)
+    lock.release(TERMINAL_JOB)
+    return refusal
+
+
 def _refusal(lock: QLockFile, file: Path) -> str:
     if lock.error() != QLockFile.LockError.LockFailedError:
         return f"Could not create the lock file {file}: {lock.error().name}"

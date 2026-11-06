@@ -127,7 +127,9 @@ If the VRAM is not enough, use a preset with `network_dim = 8` or lower the reso
 
 `<data folder>/gpu.lock` lets one process use the GPU of a data folder: a training from the
 terminal refuses Start, Generate and Install in the window, and the other way round, naming the
-process that holds it. A lock left by a process that died does not block. If that process was
+process that holds it; `train` checks it before asking for confirmation and `tui` before the
+summary. A lock left by a
+process that died does not block. If that process was
 killed with SIGKILL its training may still be running: check `nvidia-smi` before starting another.
 
 ## Where things are

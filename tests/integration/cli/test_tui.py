@@ -254,13 +254,32 @@ def test_a_failed_training_says_so(paths):
     assert app.exit_code == 1
 
 
-def test_another_process_on_the_gpu_is_reported_and_nothing_runs(paths):
-    _accelerate(paths, "train", "0")
+def test_a_busy_gpu_is_reported_at_the_form_before_the_summary(paths):
     app = _app(paths)
 
     async def scenario(pilot):
         with held_by_another_process(paths.gpu_lock_file) as pid:
-            await _to_training(pilot, paths)
+            epochs, repeats = _fill(app, paths)
+            await pilot.pause()
+            _input(app, "epochs").value = epochs
+            _input(app, "repeats").value = repeats
+            await pilot.click("#continue")
+            await _until(pilot, lambda: str(pid) in _text(app, "errors"))
+        assert isinstance(app.screen, FormScreen)
+        assert list(paths.configs_dir.glob("*.toml")) == []
+
+    _play(app, scenario)
+
+
+def test_a_gpu_taken_while_the_summary_is_open_is_reported_and_nothing_runs(paths):
+    _accelerate(paths, "train", "0")
+    app = _app(paths)
+
+    async def scenario(pilot):
+        await _to_summary(pilot, paths)
+        with held_by_another_process(paths.gpu_lock_file) as pid:
+            await pilot.click("#start")
+            await _until(pilot, lambda: isinstance(app.screen, TrainingScreen))
             await _until(pilot, lambda: str(pid) in _log(app))
         assert "not started" in _text(app, "status")
         assert list(paths.configs_dir.glob("*.toml")) == []
