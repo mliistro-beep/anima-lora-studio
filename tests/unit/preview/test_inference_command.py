@@ -7,8 +7,11 @@ import pytest
 
 from anima_trainer.preview.inference_command import (
     GenerationRequest,
+    LoraUse,
     build_generation_launch,
+    default_generated_folder,
     output_image_path,
+    project_generated_folder,
 )
 from anima_trainer.preview.sample_prompts import SampleSize
 from anima_trainer.preview.vram_profile import (
@@ -29,9 +32,8 @@ NOW = datetime(2026, 10, 27, 12, 30, 5)
 
 def _request(**changes):
     values = {
-        "base_model": "anima-base-v1.0",
-        "lora": Path("/out/my_lora-000002.safetensors"),
-        "lora_multiplier": 0.8,
+        "dit": Path("/models/merge.safetensors"),
+        "loras": (LoraUse(Path("/out/my_lora-000002.safetensors"), 0.8),),
         "prompt": "a girl",
         "negative_prompt": "lowres",
         "size": SampleSize(1024, 768),
@@ -60,7 +62,7 @@ def test_launch_runs_generate_py_with_the_training_venv_and_models():
     # less memory held between the text encoder, DiT and VAE phases
     assert spec.env["PYTORCH_CUDA_ALLOC_CONF"] == "expandable_segments:True"
     args = spec.arguments
-    assert _option(args, "--dit") == str(PATHS.dit_model("anima-base-v1.0"))
+    assert _option(args, "--dit") == "/models/merge.safetensors"
     assert _option(args, "--qwen3") == str(PATHS.qwen3_model)
     assert _option(args, "--vae") == str(PATHS.vae_model)
     assert _option(args, "--lora") == "/out/my_lora-000002.safetensors"
@@ -106,13 +108,27 @@ def test_the_margin_is_larger_while_a_training_runs():
 
 
 def test_without_a_lora_no_lora_option_is_passed():
-    spec = build_generation_launch(PATHS, _request(lora=None), PROFILES, "0", training=False)
+    spec = build_generation_launch(PATHS, _request(loras=()), PROFILES, "0", training=False)
 
     assert "--lora" not in spec.arguments
+    assert "--lora_multiplier" not in spec.arguments
+
+
+def test_every_lora_is_passed_with_its_own_strength_in_order():
+    loras = (LoraUse(Path("/l/a.safetensors"), 1.0), LoraUse(Path("/l/b.safetensors"), -0.5))
+
+    spec = build_generation_launch(PATHS, _request(loras=loras), PROFILES, "0", training=False)
+
+    args = list(spec.arguments)
+    start = args.index("--lora")
+    assert args[start : start + 8] == [
+        "--lora", "/l/a.safetensors", "--lora_multiplier", "1.0",
+        "--lora", "/l/b.safetensors", "--lora_multiplier", "-0.5",
+    ]  # fmt: skip
 
 
 def test_output_path_names_project_checkpoint_time_and_seed():
-    path = output_image_path(Path("/out"), "my_lora", "Epoch 2", 7, NOW)
+    path = output_image_path(Path("/out/generated"), "my_lora", "Epoch 2", 7, NOW)
 
     assert path == Path("/out/generated/my_lora_epoch-2_20261027-123005_7.png")
     assert output_image_path(Path("/out"), "p", "No LoRA", 1, NOW).name == (
@@ -121,12 +137,13 @@ def test_output_path_names_project_checkpoint_time_and_seed():
 
 
 def test_an_existing_image_is_never_overwritten(tmp_path):
-    first = output_image_path(tmp_path, "p", "Final", 7, NOW)
+    first = output_image_path(tmp_path / "pictures", "p", "Final", 7, NOW)
+    assert first.parent == tmp_path / "pictures"
     first.parent.mkdir(parents=True)
     first.write_bytes(b"png")
     first.with_name(first.stem + "_2.png").write_bytes(b"png")
 
-    path = output_image_path(tmp_path, "p", "Final", 7, NOW)
+    path = output_image_path(tmp_path / "pictures", "p", "Final", 7, NOW)
 
     assert path == first.with_name(first.stem + "_3.png")
 
@@ -143,3 +160,8 @@ def test_prompts_reach_argparse_whatever_they_start_with(text):
 
     parsed = parser.parse_args(options)
     assert (parsed.prompt, parsed.negative_prompt) == (text, text)
+
+
+def test_the_default_folder_is_in_the_data_folder_and_a_project_uses_its_output():
+    assert default_generated_folder(PATHS) == ROOT / "generated"
+    assert project_generated_folder(Path("/out")) == Path("/out/generated")

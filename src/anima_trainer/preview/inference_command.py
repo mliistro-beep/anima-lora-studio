@@ -25,10 +25,17 @@ TIME_FORMAT = "%Y%m%d-%H%M%S"
 
 
 @dataclass(frozen=True)
+class LoraUse:
+    path: Path
+    strength: float
+
+
+@dataclass(frozen=True)
 class GenerationRequest:
-    base_model: str
-    lora: Path | None  # None: the base model alone
-    lora_multiplier: float
+    """One image, with no tie to the training: the model file and the LoRAs to apply."""
+
+    dit: Path
+    loras: tuple[LoraUse, ...]  # empty: the base model alone
     prompt: str
     negative_prompt: str
     size: SampleSize
@@ -40,12 +47,21 @@ class GenerationRequest:
     output: Path
 
 
-def output_image_path(output_dir: Path, project: str, label: str, seed: int, now: datetime) -> Path:
-    """<output_dir>/generated/{project}_{checkpoint label}_{time}_{seed}.png, with _2, _3, ...
-    added when that file exists (two images in the same second)."""
+def default_generated_folder(paths: RuntimePaths) -> Path:
+    """Where the generator saves when no folder was chosen: <data>/generated."""
+    return paths.root / GENERATED_DIR
+
+
+def project_generated_folder(output_dir: Path) -> Path:
+    """The generated images of a training project: <output>/generated."""
+    return output_dir / GENERATED_DIR
+
+
+def output_image_path(folder: Path, prefix: str, label: str, seed: int, now: datetime) -> Path:
+    """<folder>/{prefix}_{label}_{time}_{seed}.png, with _2, _3, ... added when that file
+    exists (two images in the same second)."""
     slug = re.sub(r"[^a-z0-9]+", "-", label.lower()).strip("-")
-    stem = f"{project}_{slug}_{now.strftime(TIME_FORMAT)}_{seed}"
-    folder = output_dir / GENERATED_DIR
+    stem = f"{prefix}_{slug}_{now.strftime(TIME_FORMAT)}_{seed}"
     candidates = (folder / f"{stem}{'' if n == 1 else f'_{n}'}.png" for n in count(1))
     return next(path for path in candidates if not path.exists())
 
@@ -78,15 +94,18 @@ def build_generation_launch(
     with the margin (larger while a training runs), skipping those that do not fit the
     available system RAM with its margin; fallbacks that would not save GPU memory at this
     size are left out."""
-    lora = ("--lora", str(request.lora)) if request.lora is not None else ()
+    loras = tuple(
+        part
+        for lora in request.loras
+        for part in ("--lora", str(lora.path), "--lora_multiplier", str(lora.strength))
+    )
     arguments = (
         "-B",  # no __pycache__ next to the scripts or in sd-scripts
         str(GENERATE),
-        "--dit", str(paths.dit_model(request.base_model)),
+        "--dit", str(request.dit),
         "--qwen3", str(paths.qwen3_model),
         "--vae", str(paths.vae_model),
-        *lora,
-        "--lora_multiplier", str(request.lora_multiplier),
+        *loras,
         # One item each: as two, argparse takes a prompt starting with "-" for an option.
         f"--prompt={request.prompt}",
         f"--negative_prompt={request.negative_prompt}",

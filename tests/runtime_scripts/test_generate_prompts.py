@@ -16,7 +16,7 @@ CHECK = Path(__file__).with_name("check_generate_prompts.py")
 @pytest.mark.parametrize("text", ["-lowres", "--steps 3", "a=b", "plain"])
 def test_prompts_reach_sd_scripts_whatever_they_start_with(run_script, runtime, text):
     request = GenerationRequest(
-        base_model="anima-base-v1.0", lora=None, lora_multiplier=1.0, prompt=text,
+        dit=Path("/data/models/dit/anima-base-v1.0.safetensors"), loras=(), prompt=text,
         negative_prompt=text, size=SampleSize(1024, 1024), steps=25, cfg_scale=4.0,
         flow_shift=3.0, seed=1, sampler="er_sde", output=Path("/out/x.png"),
     )  # fmt: skip

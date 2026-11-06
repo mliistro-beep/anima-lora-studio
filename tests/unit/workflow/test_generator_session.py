@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from anima_trainer.preview.inference_command import GenerationRequest
+from anima_trainer.preview.inference_command import GenerationRequest, LoraUse
 from anima_trainer.preview.sample_prompts import SampleSize
 from anima_trainer.runtime.paths import RuntimePaths
 from anima_trainer.training.runner import RunOutcome
@@ -35,9 +35,10 @@ def parts(qtbot):
     return session, runner, events
 
 
-def _request(tmp_path, name="a.png", base_model="anima-base-v1.0"):
+def _request(tmp_path, name="a.png", dit=None, loras=()):
+    dit = dit if dit is not None else RuntimePaths(tmp_path / "data").dit_model("anima-base-v1.0")
     return GenerationRequest(
-        base_model=base_model, lora=None, lora_multiplier=1.0, prompt="a girl", negative_prompt="",
+        dit=dit, loras=loras, prompt="a girl", negative_prompt="",
         size=SampleSize(1024, 1024), steps=25, cfg_scale=4.0, flow_shift=3.0, seed=1,
         sampler="er_sde", output=tmp_path / "out" / name,
     )  # fmt: skip
@@ -85,11 +86,13 @@ def test_every_profile_is_passed_with_the_training_margin(parts, paths, tmp_path
 def test_a_checkpoint_deleted_after_the_refresh_is_refused(parts, paths, tmp_path):
     session, runner, _ = parts
     request = _request(tmp_path)
-    gone = GenerationRequest(**{**request.__dict__, "lora": tmp_path / "gone.safetensors"})
+    gone = GenerationRequest(
+        **{**request.__dict__, "loras": (LoraUse(tmp_path / "gone.safetensors", 1.0),)}
+    )
 
     error = session.generate(paths, (gone,), "0", training=False)
 
-    assert error == f"Checkpoint not found: {tmp_path / 'gone.safetensors'} (press Refresh)"
+    assert error == f"LoRA file not found: {tmp_path / 'gone.safetensors'}"
     assert runner.started == []
 
 
@@ -106,9 +109,10 @@ def test_missing_models_are_refused_before_starting(parts, paths, tmp_path):
 def test_missing_dit_of_the_chosen_base_model_is_refused(parts, paths, tmp_path):
     session, runner, _ = parts
 
-    error = session.generate(paths, (_request(tmp_path, base_model="anima-preview"),), "0", False)
+    dit = paths.dit_model("anima-preview")
+    error = session.generate(paths, (_request(tmp_path, dit=dit),), "0", False)
 
-    assert error == f"Missing model: DiT anima-preview ({paths.dit_model('anima-preview')})"
+    assert error == f"Model file not found: {dit}"
 
 
 def test_second_request_and_empty_queue_are_refused(parts, paths, tmp_path):

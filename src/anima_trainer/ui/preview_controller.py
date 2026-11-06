@@ -14,7 +14,12 @@ from anima_trainer.preview.generator_settings import (
     load_generator_settings,
     save_generator_settings,
 )
-from anima_trainer.preview.inference_command import GenerationRequest, output_image_path
+from anima_trainer.preview.inference_command import (
+    GenerationRequest,
+    LoraUse,
+    output_image_path,
+    project_generated_folder,
+)
 from anima_trainer.preview.sample_prompts import SampleSize
 from anima_trainer.preview.sample_watcher import SampleWatcher
 from anima_trainer.preview.settings import PreviewSettings, load_preview_settings
@@ -176,22 +181,30 @@ class PreviewController(QObject):
             tab.log.append_line(f"WARN: Generator settings could not be saved: {error}")
         checkpoints = tab.checkpoints() if compare else (tab.selected_checkpoint(),)
         requests = tuple(
-            self._request(settings, checkpoint, output_dir) for checkpoint in checkpoints
+            self._request(self._paths, settings, checkpoint, output_dir)
+            for checkpoint in checkpoints
         )
         refused = self.generator.generate(self._paths, requests, self._gpu_index(), self._training)
         if refused is not None:
             tab.log.append_line(f"ERROR: {refused}")
 
     def _request(
-        self, settings: GeneratorSettings, checkpoint: Checkpoint | None, output_dir: Path
+        self,
+        paths: RuntimePaths,
+        settings: GeneratorSettings,
+        checkpoint: Checkpoint | None,
+        output_dir: Path,
     ) -> GenerationRequest:
         label = checkpoint.label if checkpoint is not None else "No LoRA"
         project = self._settings.project_name or "image"
-        output = output_image_path(output_dir, project, label, settings.seed, self._clock())
+        folder = project_generated_folder(output_dir)
+        output = output_image_path(folder, project, label, settings.seed, self._clock())
+        loras = (
+            (LoraUse(checkpoint.path, settings.lora_multiplier),) if checkpoint is not None else ()
+        )
         return GenerationRequest(
-            base_model=self._settings.base_model,
-            lora=checkpoint.path if checkpoint is not None else None,
-            lora_multiplier=settings.lora_multiplier,
+            dit=paths.dit_model(self._settings.base_model),
+            loras=loras,
             prompt=settings.prompt,
             negative_prompt=settings.negative_prompt,
             size=SampleSize(settings.width, settings.height),

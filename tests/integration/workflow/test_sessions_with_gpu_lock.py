@@ -9,6 +9,7 @@ from anima_trainer.preview.inference_command import GenerationRequest
 from anima_trainer.preview.sample_prompts import SampleSize
 from anima_trainer.runtime.data_dir import open_data_dir
 from anima_trainer.runtime.install_plan import InstallPlan
+from anima_trainer.runtime.paths import RuntimePaths
 from anima_trainer.system.gpu_lock import GpuLock
 from anima_trainer.training.runner import RunOutcome
 from anima_trainer.training.start_service import StartRequest
@@ -60,7 +61,8 @@ def _training(paths, lock):
 
 def _generation(tmp_path):
     return GenerationRequest(
-        base_model=BASE_MODEL, lora=None, lora_multiplier=1.0, prompt="a girl", negative_prompt="",
+        dit=RuntimePaths(tmp_path / "data").dit_model(BASE_MODEL), loras=(), prompt="a girl",
+        negative_prompt="",
         size=SampleSize(1024, 1024), steps=25, cfg_scale=4.0, flow_shift=3.0, seed=1,
         sampler="er_sde", output=tmp_path / "out" / "a.png",
     )  # fmt: skip

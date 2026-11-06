@@ -174,9 +174,9 @@ def _model_problem(paths: RuntimePaths, requests: tuple[GenerationRequest, ...])
     if missing:
         return f"Missing models: {', '.join(missing)}"
     for request in requests:
-        dit = paths.dit_model(request.base_model)
-        if not dit.exists():
-            return f"Missing model: DiT {request.base_model} ({dit})"
-        if request.lora is not None and not request.lora.is_file():
-            return f"Checkpoint not found: {request.lora} (press Refresh)"
+        if not request.dit.is_file():
+            return f"Model file not found: {request.dit}"
+        for lora in request.loras:
+            if not lora.path.is_file():
+                return f"LoRA file not found: {lora.path}"
     return None

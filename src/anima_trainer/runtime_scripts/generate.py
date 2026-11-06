@@ -25,6 +25,7 @@ from pathlib import Path
 from typing import Any
 
 import torch
+from lora_inputs import pair_loras
 from profile_choice import (
     MIB,
     MemoryBudget,
@@ -68,8 +69,9 @@ def parse_options(argv: list[str]) -> argparse.Namespace:
     for name in ("--dit", "--qwen3", "--vae", "--output", "--prompt"):
         parser.add_argument(name, required=True)
     parser.add_argument("--negative_prompt", default="")
-    parser.add_argument("--lora", default="")
-    parser.add_argument("--lora_multiplier", type=float, default=1.0)
+    # Repeated in pairs: --lora FILE --lora_multiplier STRENGTH for each LoRA, in order.
+    parser.add_argument("--lora", action="append", default=[])
+    parser.add_argument("--lora_multiplier", type=float, action="append", default=[])
     parser.add_argument("--steps", type=int, default=25)
     parser.add_argument("--cfg", type=float, default=4.0)
     parser.add_argument("--flow_shift", type=float, default=3.0)
@@ -78,7 +80,12 @@ def parse_options(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--profiles", required=True, help="JSON list of memory profiles")
     parser.add_argument("--margin_mib", type=int, default=512, help="free GPU memory left aside")
     parser.add_argument("--ram_margin_mib", type=int, default=1024, help="free RAM left aside")
-    return parser.parse_args(argv)
+    options = parser.parse_args(argv)
+    try:
+        options.loras = pair_loras(options.lora, options.lora_multiplier)
+    except ValueError as error:
+        parser.error(str(error))
+    return options
 
 
 def parse_profiles(text: str) -> tuple[Profile, ...]:
@@ -96,8 +103,9 @@ def _inference_args(ami: Any, options: argparse.Namespace, profile: Profile) -> 
         "--flow_shift", str(options.flow_shift), "--seed", str(options.seed),
         "--save_path", str(Path(options.output).parent),
     ]  # fmt: skip
-    if options.lora:
-        argv += ["--lora_weight", options.lora, "--lora_multiplier", str(options.lora_multiplier)]
+    if options.loras:
+        argv += ["--lora_weight", *(path for path, _ in options.loras)]
+        argv += ["--lora_multiplier", *(str(strength) for _, strength in options.loras)]
     if profile.text_encoder_cpu:
         argv.append("--text_encoder_cpu")
     saved, sys.argv = sys.argv, ["anima_minimal_inference.py", *argv]
