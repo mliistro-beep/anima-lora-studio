@@ -1,4 +1,8 @@
-"""Generate one image with Anima (and optionally a LoRA), fitted to the free GPU memory.
+"""Generate one image with Anima (and optionally LoRAs), fitted to the free GPU memory.
+
+LoRAs come as `--lora FILE --lora_multiplier STRENGTH` pairs (lora_inputs.py); sd-scripts fuses
+them into the DiT weights while loading it. PEFT LoRAs are renamed to kohya keys in memory and
+what is not applied is reported first (lora_keys.py).
 
 Run by the training venv's Python. Models are loaded one at a time (text encoder, DiT, VAE)
 with sd-scripts' anima_minimal_inference helpers; the sampler is ER-SDE or Euler. The memory
@@ -7,10 +11,11 @@ free GPU memory read here, skipping those whose RAM figure plus its margin does 
 available system RAM; on out-of-memory the next, lighter one is used.
 
 Reports to the app through stdout, one line each:
-  INFO: <text>            free GPU memory and available RAM
+  INFO: <text>            free GPU memory and available RAM; a PEFT LoRA renamed
   PROFILE: <name>         a profile is being tried
   STEP: <done>/<total>    a sampling step finished
-  WARN: <text>            a profile ran out of memory, the next one follows
+  WARN: <text>            a profile ran out of memory, the next one follows; a LoRA part
+                          that is not applied (text encoder, unknown keys)
   IMAGE: <path>           the image was saved
   ERROR: <text>           nothing was generated (exit code 1, or 3 when out of memory)
 """
@@ -20,12 +25,15 @@ import gc
 import json
 import os
 import sys
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 import torch
 from lora_inputs import pair_loras
+from lora_keys import kohya_names, lora_notes
 from profile_choice import (
     MIB,
     MemoryBudget,
@@ -38,6 +46,7 @@ from profile_choice import (
     ram_unknown_warning,
     usable_profiles,
 )
+from safetensors import SafetensorError, safe_open
 from samplers import denoiser_from_velocity, er_sde, euler, flow_sigmas
 
 SD_SCRIPTS_ENV = "ANIMA_TRAINER_SD_SCRIPTS"
@@ -146,7 +155,30 @@ def _encode_prompts(ami: Any, args: Any, device: torch.device) -> list[list[torc
     return embeds
 
 
+@contextmanager
+def _peft_loras_renamed(ami: Any) -> Iterator[None]:
+    """sd-scripts reads each LoRA with its module's load_file and keeps only kohya keys: while
+    the DiT loads, that function also renames PEFT keys (lora_keys.py). Other files are as read."""
+    original = ami.load_file
+
+    def load(path: Any, *args: Any, **kwargs: Any) -> Any:
+        tensors = original(path, *args, **kwargs)
+        names = kohya_names(tensors)
+        return {names.get(key, key): value for key, value in tensors.items()} if names else tensors
+
+    ami.load_file = load
+    try:
+        yield
+    finally:
+        ami.load_file = original
+
+
 def _load_dit(ami: Any, args: Any, profile: Profile, device: torch.device) -> Any:
+    with _peft_loras_renamed(ami):
+        return _load_dit_with_loras(ami, args, profile, device)
+
+
+def _load_dit_with_loras(ami: Any, args: Any, profile: Profile, device: torch.device) -> Any:
     if not profile.blocks_to_swap:
         return ami.load_dit_model(args, device, torch.bfloat16)
     dit = ami.load_dit_model(args, torch.device("cpu"), torch.bfloat16)
@@ -313,11 +345,27 @@ def run(ami: Any, options: argparse.Namespace, profiles: tuple[Profile, ...]) ->
     return EXIT_OUT_OF_MEMORY
 
 
+def _report_loras(loras: tuple[tuple[str, float], ...]) -> bool:
+    """Say what will happen to each LoRA, from its header only; False when one cannot be read."""
+    for path, _strength in loras:
+        try:
+            with safe_open(path, framework="pt") as file:
+                keys = list(file.keys())
+        except (OSError, SafetensorError) as error:
+            say("ERROR", f"The LoRA {path} cannot be read: {error}")
+            return False
+        for kind, text in lora_notes(Path(path).name, keys):
+            say(kind, text)
+    return True
+
+
 def main() -> int:
     options = parse_options(sys.argv[1:])
     profiles = parse_profiles(options.profiles)
     if not profiles:
         say("ERROR", "No memory profile given.")
+        return EXIT_FAILED
+    if not _report_loras(options.loras):
         return EXIT_FAILED
     folder = Path(os.environ.get(SD_SCRIPTS_ENV) or Path.cwd() / "sd-scripts")
     sys.path.insert(0, str(folder))
