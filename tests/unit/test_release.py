@@ -6,7 +6,7 @@ from pathlib import Path
 from anima_trainer import __version__
 
 REPO = Path(__file__).resolve().parents[2]
-RELEASE = "0.3.1"
+RELEASE = "0.4.0"
 
 
 def test_the_package_and_pyproject_have_the_release_version():
