@@ -15,6 +15,8 @@ All notable changes to Anima LoRA Studio are listed here. The format follows
 - A Pre-prompt field and a Trigger for every LoRA: the prompt used is the pre-prompt, then the
   triggers of the LoRAs that are on (in their order), then the prompt; the log shows it. An added
   LoRA gets the trigger saved in its metadata (`modelspec.trigger_phrase`), if any.
+- Reset to defaults in the Generator and in the Previews tab puts back the image settings
+  (prompts, LoRAs, model, folder, the previews switch and schedule stay).
 - Compare Epochs shows a thumbnail for every checkpoint: a click shows it large, a double-click
   enlarges it (before, only the last image was left on screen).
 
@@ -23,6 +25,9 @@ All notable changes to Anima LoRA Studio are listed here. The format follows
 - Generated images go to `<data folder>/generated` unless a folder is chosen (before: the
   project's `<output>/generated`, still one click away with Use project folder).
 - In the Generator, the project checkpoint's strength is called Checkpoint Strength.
+- The default CFG is 6.5 with ER-SDE and 7 with Euler (before: 4), in the Generator and for the
+  previews; switching the sampler moves a CFG still at the old default to the new one. Settings
+  saved before keep their CFG: Reset to defaults puts the new one.
 
 - `anima-trainer train` checks that the GPU is free before asking for confirmation, and the terminal
   interface before showing the summary to approve, so a busy GPU no longer refuses the start only

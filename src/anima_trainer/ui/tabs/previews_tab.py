@@ -19,6 +19,7 @@ from anima_trainer.preview.gallery_layout import preview_layout
 from anima_trainer.preview.sample_files import SampleImage
 from anima_trainer.preview.settings import MAX_PROMPTS, PreviewSettings
 from anima_trainer.settings.field_specs import describe_validation_error
+from anima_trainer.ui.sampler_cfg import link_cfg_to_sampler
 from anima_trainer.ui.widgets.image_grid import ImageGrid
 from anima_trainer.ui.widgets.settings_form import SettingsForm
 
@@ -28,6 +29,14 @@ SETTINGS_STRETCH, GALLERY_STRETCH = 2, 3
 SETTINGS_WIDTH, GALLERY_WIDTH = 440, 760  # starting split; the user can drag it
 
 
+# What Reset to defaults puts back: not the on/off switch nor when previews are made.
+PREVIEW_IMAGE_FIELDS = frozenset(
+    spec.name
+    for spec in PREVIEW_FIELDS
+    if spec.name not in {"enabled", "every_n_epochs", "sample_at_first"}
+)
+
+
 class PreviewsTab(QWidget):
     image_activated = Signal(object)  # Path
     refresh_requested = Signal()
@@ -35,6 +44,15 @@ class PreviewsTab(QWidget):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.form = SettingsForm(PREVIEW_FIELDS)
+        link_cfg_to_sampler(self.form)
+        self.reset_button = QPushButton("Reset to defaults")
+        self.reset_button.setToolTip(
+            "The image settings go back to their defaults; the prompts, the on/off switch and "
+            "the schedule stay."
+        )
+        self.reset_button.clicked.connect(
+            lambda: self.form.set_values(PreviewSettings(), only=PREVIEW_IMAGE_FIELDS)
+        )
         self.prompts = QPlainTextEdit()
         self.prompts.setPlaceholderText("masterpiece, best quality, 1girl, ...")
         self.prompts.setAccessibleName("Preview prompts")
@@ -76,6 +94,7 @@ class PreviewsTab(QWidget):
     def set_editable(self, editable: bool) -> None:
         """Read-only while training: changes apply at the next Configure anyway."""
         self.form.setEnabled(editable)
+        self.reset_button.setEnabled(editable)
         self.prompts.setReadOnly(not editable)
 
     def show_samples(self, samples: tuple[SampleImage, ...]) -> None:
@@ -94,6 +113,7 @@ class PreviewsTab(QWidget):
         column = QVBoxLayout(content)
         column.addWidget(prompts_box)
         column.addWidget(self.form)
+        column.addWidget(self.reset_button, 0, Qt.AlignmentFlag.AlignRight)
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setWidget(content)

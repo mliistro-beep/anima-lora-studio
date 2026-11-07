@@ -5,7 +5,9 @@ from pydantic import ValidationError
 
 from anima_trainer.preview.settings import (
     MAX_PROMPTS,
+    SAMPLER_CFG,
     PreviewSettings,
+    cfg_after_sampler_change,
     load_preview_settings,
     save_preview_settings,
 )
@@ -16,7 +18,7 @@ def test_defaults_are_off_with_er_sde_25_steps_and_auto_size():
 
     assert settings.enabled is False
     assert settings.prompts == ()
-    assert (settings.sampler, settings.steps, settings.cfg_scale) == ("er_sde", 25, 4.0)
+    assert (settings.sampler, settings.steps, settings.cfg_scale) == ("er_sde", 25, 6.5)
     assert (settings.auto_size, settings.width, settings.height) == (True, 1024, 1024)
     assert (settings.every_n_epochs, settings.sample_at_first) == (1, False)
 
@@ -95,3 +97,16 @@ def test_load_invalid_value_keeps_the_others_and_warns(tmp_path):
 
     assert (loaded.settings.enabled, loaded.settings.seed, loaded.settings.steps) == (True, 9, 25)
     assert loaded.warnings == ("Invalid value for 'steps' (0), using default.",)
+
+
+def test_each_sampler_has_its_default_cfg():
+    assert dict(SAMPLER_CFG) == {"er_sde": 6.5, "euler": 7.0}
+
+
+def test_a_cfg_left_at_the_old_samplers_default_follows_the_new_sampler():
+    assert cfg_after_sampler_change("er_sde", "euler", 6.5) == 7.0
+    assert cfg_after_sampler_change("euler", "er_sde", 7.0) == 6.5
+
+
+def test_a_cfg_chosen_by_the_user_is_kept_when_the_sampler_changes():
+    assert cfg_after_sampler_change("er_sde", "euler", 5.0) == 5.0

@@ -6,6 +6,7 @@ GPU memory unless the user fixes it.
 
 from dataclasses import dataclass
 from pathlib import Path
+from types import MappingProxyType
 from typing import Annotated, Any, Literal, Self
 
 from pydantic import AfterValidator, BaseModel, ConfigDict, Field
@@ -18,6 +19,18 @@ SIDE_STEP = 16  # sd-scripts rounds sample sizes down to a multiple of 16
 MIN_SIDE = 256
 MAX_SIDE = 2048
 Sampler = Literal["er_sde", "euler"]
+# The CFG each sampler starts from (user's choice after real runs, 2026-11-07: 4 was too low).
+SAMPLER_CFG = MappingProxyType({"er_sde": 6.5, "euler": 7.0})
+DEFAULT_SAMPLER = "er_sde"
+DEFAULT_CFG = SAMPLER_CFG[DEFAULT_SAMPLER]
+
+
+def cfg_after_sampler_change(previous: str, new: str, cfg: float) -> float:
+    """A CFG still at the previous sampler's default moves to the new one's; one the user chose
+    stays."""
+    if cfg == SAMPLER_CFG.get(previous) and new in SAMPLER_CFG:
+        return SAMPLER_CFG[new]
+    return cfg
 
 
 def _check_side(value: int) -> int:
@@ -49,7 +62,7 @@ class PreviewSettings(BaseModel):
     height: Side = 1024
     sampler: Sampler = "er_sde"
     steps: WholeNumber = Field(25, ge=1, le=200)
-    cfg_scale: DecimalNumber = Field(4.0, ge=1.0, le=20.0)
+    cfg_scale: DecimalNumber = Field(DEFAULT_CFG, ge=1.0, le=20.0)
     flow_shift: DecimalNumber = Field(3.0, gt=0, le=20.0)
     seed: WholeNumber = Field(42, ge=0)
     every_n_epochs: WholeNumber = Field(1, ge=1)

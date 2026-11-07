@@ -29,6 +29,7 @@ from anima_trainer.preview.generator_settings import GeneratorSettings
 from anima_trainer.preview.lora_files import lora_trigger
 from anima_trainer.settings.choices import BASE_MODELS
 from anima_trainer.settings.field_specs import describe_validation_error
+from anima_trainer.ui.sampler_cfg import link_cfg_to_sampler
 from anima_trainer.ui.widgets.image_grid import ImageGrid
 from anima_trainer.ui.widgets.log_view import LogView
 from anima_trainer.ui.widgets.lora_table import LoraTable
@@ -85,6 +86,11 @@ class GeneratorTab(QWidget):
         self.prompt.setAccessibleName("Prompt")
         self.prompt.setPlaceholderText("masterpiece, best quality, 1girl, ...")
         self.form = SettingsForm(GENERATOR_FIELDS)
+        link_cfg_to_sampler(self.form)
+        self.reset_button = QPushButton("Reset to defaults")
+        self.reset_button.setToolTip(
+            "The image settings go back to their defaults; prompts, LoRAs, model and folder stay."
+        )
         self.generate_button = QPushButton("Generate")
         self.generate_button.setDefault(True)
         self.compare_button = QPushButton("Compare Epochs")
@@ -165,6 +171,7 @@ class GeneratorTab(QWidget):
         self.compare_button.setEnabled(idle_ok and bool(self._checkpoints))
         self.stop_button.setEnabled(running)
         self.form.setEnabled(not running)
+        self.reset_button.setEnabled(not running)
         self.prompt.setReadOnly(running)
         self.pre_prompt.setReadOnly(running)
         for widget in (self.checkpoint, self.base_model, self.model_file, self.output_folder):
@@ -216,6 +223,7 @@ class GeneratorTab(QWidget):
         self.refresh_button.clicked.connect(self.refresh_requested.emit)
         self.use_project_button.clicked.connect(self.use_project_folder_requested.emit)
         self.open_folder_button.clicked.connect(self.open_folder_requested.emit)
+        self.reset_button.clicked.connect(lambda: self.form.set_values(GeneratorSettings()))
         self.open_button.clicked.connect(self._open_image)
         self.compare_grid.cellClicked.connect(self._show_compared)
         self.compare_grid.image_activated.connect(self.image_activated.emit)
@@ -265,8 +273,10 @@ class GeneratorTab(QWidget):
             buttons.addWidget(button)
         content = QWidget()
         column = QVBoxLayout(content)
-        for widget in (model, lora, prompt_box, self.form, output):
+        for widget in (model, lora, prompt_box, self.form):
             column.addWidget(widget)
+        column.addWidget(self.reset_button, 0, Qt.AlignmentFlag.AlignRight)
+        column.addWidget(output)
         column.addLayout(buttons)
         column.addWidget(self.state_note)
         scroll = QScrollArea()

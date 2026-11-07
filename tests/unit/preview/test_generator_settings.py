@@ -14,7 +14,7 @@ def test_defaults_match_the_preview_defaults():
     settings = GeneratorSettings()
 
     assert (settings.sampler, settings.steps, settings.cfg_scale, settings.seed) == (
-        "er_sde", 25, 4.0, 42,
+        "er_sde", 25, 6.5, 42,
     )  # fmt: skip
     assert (settings.width, settings.height, settings.lora_multiplier) == (1024, 1024, 1.0)
 

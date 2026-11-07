@@ -20,7 +20,7 @@ def test_automatic_size_follows_the_gpu_memory():
         "",
         "Previews:",
         "  INFO: Preview size 768x768 chosen for 8192 MiB of GPU memory.",
-        "  INFO: 1 prompt, every 1 epoch, ER-SDE, 25 steps, CFG 4.0.",
+        "  INFO: 1 prompt, every 1 epoch, ER-SDE, 25 steps, CFG 6.5.",
     )
 
 
@@ -44,4 +44,4 @@ def test_fixed_size_is_used_as_chosen():
     plan = plan_previews(settings, 12288)
 
     assert plan.request == SampleRequest(settings, SampleSize(832, 1216))
-    assert plan.messages[-1] == "  INFO: 1 prompt, every 1 epoch, Euler, 25 steps, CFG 4.0."
+    assert plan.messages[-1] == "  INFO: 1 prompt, every 1 epoch, Euler, 25 steps, CFG 6.5."

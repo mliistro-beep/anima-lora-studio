@@ -107,3 +107,19 @@ def test_ampersand_in_a_group_title_is_shown_and_makes_no_shortcut(basic, advanc
     assert "Project && Paths" in titles
     assert "Noise && Flow" in titles
     assert [title for title in titles if QKeySequence.mnemonic(title).count()] == []
+
+
+def test_one_value_can_be_set(basic):
+    basic.set_value("network_dim", 64)
+
+    assert basic.value("network_dim") == 64
+
+
+def test_only_the_named_fields_take_the_given_values(basic):
+    basic.set_value("network_dim", 64)
+    basic.set_value("network_alpha", 64)
+
+    basic.set_values(TrainingSettings(), only={"network_alpha"})
+
+    assert basic.value("network_dim") == 64
+    assert basic.value("network_alpha") == TrainingSettings().network_alpha

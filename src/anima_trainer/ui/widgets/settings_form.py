@@ -1,6 +1,6 @@
 """A form built from FieldSpecs: one group box per spec group, one row per setting."""
 
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Collection, Mapping, Sequence
 from dataclasses import dataclass
 
 from pydantic import BaseModel
@@ -144,9 +144,14 @@ class SettingsForm(QWidget):
     def values(self) -> dict[str, FieldValue]:
         return {name: field.read() for name, field in self._fields.items()}
 
-    def set_values(self, settings: BaseModel) -> None:
+    def set_value(self, name: str, value: object) -> None:
+        self._fields[name].write(value)
+
+    def set_values(self, settings: BaseModel, only: Collection[str] | None = None) -> None:
+        """Every field from `settings`, or only the fields named in `only`."""
         for name, field in self._fields.items():
-            field.write(getattr(settings, name))
+            if only is None or name in only:
+                field.write(getattr(settings, name))
 
     def set_gpu_choices(self, choices: tuple[str, ...], index: str) -> None:
         if self._gpu_combo is not None:

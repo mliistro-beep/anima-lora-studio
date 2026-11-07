@@ -12,7 +12,7 @@ from typing import Annotated, Any, Self
 
 from pydantic import AfterValidator, BaseModel, ConfigDict, Field
 
-from anima_trainer.preview.settings import MAX_SIDE, MIN_SIDE, Sampler
+from anima_trainer.preview.settings import DEFAULT_CFG, MAX_SIDE, MIN_SIDE, Sampler
 from anima_trainer.preview.vram_profile import GENERATOR_SIDE_STEP
 from anima_trainer.settings.choices import BaseModelName
 from anima_trainer.settings.json_store import load_model, save_model
@@ -63,7 +63,7 @@ class GeneratorSettings(BaseModel):
     height: Side = 1024
     sampler: Sampler = "er_sde"
     steps: WholeNumber = Field(25, ge=1, le=200)
-    cfg_scale: DecimalNumber = Field(4.0, ge=1.0, le=20.0)
+    cfg_scale: DecimalNumber = Field(DEFAULT_CFG, ge=1.0, le=20.0)
     flow_shift: DecimalNumber = Field(3.0, gt=0, le=20.0)
     seed: WholeNumber = Field(42, ge=0)
     lora_multiplier: DecimalNumber = Field(1.0, ge=0.0, le=2.0)  # the project's checkpoint

@@ -233,3 +233,67 @@ def test_pre_prompt_and_triggers_of_the_enabled_loras_lead_the_prompt(app, tmp_p
     assert f"INFO: Prompt: {final}" in tab.log.text()
     saved = load_generator_settings(paths.generator_settings_file).settings
     assert (saved.pre_prompt, saved.loras[1].trigger) == ("score_9, masterpiece", "watercolor")
+
+
+def _cfg(form):
+    return float(form.value("cfg_scale"))  # decimal fields hold text
+
+
+def test_switching_the_sampler_moves_a_default_cfg_to_the_new_default(app):  # noqa: F811
+    window, _, _, _ = app
+    for form in (window.generator_tab.form, window.previews_tab.form):
+        sampler = form.field_widget("sampler")
+        assert _cfg(form) == 6.5
+
+        sampler.setCurrentText("euler")
+        assert _cfg(form) == 7.0
+        sampler.setCurrentText("er_sde")
+        assert _cfg(form) == 6.5
+
+
+def test_a_cfg_typed_by_the_user_stays_when_the_sampler_changes(app):  # noqa: F811
+    window, _, _, _ = app
+    form = window.generator_tab.form
+    form.set_value("cfg_scale", 5.0)
+
+    form.field_widget("sampler").setCurrentText("euler")
+
+    assert _cfg(form) == 5.0
+
+
+def test_reset_puts_back_the_image_defaults_and_keeps_prompt_loras_and_folder(app, tmp_path):  # noqa: F811
+    window, _, _, _ = app
+    tab = window.generator_tab
+    tab.prompt.setPlainText("a cat")
+    tab.pre_prompt.setText("score_9")
+    tab.loras.add_files([str(tmp_path / "a.safetensors")])
+    tab.output_folder.set_path(str(tmp_path / "pictures"))
+    for name, value in (("steps", 40), ("seed", 7), ("cfg_scale", 9.0), ("width", 832)):
+        tab.form.set_value(name, value)
+    tab.form.field_widget("sampler").setCurrentText("euler")
+
+    tab.reset_button.click()
+
+    values = tab.form.values()
+    assert (values["steps"], values["seed"], values["width"]) == (25, 42, 1024)
+    assert float(values["cfg_scale"]) == 6.5
+    assert values["sampler"] == "er_sde"
+    assert (tab.prompt.toPlainText(), tab.pre_prompt.text()) == ("a cat", "score_9")
+    assert len(tab.loras.entries()) == 1
+    assert tab.output_folder.path() == str(tmp_path / "pictures")
+
+
+def test_reset_of_the_previews_keeps_them_on_and_their_schedule(app):  # noqa: F811
+    window, _, _, _ = app
+    tab = window.previews_tab
+    form = tab.form
+    form.field_widget("enabled").setChecked(True)
+    form.set_value("every_n_epochs", 3)
+    form.set_value("steps", 40)
+    tab.prompts.setPlainText("a girl")
+
+    tab.reset_button.click()
+
+    values = form.values()
+    assert (values["enabled"], values["every_n_epochs"], values["steps"]) == (True, 3, 25)
+    assert tab.prompts.toPlainText() == "a girl"
