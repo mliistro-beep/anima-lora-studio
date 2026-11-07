@@ -105,11 +105,11 @@ def test_while_generating_the_list_cannot_be_changed(qtbot):
 
 def test_the_trigger_is_shown_and_kept_with_its_lora(qtbot):
     table = _table(qtbot)
-    entries = (LoraEntry(path="/l/a.safetensors", trigger="@bisley"),)
+    entries = (LoraEntry(path="/l/a.safetensors", trigger="@style"),)
 
     table.set_entries(entries)
 
-    assert table.item(0, TRIGGER_COLUMN).text() == "@bisley"
+    assert table.item(0, TRIGGER_COLUMN).text() == "@style"
     assert table.entries() == entries
 
 
@@ -126,9 +126,9 @@ def test_an_added_file_gets_the_trigger_found_in_it(qtbot):
     table = LoraTable(trigger_for=lambda path: "@" + path.rsplit("/", 1)[-1].split(".")[0])
     qtbot.addWidget(table)
 
-    table.add_files(["/l/bisley.safetensors"])
+    table.add_files(["/l/style.safetensors"])
 
-    assert table.entries()[0].trigger == "@bisley"
+    assert table.entries()[0].trigger == "@style"
 
 
 def test_only_the_trigger_can_be_typed_in(qtbot):

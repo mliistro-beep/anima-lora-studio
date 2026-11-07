@@ -132,14 +132,14 @@ def test_the_final_prompt_is_pre_prompt_then_triggers_of_enabled_loras_then_prom
         pre_prompt=" score_9, masterpiece ",
         prompt="1girl, castle",
         loras=(
-            LoraEntry(path="/l/a.safetensors", trigger=" @bisley "),
+            LoraEntry(path="/l/a.safetensors", trigger=" @style "),
             LoraEntry(path="/l/b.safetensors", trigger="off_trigger", enabled=False),
             LoraEntry(path="/l/c.safetensors"),
             LoraEntry(path="/l/d.safetensors", trigger="watercolor"),
         ),
     )
 
-    assert settings.final_prompt() == "score_9, masterpiece, @bisley, watercolor, 1girl, castle"
+    assert settings.final_prompt() == "score_9, masterpiece, @style, watercolor, 1girl, castle"
 
 
 def test_without_pre_prompt_or_triggers_the_final_prompt_is_the_prompt():

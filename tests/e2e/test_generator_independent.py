@@ -216,7 +216,7 @@ def test_pre_prompt_and_triggers_of_the_enabled_loras_lead_the_prompt(app, tmp_p
     window, _, generator_runner, paths = app
     _real_model(paths)
     styled = write_safetensors(
-        tmp_path / "bisley.safetensors", kohya_blocks(28), {"modelspec.trigger_phrase": "@bisley"}
+        tmp_path / "style_a.safetensors", kohya_blocks(28), {"modelspec.trigger_phrase": "@style"}
     )
     plain = _lora(tmp_path / "loras", "plain.safetensors")
     tab = window.generator_tab
@@ -227,8 +227,8 @@ def test_pre_prompt_and_triggers_of_the_enabled_loras_lead_the_prompt(app, tmp_p
 
     tab.generate_button.click()
 
-    assert tab.loras.item(0, TRIGGER_COLUMN).text() == "@bisley"  # read from the file
-    final = "score_9, masterpiece, @bisley, watercolor, 1girl, castle"
+    assert tab.loras.item(0, TRIGGER_COLUMN).text() == "@style"  # read from the file
+    final = "score_9, masterpiece, @style, watercolor, 1girl, castle"
     assert f"--prompt={final}" in generator_runner.started[0][0].arguments
     assert f"INFO: Prompt: {final}" in tab.log.text()
     saved = load_generator_settings(paths.generator_settings_file).settings

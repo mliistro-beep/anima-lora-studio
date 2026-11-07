@@ -250,10 +250,10 @@ def test_modules_that_anima_does_not_have_are_counted_as_unused(tmp_path):
 
 def test_the_trigger_comes_from_the_training_metadata(tmp_path):
     path = write_safetensors(
-        tmp_path / "a.safetensors", kohya_blocks(1), {"modelspec.trigger_phrase": " @bisley "}
+        tmp_path / "a.safetensors", kohya_blocks(1), {"modelspec.trigger_phrase": " @style "}
     )
 
-    assert lora_trigger(path) == "@bisley"
+    assert lora_trigger(path) == "@style"
 
 
 def test_without_a_trigger_in_the_metadata_or_a_readable_file_there_is_none(tmp_path):

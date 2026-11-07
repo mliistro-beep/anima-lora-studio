@@ -22,7 +22,7 @@ from anima_trainer.settings.choices import BaseModelName
 from anima_trainer.settings.json_store import load_model, save_model
 from anima_trainer.settings.schema import DecimalNumber, WholeNumber
 
-MAX_LORAS = 8  # the user runs 6 together in Krita
+MAX_LORAS = 8  # room for a stack of 6 or more style LoRAs
 MAX_QUEUE = 10  # entries in the queue
 MAX_COUNT = 10  # images of one entry in a row
 MIN_STRENGTH = -2.0
