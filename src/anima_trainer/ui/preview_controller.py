@@ -61,6 +61,7 @@ class PreviewController(QObject):
         self._gpu_index = gpu_index
         self._training = False
         self._ready = False
+        self._compared: dict[Path, int] = {}  # image of a Compare Epochs run -> its column
         self._connect()
 
     def load(self, paths: RuntimePaths, settings: TrainingSettings) -> tuple[str, ...]:
@@ -152,7 +153,7 @@ class PreviewController(QObject):
         tab.image_activated.connect(self._show_image)
         self.generator.log_line.connect(tab.log.append_line)
         self.generator.step_progress.connect(tab.show_step)
-        self.generator.image_ready.connect(tab.show_image)
+        self.generator.image_ready.connect(self._image_ready)
         self.generator.running_changed.connect(lambda _running: self._update_generator_state())
         self.generator.finished.connect(lambda _ok, message: tab.log.append_line(message))
 
@@ -186,9 +187,23 @@ class PreviewController(QObject):
             tab.log.set_lines(tuple(line for line in plan if isinstance(line, str)))
             return
         requests = tuple(request for request in plan if isinstance(request, GenerationRequest))
+        self._compared = {request.output: column for column, request in enumerate(requests)}
+        if compare:
+            tab.start_comparison(
+                tuple(checkpoint.label for checkpoint in checkpoints if checkpoint)
+            )
+        else:
+            self._compared = {}
+            tab.hide_comparison()
         refused = self.generator.generate(self._paths, requests, self._gpu_index(), self._training)
         if refused is not None:
             tab.log.append_line(f"ERROR: {refused}")
+
+    def _image_ready(self, path: Path) -> None:
+        self.generator_tab.show_image(path)
+        column = self._compared.get(path)
+        if column is not None:
+            self.generator_tab.show_comparison_image(column, path)
 
     def _use_project_folder(self) -> None:
         output_dir = self._output_dir()

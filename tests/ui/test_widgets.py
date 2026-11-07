@@ -178,3 +178,36 @@ def test_image_grid_loads_again_a_thumbnail_that_was_half_written(qtbot, tmp_pat
     grid.set_grid(("Epoch 1",), ("Prompt 1",), {(0, 0): path})
 
     assert not grid.item(0, 0).icon().isNull()
+
+
+def _png(path):
+    image = QImage(4, 4, QImage.Format.Format_RGB32)
+    image.fill(QColor("blue"))
+    assert image.save(str(path))
+    return path
+
+
+def test_image_grid_keeps_at_most_its_limit_of_thumbnails_dropping_the_oldest(qtbot, tmp_path):
+    grid = ImageGrid(max_thumbnails=2)
+    qtbot.addWidget(grid)
+    first, second, third = (_png(tmp_path / f"{n}.png") for n in (1, 2, 3))
+
+    for path in (first, second, third):
+        grid.set_grid(("r",), ("c",), {(0, 0): path})
+
+    assert grid.cached_thumbnails() == 2
+    assert not grid.is_cached(first)
+    assert grid.is_cached(second) and grid.is_cached(third)
+
+
+def test_image_grid_can_fill_one_cell_at_a_time(qtbot, tmp_path):
+    grid = ImageGrid()
+    qtbot.addWidget(grid)
+    grid.set_grid(("Seed 7",), ("Epoch 1", "Final"), {})
+    path = _png(tmp_path / "final.png")
+
+    grid.set_cell(0, 1, path)
+
+    assert grid.image_at(0, 1) == path
+    assert grid.image_at(0, 0) is None
+    assert grid.horizontalHeaderItem(1).text() == "Final"

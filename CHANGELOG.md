@@ -12,6 +12,8 @@ All notable changes to Anima LoRA Studio are listed here. The format follows
   yours, up to 8 LoRAs with their strength and an on/off switch (kohya, or PEFT renamed in memory),
   and its own output folder, with Use project folder and Open folder. A LoRA that cannot be applied
   (LoHa, LoKr, DoRA, a larger model...) stops the generation with a clear error.
+- Compare Epochs shows a thumbnail for every checkpoint: a click shows it large, a double-click
+  enlarges it (before, only the last image was left on screen).
 
 ### Changed
 

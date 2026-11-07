@@ -27,6 +27,7 @@ from anima_trainer.preview.form_fields import GENERATOR_FIELDS, GENERATOR_LABELS
 from anima_trainer.preview.generator_settings import GeneratorSettings
 from anima_trainer.settings.choices import BASE_MODELS
 from anima_trainer.settings.field_specs import describe_validation_error
+from anima_trainer.ui.widgets.image_grid import ImageGrid
 from anima_trainer.ui.widgets.log_view import LogView
 from anima_trainer.ui.widgets.lora_table import LoraTable
 from anima_trainer.ui.widgets.path_picker import PathPicker
@@ -39,6 +40,8 @@ SETTINGS_LABELS = GENERATOR_LABELS | {
     "output_folder": "Output folder",
 }  # fmt: skip
 RESULT_SIDE = 512
+COMPARE_THUMBNAIL_SIDE = 128
+COMPARE_ROW = "Compare"
 SETTINGS_STRETCH, OUTPUT_STRETCH = 2, 3
 
 
@@ -85,6 +88,10 @@ class GeneratorTab(QWidget):
         self.result = QLabel("No image yet.", alignment=Qt.AlignmentFlag.AlignCenter)
         self.result.setMinimumSize(RESULT_SIDE // 2, RESULT_SIDE // 2)
         self.open_button = QPushButton("Enlarge")
+        self.compare_grid = ImageGrid(COMPARE_THUMBNAIL_SIDE)
+        self.compare_grid.setAccessibleName("Compare Epochs")
+        self.compare_grid.setToolTip("Click: show it above. Double-click: enlarge.")
+        self.compare_grid.setVisible(False)
         self.log = LogView("Generator Log")
         self._checkpoints: tuple[Checkpoint, ...] = ()
         self._image: Path | None = None
@@ -158,6 +165,17 @@ class GeneratorTab(QWidget):
         if running:
             self.progress.setValue(0)
 
+    def start_comparison(self, labels: tuple[str, ...]) -> None:
+        """One empty thumbnail per checkpoint, filled as the images arrive."""
+        self.compare_grid.set_grid((COMPARE_ROW,), labels, {})
+        self.compare_grid.setVisible(True)
+
+    def show_comparison_image(self, column: int, path: Path) -> None:
+        self.compare_grid.set_cell(0, column, path)
+
+    def hide_comparison(self) -> None:
+        self.compare_grid.setVisible(False)
+
     def show_step(self, done: int, total: int) -> None:
         self.progress.setRange(0, max(total, 1))
         self.progress.setValue(done)
@@ -188,7 +206,14 @@ class GeneratorTab(QWidget):
         self.use_project_button.clicked.connect(self.use_project_folder_requested.emit)
         self.open_folder_button.clicked.connect(self.open_folder_requested.emit)
         self.open_button.clicked.connect(self._open_image)
+        self.compare_grid.cellClicked.connect(self._show_compared)
+        self.compare_grid.image_activated.connect(self.image_activated.emit)
         self.open_button.setEnabled(False)
+
+    def _show_compared(self, row: int, column: int) -> None:
+        path = self.compare_grid.image_at(row, column)
+        if path is not None:
+            self.show_image(path)
 
     def _open_image(self) -> None:
         if self._image is not None:
@@ -243,5 +268,6 @@ class GeneratorTab(QWidget):
         layout.addWidget(self.progress)
         layout.addWidget(self.result, 2)
         layout.addWidget(self.open_button, 0, Qt.AlignmentFlag.AlignRight)
+        layout.addWidget(self.compare_grid, 1)
         layout.addWidget(self.log, 1)
         return column

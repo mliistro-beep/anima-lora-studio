@@ -1,8 +1,10 @@
 """The Generator tab on its own: any model, the user's LoRAs and an own folder (M9)."""
 
+from pathlib import Path
+
 import pytest
 from PySide6.QtCore import QUrl
-from PySide6.QtGui import QDesktopServices
+from PySide6.QtGui import QColor, QDesktopServices, QImage
 
 from anima_trainer.preview.generator_settings import LoraEntry, load_generator_settings
 from tests.e2e.test_previews_generator import OK, _checkpoints, _option, app  # noqa: F401
@@ -143,3 +145,67 @@ def test_open_folder_creates_and_opens_the_folder_in_use(app, monkeypatch, tmp_p
         QUrl.fromLocalFile(str(tmp_path / "pictures")),
     ]
     assert (tmp_path / "pictures").is_dir()
+
+
+def _png(path):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    image = QImage(4, 4, QImage.Format.Format_RGB32)
+    image.fill(QColor("green"))
+    assert image.save(str(path))
+
+
+def _finish_each(generator_runner):
+    """Report every queued image as done, as generate.py would."""
+    done = 0
+    while done < len(generator_runner.started):
+        output = _option(generator_runner.started[done][0].arguments, "--output")
+        _png(Path(output))
+        generator_runner.line_received.emit(f"IMAGE: {output}")
+        generator_runner.finished.emit(OK)
+        done += 1
+    return [_option(spec.arguments, "--output") for spec, _log in generator_runner.started]
+
+
+def test_compare_epochs_shows_one_thumbnail_per_checkpoint(app):  # noqa: F811
+    window, _, generator_runner, paths = app
+    _checkpoints(paths)
+    window.tabs.setCurrentWidget(window.generator_tab)
+    tab = window.generator_tab
+    tab.prompt.setPlainText("a girl")
+
+    tab.compare_button.click()
+    outputs = _finish_each(generator_runner)
+
+    grid = tab.compare_grid
+    assert grid.isVisibleTo(window)
+    labels = [grid.horizontalHeaderItem(column).text() for column in range(grid.columnCount())]
+    assert labels == ["Epoch 1", "Final"]
+    assert [str(grid.image_at(0, column)) for column in range(2)] == outputs
+
+
+def test_a_click_on_a_thumbnail_shows_that_image_large(app):  # noqa: F811
+    window, _, generator_runner, paths = app
+    _checkpoints(paths)
+    window.tabs.setCurrentWidget(window.generator_tab)
+    tab = window.generator_tab
+    tab.prompt.setPlainText("a girl")
+    tab.compare_button.click()
+    outputs = _finish_each(generator_runner)
+
+    tab.compare_grid.cellClicked.emit(0, 0)
+
+    assert tab.result.toolTip() == outputs[0]
+
+
+def test_a_single_image_hides_the_comparison(app):  # noqa: F811
+    window, _, generator_runner, paths = app
+    _checkpoints(paths)
+    window.tabs.setCurrentWidget(window.generator_tab)
+    tab = window.generator_tab
+    tab.prompt.setPlainText("a girl")
+    tab.compare_button.click()
+    _finish_each(generator_runner)
+
+    tab.generate_button.click()
+
+    assert not tab.compare_grid.isVisibleTo(window)
