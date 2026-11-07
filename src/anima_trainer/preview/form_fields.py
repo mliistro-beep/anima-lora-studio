@@ -52,3 +52,10 @@ GENERATOR_FIELDS: tuple[FieldSpec, ...] = (
 
 PREVIEW_LABELS = {spec.name: spec.label for spec in PREVIEW_FIELDS} | {"prompts": "Prompts"}
 GENERATOR_LABELS = {spec.name: spec.label for spec in GENERATOR_FIELDS} | {"prompt": "Prompt"}
+# Every field of GeneratorSettings, for its error lines (the window and the TUI).
+GENERATOR_SETTINGS_LABELS = GENERATOR_LABELS | {
+    "pre_prompt": "Pre-prompt", "base_model": "Base Model", "model_file": "Model file",
+    "loras": "LoRAs", "output_folder": "Output folder",
+}  # fmt: skip
+# What Reset to defaults puts back in the Generator: prompts, LoRAs, model and folder stay.
+GENERATOR_RESET_FIELDS = frozenset(spec.name for spec in GENERATOR_FIELDS)

@@ -46,18 +46,27 @@ def _accelerate(paths, *mode):
     paths.venv_accelerate.chmod(0o755)
 
 
-def _app(paths, forced=None):
+def _app(paths, forced=None, generation_runner=None):
     forced = [] if forced is None else forced
     context = terminal_context(open_data_dir(paths.root), {})
-    return TrainerApp(context, QCoreApplication.instance(), force_exit=forced.append)
+    return TrainerApp(
+        context,
+        QCoreApplication.instance(),
+        force_exit=forced.append,
+        generation_runner=generation_runner,
+    )
 
 
-def _play(app, scenario):
-    """Run `scenario(pilot)` on `app`, and always stop what it started."""
+def _play(app, scenario, choice="#menu-training"):
+    """Run `scenario(pilot)` on `app` after choosing `choice` in the menu (None: stay there),
+    and always stop what it started."""
 
     async def main():
         async with app.run_test(size=SIZE) as pilot:
             await pilot.pause()
+            if choice is not None:
+                await pilot.click(choice)
+                await pilot.pause()
             await scenario(pilot)
 
     try:

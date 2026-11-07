@@ -24,7 +24,7 @@ from PySide6.QtWidgets import (
 )
 
 from anima_trainer.preview.checkpoints import Checkpoint
-from anima_trainer.preview.form_fields import GENERATOR_FIELDS, GENERATOR_LABELS
+from anima_trainer.preview.form_fields import GENERATOR_FIELDS, GENERATOR_SETTINGS_LABELS
 from anima_trainer.preview.generator_settings import GeneratorSettings
 from anima_trainer.preview.lora_files import lora_trigger
 from anima_trainer.settings.choices import BASE_MODELS
@@ -38,10 +38,6 @@ from anima_trainer.ui.widgets.settings_form import SettingsForm
 
 NO_LORA = "No checkpoint"
 MODEL_FILE_FILTER = "Model files (*.safetensors);;All files (*)"
-SETTINGS_LABELS = GENERATOR_LABELS | {
-    "base_model": "Base Model", "model_file": "Model file", "loras": "LoRAs",
-    "output_folder": "Output folder",
-}  # fmt: skip
 RESULT_SIDE = 512
 COMPARE_THUMBNAIL_SIDE = 128
 COMPARE_ROW = "Compare"
@@ -131,7 +127,7 @@ class GeneratorTab(QWidget):
         try:
             return GeneratorSettings.model_validate(values)
         except ValidationError as error:
-            return describe_validation_error(error, SETTINGS_LABELS)
+            return describe_validation_error(error, GENERATOR_SETTINGS_LABELS)
 
     def set_settings(self, settings: GeneratorSettings) -> None:
         self.form.set_values(settings)

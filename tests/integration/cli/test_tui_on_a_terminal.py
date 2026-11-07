@@ -116,11 +116,11 @@ def test_a_lost_terminal_stops_the_training_and_leaves_no_process(setup):
     pid, terminal = _fork(env)
     closed = False
     try:
-        # Repeats, then Enter on the form and Enter on the Start button of the summary.
+        # Enter on Train in the menu, repeats, then Enter on the form and on Start.
         _drain_until(
             terminal,
             lambda: pid_file.exists() and pid_file.read_text().strip(),
-            send=(b"1", b"\r", b"\r"),
+            send=(b"\r", b"1", b"\r", b"\r"),
         )
         os.close(terminal)
         closed = True

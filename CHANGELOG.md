@@ -17,6 +17,11 @@ All notable changes to Anima LoRA Studio are listed here. The format follows
   LoRA gets the trigger saved in its metadata (`modelspec.trigger_phrase`), if any.
 - Reset to defaults in the Generator and in the Previews tab puts back the image settings
   (prompts, LoRAs, model, folder, the previews switch and schedule stay).
+- The terminal interface (`anima-trainer tui`) opens on a menu: Train a LoRA, or Generate images
+  with the Generator's own features (base model or model file, up to 8 LoRAs with on/off,
+  trigger and strength, pre-prompt, prompt, negative prompt, image settings, folder, Reset to
+  defaults). It uses the same settings as the window's Generator; Stop and quitting leave no
+  process behind.
 - Compare Epochs shows a thumbnail for every checkpoint: a click shows it large, a double-click
   enlarges it (before, only the last image was left on screen).
 

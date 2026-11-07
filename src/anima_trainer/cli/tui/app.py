@@ -1,23 +1,30 @@
-"""The TUI application: keeps the training and runs Qt's events inside Textual's loop.
+"""The TUI application: keeps the training or the generation and runs Qt's events inside
+Textual's loop.
 
-Both the training's signals and Textual's screens stay on this one thread, so slots can update
+Their signals and Textual's screens stay on this one thread, so slots can update
 the widgets directly.
 """
 
 import os
 import threading
 from collections.abc import Callable
+from pathlib import Path
 
 from PySide6.QtCore import QCoreApplication
 from textual.app import App
 
+from anima_trainer.cli.terminal_generation import TerminalGeneration
 from anima_trainer.cli.terminal_output import is_progress_line
 from anima_trainer.cli.terminal_run import TerminalRun
 from anima_trainer.cli.train_plan import EXIT_FAILED, EXIT_OK
 from anima_trainer.cli.train_preparation import TerminalContext, TrainPlan
-from anima_trainer.cli.tui.screens import FormScreen, QuitDialog, TrainingScreen
+from anima_trainer.cli.tui.generator_screens import GenerationScreen
+from anima_trainer.cli.tui.menu import MenuScreen
+from anima_trainer.cli.tui.screens import QuitDialog, TrainingScreen
 from anima_trainer.cli.tui_values import TuiValues, save_tui_values
+from anima_trainer.preview.generator_settings import GeneratorSettings
 from anima_trainer.training.progress import ProgressState
+from anima_trainer.workflow.training_session import Runner
 
 QT_EVENTS_INTERVAL_S = 0.05
 # After a signal the terminal may be gone, and Textual can hang while closing on it. Nothing is
@@ -34,6 +41,7 @@ class TrainerApp(App[None]):
         context: TerminalContext,
         qt: QCoreApplication,
         force_exit: Callable[[int], None] = os._exit,
+        generation_runner: Runner | None = None,  # tests: a fake; None: the real one
     ) -> None:
         super().__init__()
         self._force_exit = force_exit
@@ -46,6 +54,9 @@ class TrainerApp(App[None]):
         self._qt_app = qt
         self._training: TerminalRun | None = None
         self._training_screen: TrainingScreen | None = None
+        self._generation_runner = generation_runner
+        self._generation: TerminalGeneration | None = None
+        self._generation_screen: GenerationScreen | None = None
         self._quit_requested = False
         self._exit_when_ended = False
 
@@ -58,11 +69,12 @@ class TrainerApp(App[None]):
 
     @property
     def run_active(self) -> bool:
-        return self._training is not None and self._training.active
+        training = self._training is not None and self._training.active
+        return training or (self._generation is not None and self._generation.active)
 
     def on_mount(self) -> None:
         self.set_interval(QT_EVENTS_INTERVAL_S, self._process_qt_events)
-        self.push_screen(FormScreen(self.terminal))
+        self.push_screen(MenuScreen())
 
     def request_quit(self) -> None:
         """From a signal handler (a lost terminal, SIGTERM): recorded, see _process_qt_events."""
@@ -89,11 +101,32 @@ class TrainerApp(App[None]):
         if self._training is not None:
             self._training.stop()
 
+    def start_generation(self, settings: GeneratorSettings, screen: GenerationScreen) -> None:
+        """Called by the generation screen once it can show lines."""
+        self._generation_screen = screen
+        if self._generation is None:
+            self._generation = TerminalGeneration(
+                self.terminal.paths,
+                self._on_generation_line,
+                self._on_generation_step,
+                self._on_generation_image,
+                self._on_generation_ended,
+                runner=self._generation_runner,
+            )
+        if not self._generation.begin(settings):
+            screen.show_not_started()
+
+    def stop_generation(self) -> None:
+        if self._generation is not None:
+            self._generation.stop()
+
     def shutdown(self) -> None:
         if self._forced_exit_timer is not None:
             self._forced_exit_timer.cancel()
         if self._training is not None:
             self._training.shutdown()
+        if self._generation is not None:
+            self._generation.shutdown()
 
     async def action_quit(self) -> None:
         if self.run_active:
@@ -116,6 +149,7 @@ class TrainerApp(App[None]):
         if self.run_active:
             self._exit_when_ended = True
             self.stop_training()
+            self.stop_generation()
         else:
             self._leave()
 
@@ -156,3 +190,21 @@ class TrainerApp(App[None]):
             self._forced_exit_timer.daemon = True
             self._forced_exit_timer.start()
         self.exit()
+
+    def _on_generation_line(self, line: str) -> None:
+        if self._generation_screen is not None:
+            self._generation_screen.add_line(line)
+
+    def _on_generation_image(self, path: Path) -> None:
+        if self._generation_screen is not None:
+            self._generation_screen.add_image(path)
+
+    def _on_generation_step(self, done: int, total: int) -> None:
+        if self._generation_screen is not None:
+            self._generation_screen.show_step(done, total)
+
+    def _on_generation_ended(self, ok: bool, message: str) -> None:
+        if self._generation_screen is not None:
+            self._generation_screen.show_end(ok, message)
+        if self._exit_when_ended:
+            self._leave()

@@ -18,8 +18,9 @@ def run_tui(arguments: Sequence[str]) -> int:
     parser = argparse.ArgumentParser(
         prog="anima-trainer tui",
         description=(
-            "Choose a preset, check the total steps and train, in the terminal. Quitting stops "
-            "the training: for remote use run it inside tmux, which survives a lost connection."
+            "Choose a preset, check the total steps and train, or generate images with LoRAs, "
+            "in the terminal. Quitting stops what is running: for remote use run it inside "
+            "tmux, which survives a lost connection."
         ),
     )
     parser.parse_args(arguments)

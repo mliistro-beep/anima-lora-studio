@@ -117,6 +117,7 @@ class FormScreen(Screen[None]):
             yield Static("\n".join(warnings), id="errors", markup=False)
             with Horizontal(classes="buttons"):
                 yield Button("Continue", variant="primary", id="continue")
+                yield Button("Menu", id="menu-form")
                 yield Button("Quit", id="quit-form")
         yield Footer()
 
@@ -144,6 +145,8 @@ class FormScreen(Screen[None]):
             self._continue()
         elif event.button.id == "quit-form":
             cast("TrainerApp", self.app).exit()
+        elif event.button.id == "menu-form":
+            self.app.pop_screen()
         elif event.button.id in BROWSE_BUTTONS:
             self._browse(self.query_one(f"#{BROWSE_BUTTONS[event.button.id]}", Input))
 
@@ -297,12 +300,12 @@ class QuitDialog(ModalScreen[bool]):
     def compose(self) -> ComposeResult:
         with Vertical(id="quit-box"):
             yield Label(
-                "Quitting stops the training.\n"
+                "Quitting stops the training or the generation that is running.\n"
                 "Inside tmux you can leave it running instead: detach with Ctrl+B, then D."
             )
             with Horizontal(classes="buttons"):
                 yield Button("Stop and quit", variant="error", id="quit-yes")
-                yield Button("Keep training", variant="primary", id="quit-no")
+                yield Button("Keep it running", variant="primary", id="quit-no")
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         self.dismiss(event.button.id == "quit-yes")

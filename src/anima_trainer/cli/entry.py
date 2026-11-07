@@ -18,7 +18,8 @@ Without a command, opens the graphical app.
 
 commands:
   train    train a LoRA from a preset, without a window
-  tui      the same in a terminal interface, with a summary to approve or change
+  tui      a terminal interface: train with a summary to approve or change, or
+           generate images with LoRAs (the window's Generator settings)
 """
 HELP_FLAGS = {"-h", "--help"}
 QT_PLATFORM_OPTION = "-platform"
