@@ -73,6 +73,7 @@ Start -> accelerate launch ... runtime_scripts/train_with_previews.py (same argu
 SampleWatcher (2 s poll of <output_dir>/sample/) -> samples_changed -> PreviewsTab gallery (epoch x prompt)
 
 ## Generator flow
+Full map and the modules Anima Merger Studio copies: [generator.md](generator.md).
 GeneratorTab Generate / Compare Epochs -> PreviewController -> GenerationRequest per checkpoint
   -> GeneratorSession -> build_generation_launch -> <data>/.venv/bin/python generate.py
   generate.py reads free VRAM (torch) and MemAvailable once, usable_profiles skips the ones that do
