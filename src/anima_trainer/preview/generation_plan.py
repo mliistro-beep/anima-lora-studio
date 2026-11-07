@@ -107,7 +107,7 @@ def _request(
     return GenerationRequest(
         dit=dit,
         loras=(*project_lora, *loras),
-        prompt=settings.prompt,
+        prompt=settings.final_prompt(),
         negative_prompt=settings.negative_prompt,
         size=SampleSize(settings.width, settings.height),
         steps=settings.steps,

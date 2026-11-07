@@ -7,6 +7,7 @@ from anima_trainer.preview.lora_files import (
     LoraFileError,
     LoraFormat,
     check_lora,
+    lora_trigger,
     read_checkpoint_blocks,
     read_lora,
 )
@@ -245,3 +246,19 @@ def test_modules_that_anima_does_not_have_are_counted_as_unused(tmp_path):
     lora = _lora(tmp_path, keys)
 
     assert lora.unused_keys == 3
+
+
+def test_the_trigger_comes_from_the_training_metadata(tmp_path):
+    path = write_safetensors(
+        tmp_path / "a.safetensors", kohya_blocks(1), {"modelspec.trigger_phrase": " @bisley "}
+    )
+
+    assert lora_trigger(path) == "@bisley"
+
+
+def test_without_a_trigger_in_the_metadata_or_a_readable_file_there_is_none(tmp_path):
+    broken = tmp_path / "broken.safetensors"
+    broken.write_bytes(b"x")
+
+    assert lora_trigger(write_safetensors(tmp_path / "a.safetensors", kohya_blocks(1))) == ""
+    assert lora_trigger(broken) == ""

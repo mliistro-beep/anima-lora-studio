@@ -7,6 +7,7 @@ import pytest
 from anima_trainer.preview.safetensors_header import (
     MAX_HEADER_BYTES,
     SafetensorsHeaderError,
+    read_metadata,
     read_tensor_names,
 )
 from tests.safetensors_helpers import write_safetensors
@@ -50,3 +51,21 @@ def test_a_header_larger_than_the_limit_is_refused_without_reading_it(tmp_path):
 
     with pytest.raises(SafetensorsHeaderError, match="header"):
         read_tensor_names(path)
+
+
+def test_the_metadata_strings_are_read(tmp_path):
+    path = write_safetensors(tmp_path / "a.safetensors", ["w"], {"modelspec.trigger_phrase": "@x"})
+
+    assert read_metadata(path) == {"modelspec.trigger_phrase": "@x"}
+
+
+def test_a_file_without_metadata_has_none(tmp_path):
+    assert read_metadata(write_safetensors(tmp_path / "a.safetensors", ["w"])) == {}
+
+
+def test_metadata_values_that_are_not_strings_are_left_out(tmp_path):
+    path = tmp_path / "odd.safetensors"
+    text = b'{"__metadata__": {"a": "1", "b": 2}}'
+    path.write_bytes(struct.pack("<Q", len(text)) + text)
+
+    assert read_metadata(path) == {"a": "1"}

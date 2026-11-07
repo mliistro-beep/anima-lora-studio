@@ -28,6 +28,14 @@ def read_tensor_names(path: Path) -> tuple[str, ...]:
     return names
 
 
+def read_metadata(path: Path) -> dict[str, str]:
+    """The string entries of `__metadata__`; raises SafetensorsHeaderError."""
+    metadata = _read_header(path).get(METADATA_KEY)
+    if not isinstance(metadata, dict):
+        return {}
+    return {key: value for key, value in metadata.items() if isinstance(value, str)}
+
+
 def _read_header(path: Path) -> dict[str, object]:
     try:
         with path.open("rb") as file:

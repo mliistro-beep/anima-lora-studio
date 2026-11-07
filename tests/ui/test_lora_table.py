@@ -1,9 +1,10 @@
 """The Generator's list of LoRAs: file, strength and on/off, at most MAX_LORAS."""
 
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QFileDialog
 
 from anima_trainer.preview.generator_settings import MAX_LORAS, LoraEntry
-from anima_trainer.ui.widgets.lora_table import LoraTable
+from anima_trainer.ui.widgets.lora_table import TRIGGER_COLUMN, LoraTable
 
 
 def _table(qtbot):
@@ -100,3 +101,40 @@ def test_while_generating_the_list_cannot_be_changed(qtbot):
     assert not table.strength_box(0).isEnabled()
     table.set_editable(True)
     assert table.add_button.isEnabled()
+
+
+def test_the_trigger_is_shown_and_kept_with_its_lora(qtbot):
+    table = _table(qtbot)
+    entries = (LoraEntry(path="/l/a.safetensors", trigger="@bisley"),)
+
+    table.set_entries(entries)
+
+    assert table.item(0, TRIGGER_COLUMN).text() == "@bisley"
+    assert table.entries() == entries
+
+
+def test_a_typed_trigger_is_kept(qtbot):
+    table = _table(qtbot)
+    table.add_files(["/l/a.safetensors"])
+
+    table.item(0, TRIGGER_COLUMN).setText(" watercolor ")
+
+    assert table.entries()[0].trigger == "watercolor"
+
+
+def test_an_added_file_gets_the_trigger_found_in_it(qtbot):
+    table = LoraTable(trigger_for=lambda path: "@" + path.rsplit("/", 1)[-1].split(".")[0])
+    qtbot.addWidget(table)
+
+    table.add_files(["/l/bisley.safetensors"])
+
+    assert table.entries()[0].trigger == "@bisley"
+
+
+def test_only_the_trigger_can_be_typed_in(qtbot):
+    table = _table(qtbot)
+    table.add_files(["/l/a.safetensors"])
+
+    editable = Qt.ItemFlag.ItemIsEditable
+    assert table.item(0, TRIGGER_COLUMN).flags() & editable
+    assert not table.item(0, 1).flags() & editable

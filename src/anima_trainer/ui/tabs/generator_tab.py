@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (
     QGroupBox,
     QHBoxLayout,
     QLabel,
+    QLineEdit,
     QPlainTextEdit,
     QProgressBar,
     QPushButton,
@@ -25,6 +26,7 @@ from PySide6.QtWidgets import (
 from anima_trainer.preview.checkpoints import Checkpoint
 from anima_trainer.preview.form_fields import GENERATOR_FIELDS, GENERATOR_LABELS
 from anima_trainer.preview.generator_settings import GeneratorSettings
+from anima_trainer.preview.lora_files import lora_trigger
 from anima_trainer.settings.choices import BASE_MODELS
 from anima_trainer.settings.field_specs import describe_validation_error
 from anima_trainer.ui.widgets.image_grid import ImageGrid
@@ -65,7 +67,7 @@ class GeneratorTab(QWidget):
         self.model_file.setToolTip("A DiT file of yours (for example a merge); it wins when set.")
         self.checkpoint = QComboBox()
         self.checkpoint.setAccessibleName("Checkpoint")
-        self.loras = LoraTable()
+        self.loras = LoraTable(trigger_for=lambda file: lora_trigger(Path(file)))
         self.output_folder = PathPicker("Output folder", "folder")
         self.use_project_button = QPushButton("Use project folder")
         self.use_project_button.setToolTip(
@@ -73,6 +75,12 @@ class GeneratorTab(QWidget):
         )
         self.open_folder_button = QPushButton("Open folder")
         self.refresh_button = QPushButton("Refresh")
+        self.pre_prompt = QLineEdit()
+        self.pre_prompt.setAccessibleName("Pre-prompt")
+        self.pre_prompt.setPlaceholderText("score_9, masterpiece, highres, ...")
+        self.pre_prompt.setToolTip(
+            "Put before the triggers of the LoRAs that are on, then the prompt."
+        )
         self.prompt = QPlainTextEdit()
         self.prompt.setAccessibleName("Prompt")
         self.prompt.setPlaceholderText("masterpiece, best quality, 1girl, ...")
@@ -108,6 +116,7 @@ class GeneratorTab(QWidget):
         values = {
             **self.form.values(),
             "prompt": self.prompt.toPlainText(),
+            "pre_prompt": self.pre_prompt.text(),
             "base_model": self.base_model.currentText(),
             "model_file": self.model_file.path(),
             "loras": self.loras.entries(),
@@ -121,6 +130,7 @@ class GeneratorTab(QWidget):
     def set_settings(self, settings: GeneratorSettings) -> None:
         self.form.set_values(settings)
         self.prompt.setPlainText(settings.prompt)
+        self.pre_prompt.setText(settings.pre_prompt)
         self.base_model.setCurrentText(settings.base_model)
         self.model_file.set_path(settings.model_file)
         self.loras.set_entries(settings.loras)
@@ -156,6 +166,7 @@ class GeneratorTab(QWidget):
         self.stop_button.setEnabled(running)
         self.form.setEnabled(not running)
         self.prompt.setReadOnly(running)
+        self.pre_prompt.setReadOnly(running)
         for widget in (self.checkpoint, self.base_model, self.model_file, self.output_folder):
             widget.setEnabled(not running)
         self.use_project_button.setEnabled(not running)
@@ -246,7 +257,9 @@ class GeneratorTab(QWidget):
         output_buttons.addStretch(1)
         output_layout.addLayout(output_buttons)
         prompt_box = QGroupBox("Prompt")
-        QVBoxLayout(prompt_box).addWidget(self.prompt)
+        prompt_layout = QFormLayout(prompt_box)
+        prompt_layout.addRow("Pre-prompt", self.pre_prompt)
+        prompt_layout.addRow(self.prompt)
         buttons = QHBoxLayout()
         for button in (self.generate_button, self.compare_button, self.stop_button):
             buttons.addWidget(button)

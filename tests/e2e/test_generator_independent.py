@@ -7,6 +7,7 @@ from PySide6.QtCore import QUrl
 from PySide6.QtGui import QColor, QDesktopServices, QImage
 
 from anima_trainer.preview.generator_settings import LoraEntry, load_generator_settings
+from anima_trainer.ui.widgets.lora_table import TRIGGER_COLUMN
 from tests.e2e.test_previews_generator import OK, _checkpoints, _option, app  # noqa: F401
 from tests.safetensors_helpers import checkpoint_keys, kohya_blocks, write_safetensors
 
@@ -209,3 +210,26 @@ def test_a_single_image_hides_the_comparison(app):  # noqa: F811
     tab.generate_button.click()
 
     assert not tab.compare_grid.isVisibleTo(window)
+
+
+def test_pre_prompt_and_triggers_of_the_enabled_loras_lead_the_prompt(app, tmp_path):  # noqa: F811
+    window, _, generator_runner, paths = app
+    _real_model(paths)
+    styled = write_safetensors(
+        tmp_path / "bisley.safetensors", kohya_blocks(28), {"modelspec.trigger_phrase": "@bisley"}
+    )
+    plain = _lora(tmp_path / "loras", "plain.safetensors")
+    tab = window.generator_tab
+    tab.pre_prompt.setText("score_9, masterpiece")
+    tab.prompt.setPlainText("1girl, castle")
+    tab.loras.add_files([str(styled), str(plain)])
+    tab.loras.item(1, TRIGGER_COLUMN).setText("watercolor")
+
+    tab.generate_button.click()
+
+    assert tab.loras.item(0, TRIGGER_COLUMN).text() == "@bisley"  # read from the file
+    final = "score_9, masterpiece, @bisley, watercolor, 1girl, castle"
+    assert f"--prompt={final}" in generator_runner.started[0][0].arguments
+    assert f"INFO: Prompt: {final}" in tab.log.text()
+    saved = load_generator_settings(paths.generator_settings_file).settings
+    assert (saved.pre_prompt, saved.loras[1].trigger) == ("score_9, masterpiece", "watercolor")

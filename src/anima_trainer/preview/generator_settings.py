@@ -21,6 +21,7 @@ from anima_trainer.settings.schema import DecimalNumber, WholeNumber
 MAX_LORAS = 8  # the user runs 6 together in Krita
 MIN_STRENGTH = -2.0
 MAX_STRENGTH = 2.0
+PROMPT_SEPARATOR = ", "
 
 
 def _check_side(value: int) -> int:
@@ -47,6 +48,7 @@ class LoraEntry(BaseModel):
     path: Annotated[str, AfterValidator(_required_path)]
     strength: DecimalNumber = Field(1.0, ge=MIN_STRENGTH, le=MAX_STRENGTH)
     enabled: bool = True
+    trigger: Annotated[str, AfterValidator(str.strip)] = ""  # added to the prompt while enabled
 
 
 class GeneratorSettings(BaseModel):
@@ -55,6 +57,7 @@ class GeneratorSettings(BaseModel):
     )
 
     prompt: Annotated[str, AfterValidator(str.strip)] = ""
+    pre_prompt: Annotated[str, AfterValidator(str.strip)] = ""  # e.g. score_9, masterpiece
     negative_prompt: str = ""
     width: Side = 1024
     height: Side = 1024
@@ -75,6 +78,12 @@ class GeneratorSettings(BaseModel):
 
     def enabled_loras(self) -> tuple[LoraEntry, ...]:
         return tuple(entry for entry in self.loras if entry.enabled)
+
+    def final_prompt(self) -> str:
+        """Pre-prompt, then the triggers of the enabled LoRAs in their order, then the prompt."""
+        triggers = (entry.trigger for entry in self.enabled_loras())
+        parts = (self.pre_prompt, *triggers, self.prompt)
+        return PROMPT_SEPARATOR.join(part for part in parts if part)
 
     def problems(self) -> tuple[str, ...]:
         return () if self.prompt else ("Write a prompt first.",)

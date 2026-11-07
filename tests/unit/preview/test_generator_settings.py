@@ -122,3 +122,33 @@ def test_a_change_keeps_the_loras_and_checks_them_again():
     assert (changed.seed, changed.loras) == (9, settings.loras)
     with pytest.raises(ValidationError):
         settings.with_changes(loras=(*settings.loras,) * (MAX_LORAS + 1))
+
+
+def test_the_final_prompt_is_pre_prompt_then_triggers_of_enabled_loras_then_prompt():
+    settings = GeneratorSettings(
+        pre_prompt=" score_9, masterpiece ",
+        prompt="1girl, castle",
+        loras=(
+            LoraEntry(path="/l/a.safetensors", trigger=" @bisley "),
+            LoraEntry(path="/l/b.safetensors", trigger="off_trigger", enabled=False),
+            LoraEntry(path="/l/c.safetensors"),
+            LoraEntry(path="/l/d.safetensors", trigger="watercolor"),
+        ),
+    )
+
+    assert settings.final_prompt() == "score_9, masterpiece, @bisley, watercolor, 1girl, castle"
+
+
+def test_without_pre_prompt_or_triggers_the_final_prompt_is_the_prompt():
+    assert GeneratorSettings(prompt="a cat").final_prompt() == "a cat"
+
+
+def test_trigger_and_pre_prompt_survive_a_save(tmp_path):
+    path = tmp_path / "generator.json"
+    settings = GeneratorSettings(
+        pre_prompt="score_9", loras=(LoraEntry(path="/l/a.safetensors", trigger="@x"),)
+    )
+
+    save_generator_settings(path, settings)
+
+    assert load_generator_settings(path).settings == settings

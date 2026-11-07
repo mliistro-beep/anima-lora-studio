@@ -187,6 +187,7 @@ class PreviewController(QObject):
             tab.log.set_lines(tuple(line for line in plan if isinstance(line, str)))
             return
         requests = tuple(request for request in plan if isinstance(request, GenerationRequest))
+        tab.log.append_line(f"INFO: Prompt: {requests[0].prompt}")
         self._compared = {request.output: column for column, request in enumerate(requests)}
         if compare:
             tab.start_comparison(

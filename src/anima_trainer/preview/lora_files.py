@@ -16,7 +16,11 @@ from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
 
-from anima_trainer.preview.safetensors_header import SafetensorsHeaderError, read_tensor_names
+from anima_trainer.preview.safetensors_header import (
+    SafetensorsHeaderError,
+    read_metadata,
+    read_tensor_names,
+)
 
 # Transformer blocks of the Anima generations: a LoRA reaching exactly one of these counts was
 # probably made for that generation.
@@ -117,6 +121,19 @@ def read_lora(path: Path) -> LoraFile:
         has_text_encoder=bool(text_encoder),
         unused_keys=len(keys) - len(dit_keys) - len(text_encoder),
     )
+
+
+# sd-scripts writes the trigger given at training time here (Civitai LoRAs made with it too).
+TRIGGER_METADATA_KEY = "modelspec.trigger_phrase"
+
+
+def lora_trigger(path: Path) -> str:
+    """The trigger saved in the LoRA's metadata; blank when there is none or the file cannot be
+    read (adding a LoRA must not fail on this: the user can type the trigger)."""
+    try:
+        return read_metadata(path).get(TRIGGER_METADATA_KEY, "").strip()
+    except SafetensorsHeaderError:
+        return ""
 
 
 def read_checkpoint_blocks(path: Path) -> int:

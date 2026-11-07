@@ -170,3 +170,14 @@ def test_the_catalog_model_is_read_only_when_loras_are_added(paths, tmp_path):
 
     assert len(plain) == 1 and not isinstance(plain[0], str)
     assert len(with_lora) == 1 and with_lora[0].startswith("ERROR: ")
+
+
+def test_the_request_carries_the_final_prompt(paths, tmp_path):
+    lora = _lora(tmp_path, "a.safetensors")
+    settings = GeneratorSettings(
+        pre_prompt="score_9", prompt="a cat", loras=(LoraEntry(path=str(lora), trigger="@x"),)
+    )
+
+    (request,) = plan_generation(settings, paths, _target(), NOW)
+
+    assert request.prompt == "score_9, @x, a cat"
