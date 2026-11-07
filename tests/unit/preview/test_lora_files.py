@@ -15,6 +15,7 @@ from tests.safetensors_helpers import (
     kohya_blocks,
     kohya_module,
     peft_blocks,
+    peft_module,
     write_safetensors,
 )
 
@@ -200,3 +201,47 @@ def test_a_lora_on_the_text_encoder_only_says_so(tmp_path):
 
     with pytest.raises(LoraFileError, match="only the text encoder"):
         _lora(tmp_path, keys)
+
+
+@pytest.mark.parametrize(
+    "key",
+    [
+        "lora_unet_down_blocks_0_attentions_0_transformer_blocks_1_attn2_to_k",  # SDXL
+        "lora_unet_double_blocks_0_img_attn_proj",  # Flux, kohya
+    ],
+)
+def test_a_kohya_lora_of_another_model_is_not_an_anima_lora(tmp_path, key):
+    with pytest.raises(LoraFileError, match="not an Anima LoRA"):
+        _lora(tmp_path, kohya_module(key))
+
+
+@pytest.mark.parametrize(
+    "module",
+    [
+        "layers.0.adaLN_modulation.0",  # Z-Image
+        "blocks.0.attn.gate",  # Krea2: blocks, but not Anima's modules
+        "double_blocks.0.img_attn.proj",  # Flux 2
+    ],
+)
+def test_a_peft_lora_of_another_model_is_not_an_anima_lora(tmp_path, module):
+    with pytest.raises(LoraFileError, match="not an Anima LoRA"):
+        _lora(tmp_path, peft_module(module))
+
+
+def test_a_peft_lora_with_the_adaln_modules_is_read_with_its_blocks(tmp_path):
+    keys = [
+        *peft_module("blocks.0.adaln_modulation_cross_attn.1"),
+        *peft_module("blocks.27.cross_attn.output_proj"),
+    ]
+
+    lora = _lora(tmp_path, keys)
+
+    assert (lora.format, lora.blocks, lora.unused_keys) == (LoraFormat.PEFT, (0, 27), 0)
+
+
+def test_modules_that_anima_does_not_have_are_counted_as_unused(tmp_path):
+    keys = kohya_blocks(28) + list(kohya_module("lora_unet_final_layer_linear"))
+
+    lora = _lora(tmp_path, keys)
+
+    assert lora.unused_keys == 3

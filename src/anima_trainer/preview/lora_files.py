@@ -29,6 +29,25 @@ KOHYA_SUFFIXES = (".lora_down.weight", ".lora_up.weight", ".alpha")
 PEFT_SUFFIXES = (".lora_A.weight", ".lora_B.weight", ".alpha")
 CHECKPOINT_PREFIXES = ("model.diffusion_model.", "net.")
 
+# The modules of Anima's DiT that LoRAs change: attention and MLP of each block, its adaLN
+# linears, and the LLM adapter. Other models share the prefixes (SDXL and Flux kohya files start
+# with lora_unet_, Z-Image and Krea2 PEFT files with diffusion_model., Krea2 even has blocks.N),
+# so the module names are what tells an Anima LoRA apart.
+_ANIMA_MODULE = (
+    r"blocks{sep}\d{{1,6}}{sep}(?:(?:self_attn|cross_attn){sep}(?:q_proj|k_proj|v_proj|output_proj)"
+    r"|mlp{sep}layer[12]|adaln_modulation_(?:self_attn|cross_attn|mlp){sep}\d+)"
+    r"|llm_adapter{sep}.+"
+)
+_KOHYA_ANIMA = re.compile(
+    r"^lora_unet_(?:"
+    + _ANIMA_MODULE.format(sep="_")
+    + r")\.(?:lora_down\.weight|lora_up\.weight|alpha)$"
+)
+_PEFT_ANIMA = re.compile(
+    r"^diffusion_model\.(?:"
+    + _ANIMA_MODULE.format(sep=r"\.")
+    + r")\.(?:lora_A\.weight|lora_B\.weight|alpha)$"
+)
 _KOHYA_BLOCK = re.compile(r"^lora_unet_blocks_(\d{1,6})_")
 _PEFT_BLOCK = re.compile(r"^diffusion_model\.blocks\.(\d{1,6})\.")
 _CHECKPOINT_BLOCK = re.compile(r"^blocks\.(\d{1,6})\.")
@@ -81,10 +100,8 @@ def read_lora(path: Path) -> LoraFile:
     except SafetensorsHeaderError as error:
         raise LoraFileError(str(error)) from error
     _refuse_variants(path, keys)
-    kohya = [
-        key for key in keys if key.startswith(KOHYA_DIT_PREFIX) and key.endswith(KOHYA_SUFFIXES)
-    ]
-    peft = [key for key in keys if key.startswith(PEFT_DIT_PREFIX) and key.endswith(PEFT_SUFFIXES)]
+    kohya = [key for key in keys if _KOHYA_ANIMA.match(key)]
+    peft = [key for key in keys if _PEFT_ANIMA.match(key)]
     text_encoder = [key for key in keys if key.startswith(KOHYA_TEXT_ENCODER_PREFIX)]
     if kohya and peft:
         raise LoraFileError(f"{path.name} mixes the kohya and PEFT formats: it cannot be applied.")
