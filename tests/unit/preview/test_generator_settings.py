@@ -2,7 +2,10 @@ import pytest
 from pydantic import ValidationError
 
 from anima_trainer.preview.generator_settings import (
+    MAX_COUNT,
     MAX_LORAS,
+    MAX_QUEUE,
+    GenerationEntry,
     GeneratorSettings,
     LoraEntry,
     load_generator_settings,
@@ -152,3 +155,51 @@ def test_trigger_and_pre_prompt_survive_a_save(tmp_path):
     save_generator_settings(path, settings)
 
     assert load_generator_settings(path).settings == settings
+
+
+def test_a_new_entry_has_a_fixed_seed_one_image_and_the_queue_is_empty():
+    settings = GeneratorSettings()
+    assert (settings.random_seed, settings.count, settings.queue) == (False, 1, ())
+
+
+@pytest.mark.parametrize("count", [0, MAX_COUNT + 1, True])
+def test_the_count_goes_from_one_to_ten(count):
+    with pytest.raises(ValidationError):
+        GeneratorSettings(count=count)
+
+
+def test_the_form_becomes_a_queue_entry_without_the_folder_or_the_checkpoint_strength():
+    lora = LoraEntry(path="/l/a.safetensors", trigger="sks")
+    settings = GeneratorSettings(
+        prompt="a cat", random_seed=True, count=5, loras=(lora,), output_folder="/out"
+    )
+    entry = settings.entry()
+    assert isinstance(entry, GenerationEntry)
+    assert (entry.prompt, entry.random_seed, entry.count, entry.loras) == (
+        "a cat",
+        True,
+        5,
+        (lora,),
+    )
+    assert not hasattr(entry, "output_folder")
+    assert not hasattr(entry, "lora_multiplier")
+
+
+def test_the_queue_keeps_at_most_ten_entries_in_order():
+    entries = tuple(GenerationEntry(prompt=f"p{n}") for n in range(MAX_QUEUE))
+    assert GeneratorSettings(queue=entries).queue == entries
+    with pytest.raises(ValidationError):
+        GeneratorSettings(queue=(*entries, GenerationEntry(prompt="one more")))
+
+
+def test_the_queue_survives_a_save(tmp_path):
+    file = tmp_path / "generator.json"
+    entry = GenerationEntry(prompt="a dog", random_seed=True, count=3, sampler="euler")
+    save_generator_settings(file, GeneratorSettings(prompt="a cat", queue=(entry,)))
+    assert load_generator_settings(file).settings.queue == (entry,)
+
+
+def test_a_queue_entry_has_its_own_final_prompt_and_problems():
+    entry = GenerationEntry(pre_prompt="score_9", prompt="a dog")
+    assert entry.final_prompt() == "score_9, a dog"
+    assert GenerationEntry().problems() == ("Write a prompt first.",)

@@ -5,7 +5,11 @@ from datetime import datetime
 import pytest
 
 from anima_trainer.cli.terminal_generation import TerminalGeneration
-from anima_trainer.preview.generator_settings import GeneratorSettings, load_generator_settings
+from anima_trainer.preview.generator_settings import (
+    GenerationEntry,
+    GeneratorSettings,
+    load_generator_settings,
+)
 from anima_trainer.preview.inference_command import default_generated_folder
 from anima_trainer.training.runner import RunOutcome
 from tests.e2e.helpers import make_runtime
@@ -118,3 +122,22 @@ def test_shutdown_stops_the_process(parts):
     run.shutdown()
 
     assert runner.shut_down == 1  # the real runner waits there for the process to exit
+
+
+def test_the_queue_is_generated_with_every_entry_in_order(parts):
+    run, runner, events = parts
+    queue = (GenerationEntry(prompt="a cat"), GenerationEntry(prompt="a dog"))
+
+    assert run.begin(GeneratorSettings(prompt="not queued", queue=queue), queue=True)
+
+    assert "INFO: Queue: 2 entries, 2 images." in events["lines"]
+    assert "a cat" in " ".join(runner.started[0][0].arguments)
+
+
+def test_an_empty_queue_starts_nothing(parts):
+    run, runner, events = parts
+
+    assert not run.begin(GeneratorSettings(prompt="a cat"), queue=True)
+
+    assert runner.started == []
+    assert any("The queue is empty" in line for line in events["lines"])

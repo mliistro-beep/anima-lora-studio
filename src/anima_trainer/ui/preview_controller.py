@@ -10,8 +10,9 @@ from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import QWidget
 
 from anima_trainer.preview.checkpoints import list_checkpoints
-from anima_trainer.preview.generation_plan import GenerationTarget, plan_generation
+from anima_trainer.preview.generation_plan import GenerationTarget, plan_generation, plan_queue
 from anima_trainer.preview.generator_settings import (
+    GeneratorSettings,
     load_generator_settings,
     save_generator_settings,
 )
@@ -146,6 +147,7 @@ class PreviewController(QObject):
         tab = self.generator_tab
         tab.generate_requested.connect(lambda: self._generate(compare=False))
         tab.compare_requested.connect(lambda: self._generate(compare=True))
+        tab.generate_queue_requested.connect(self._generate_queue)
         tab.stop_requested.connect(self.generator.stop)
         tab.refresh_requested.connect(self.refresh_checkpoints)
         tab.use_project_folder_requested.connect(self._use_project_folder)
@@ -153,6 +155,7 @@ class PreviewController(QObject):
         tab.image_activated.connect(self._show_image)
         self.generator.log_line.connect(tab.log.append_line)
         self.generator.step_progress.connect(tab.show_step)
+        self.generator.image_started.connect(tab.show_image_started)
         self.generator.image_ready.connect(self._image_ready)
         self.generator.running_changed.connect(lambda _running: self._update_generator_state())
         self.generator.finished.connect(lambda _ok, message: tab.log.append_line(message))
@@ -170,24 +173,14 @@ class PreviewController(QObject):
 
     def _generate(self, compare: bool) -> None:
         tab = self.generator_tab
-        settings = tab.settings()
-        if isinstance(settings, tuple):
-            tab.log.set_lines(settings)
+        settings = self._saved_settings()
+        if settings is None or self._paths is None:
             return
-        if self._paths is None:
-            return
-        try:
-            save_generator_settings(self._paths.generator_settings_file, settings)
-        except OSError as error:
-            tab.log.append_line(f"WARN: Generator settings could not be saved: {error}")
         checkpoints = tab.checkpoints() if compare else (tab.selected_checkpoint(),)
         target = GenerationTarget(self._settings.project_name, checkpoints)
-        plan = plan_generation(settings, self._paths, target, self._clock())
-        if not plan or isinstance(plan[0], str):
-            tab.log.set_lines(tuple(line for line in plan if isinstance(line, str)))
+        requests = self._requests(plan_generation(settings, self._paths, target, self._clock()))
+        if not requests:
             return
-        requests = tuple(request for request in plan if isinstance(request, GenerationRequest))
-        tab.log.append_line(f"INFO: Prompt: {requests[0].prompt}")
         self._compared = {request.output: column for column, request in enumerate(requests)}
         if compare:
             tab.start_comparison(
@@ -196,9 +189,53 @@ class PreviewController(QObject):
         else:
             self._compared = {}
             tab.hide_comparison()
+        self._start(requests)
+
+    def _generate_queue(self) -> None:
+        settings = self._saved_settings()
+        if settings is None or self._paths is None:
+            return
+        requests = self._requests(plan_queue(settings, self._paths, self._clock()))
+        if not requests:
+            return
+        self._compared = {}
+        self.generator_tab.hide_comparison()
+        self.generator_tab.log.append_line(
+            f"INFO: Queue: {len(settings.queue)} entries, {len(requests)} images."
+        )
+        self._start(requests)
+
+    def _saved_settings(self) -> GeneratorSettings | None:
+        """The tab's settings, saved; None (and the reasons in the log) when they are wrong."""
+        tab = self.generator_tab
+        settings = tab.settings()
+        if isinstance(settings, tuple):
+            tab.log.set_lines(settings)
+            return None
+        if self._paths is not None:
+            try:
+                save_generator_settings(self._paths.generator_settings_file, settings)
+            except OSError as error:
+                tab.log.append_line(f"WARN: Generator settings could not be saved: {error}")
+        return settings
+
+    def _requests(
+        self, plan: tuple[GenerationRequest, ...] | tuple[str, ...]
+    ) -> tuple[GenerationRequest, ...]:
+        """The planned images; none, and the reasons in the log, when the plan was refused."""
+        requests = tuple(item for item in plan if isinstance(item, GenerationRequest))
+        if not requests:
+            self.generator_tab.log.set_lines(tuple(str(line) for line in plan))
+            return ()
+        self.generator_tab.log.append_line(f"INFO: Prompt: {requests[0].prompt}")
+        return requests
+
+    def _start(self, requests: tuple[GenerationRequest, ...]) -> None:
+        if self._paths is None:
+            return
         refused = self.generator.generate(self._paths, requests, self._gpu_index(), self._training)
         if refused is not None:
-            tab.log.append_line(f"ERROR: {refused}")
+            self.generator_tab.log.append_line(f"ERROR: {refused}")
 
     def _image_ready(self, path: Path) -> None:
         self.generator_tab.show_image(path)

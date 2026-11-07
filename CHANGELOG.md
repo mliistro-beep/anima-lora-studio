@@ -22,6 +22,16 @@ All notable changes to Anima LoRA Studio are listed here. The format follows
   trigger and strength, pre-prompt, prompt, negative prompt, image settings, folder, Reset to
   defaults). It uses the same settings as the window's Generator; Stop and quitting leave no
   process behind.
+- Random seed and Images (1 to 10 in a row) in the Generator, and a Queue of up to 10 entries
+  with Add current, Remove, Clear and Generate queue: each entry keeps its own prompts, model,
+  LoRAs and image settings, and its own random seed and number of images. The same in the
+  window and in the terminal interface, which share the queue.
+- Every generated PNG holds its settings: a `parameters` text in the A1111 / Forge layout (read
+  by Civitai and image viewers) and the entry as JSON, with the seed used and the app's name and
+  version. Only file names are saved, never folders.
+- A progress line `img 03/10 | batch 2/4 | step 12/25` in the window and next to the bar in
+  the terminal interface; the images of a group are numbered in their file names
+  (`..._03_<seed>.png`), so they sort in the order they were made.
 - Compare Epochs shows a thumbnail for every checkpoint: a click shows it large, a double-click
   enlarges it (before, only the last image was left on screen).
 

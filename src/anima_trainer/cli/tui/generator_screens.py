@@ -2,8 +2,9 @@
 
 The form shows the window's generator settings (<data>/generator.json): the base model or a
 model file, the LoRAs with on/off, trigger and strength, the pre-prompt, prompt and negative
-prompt, the image settings and the folder. No project checkpoints here: a trained LoRA is added
-like any other.
+prompt, the image settings with the random seed and how many images, the folder, and the queue
+(Add current, Remove, Clear, Generate queue). No project checkpoints here: a trained LoRA is
+added like any other.
 """
 
 from pathlib import Path
@@ -31,14 +32,17 @@ from textual.widgets import (
 from anima_trainer.cli.generator_values import add_loras, image_defaults, settings_from_fields
 from anima_trainer.cli.train_preparation import TerminalContext
 from anima_trainer.cli.tui.folder_picker import FilePicker, FolderPicker, start_folder
+from anima_trainer.cli.tui.generator_rows import LoraRow, QueueRow
 from anima_trainer.preview.form_fields import GENERATOR_FIELDS
 from anima_trainer.preview.generator_settings import (
     MAX_LORAS,
+    MAX_QUEUE,
+    GenerationEntry,
     GeneratorSettings,
-    LoraEntry,
     load_generator_settings,
 )
 from anima_trainer.preview.lora_files import lora_trigger
+from anima_trainer.preview.progress_text import ImageProgress, progress_line
 from anima_trainer.preview.settings import cfg_after_sampler_change
 from anima_trainer.settings.choices import BASE_MODELS
 
@@ -46,7 +50,7 @@ if TYPE_CHECKING:
     from anima_trainer.cli.tui.app import TrainerApp
 
 MAX_LOG_LINES = 5000
-FIELDS_PER_ROW = 4
+FIELDS_PER_ROW = 3
 # The project checkpoint's strength has no use here; the negative prompt gets a full row.
 GRID_FIELDS = tuple(
     spec for spec in GENERATOR_FIELDS if spec.name not in {"lora_multiplier", "negative_prompt"}
@@ -54,9 +58,17 @@ GRID_FIELDS = tuple(
 PATH_FIELDS = ("model_file", "output_folder")
 GENERATOR_CSS = """
 .field-label { color: $text-muted; }
-.path-row, .lora-row, .field-row, .buttons { height: auto; }
+.path-row, .lora-row, .queue-row, .field-row, .buttons, .progress-row { height: auto; }
+.lora-row, .queue-row { border-bottom: dashed $foreground 25%; }
+/* !important: compact checkboxes and inputs take their borders away */
+.lora-row .lora-on, .lora-row .lora-name, .lora-row .lora-trigger {
+    border-right: solid $foreground 25% !important;
+}
+.progress-row #status { width: auto; margin-right: 2; }
 .path-row Input { width: 1fr; }
-.path-row Button, .lora-row Button { width: auto; margin-left: 2; }
+.path-row Button, .lora-row Button, .queue-row Button { width: auto; margin-left: 2; }
+.queue-text { width: 1fr; }
+#queue { height: auto; }
 .lora-name { width: 1fr; }
 .lora-trigger { width: 1fr; }
 .lora-strength { width: 8; }
@@ -67,41 +79,9 @@ GENERATOR_CSS = """
 .buttons { margin-top: 1; }
 .buttons Button { margin-right: 2; }
 #log { height: 1fr; border: solid $primary; }
-#bar { margin: 1 0; }
+.progress-row { margin: 1 0; }
 """
 NOT_STARTED_STATUS = "Generation not started."
-
-
-class LoraRow(Horizontal):
-    """One LoRA: on/off, file name (the full path in its tooltip), trigger, strength."""
-
-    def __init__(self, entry: LoraEntry) -> None:
-        super().__init__(classes="lora-row")
-        self.entry = entry
-
-    def compose(self) -> ComposeResult:
-        on = Checkbox(value=self.entry.enabled, classes="lora-on", compact=True)
-        on.tooltip = "Used, and its trigger added to the prompt, while on."
-        yield on
-        name = Static(Path(self.entry.path).name, classes="lora-name", markup=False)
-        name.tooltip = self.entry.path
-        yield name
-        yield Input(self.entry.trigger, placeholder="trigger", classes="lora-trigger", compact=True)
-        yield Input(str(self.entry.strength), classes="lora-strength", compact=True)
-        yield Button("Remove", classes="lora-remove", compact=True)
-
-    def values(self) -> dict[str, object]:
-        return {
-            "path": self.entry.path,
-            "enabled": self.query_one(".lora-on", Checkbox).value,
-            "trigger": self.query_one(".lora-trigger", Input).value,
-            "strength": self.query_one(".lora-strength", Input).value,
-        }
-
-    def on_button_pressed(self, event: Button.Pressed) -> None:
-        if event.button.has_class("lora-remove"):
-            event.stop()
-            self.remove()
 
 
 class GeneratorScreen(Screen[None]):
@@ -113,6 +93,7 @@ class GeneratorScreen(Screen[None]):
         self._settings = loaded.settings
         self._warnings = loaded.warnings
         self._sampler: str = loaded.settings.sampler
+        self._queue: tuple[GenerationEntry, ...] = loaded.settings.queue
 
     def compose(self) -> ComposeResult:
         settings = self._settings
@@ -146,22 +127,32 @@ class GeneratorScreen(Screen[None]):
                         with Vertical(classes="field-cell"):
                             yield Label(spec.label, classes="field-label")
                             yield _setting_widget(
-                                spec.name, getattr(settings, spec.name), spec.choices
+                                spec.name, getattr(settings, spec.name), spec.kind, spec.choices
                             )
             yield from _path_field(
                 "Output folder (blank: <data folder>/generated)",
                 settings.output_folder,
                 "output_folder",
             )
+            yield Label(
+                f"Queue (at most {MAX_QUEUE}): Generate queue makes every entry in order",
+                classes="field-label",
+            )
+            yield Vertical(*_queue_rows(self._queue), id="queue")
+            with Horizontal(classes="buttons"):
+                yield Button("Add current", id="queue-add", compact=True)
+                yield Button("Clear", id="queue-clear", compact=True)
             yield Static("\n".join(self._warnings), id="errors", markup=False)
             with Horizontal(classes="buttons"):
                 yield Button("Generate", variant="primary", id="generate")
+                yield Button("Generate queue", id="generate-queue")
                 yield Button("Reset to defaults", id="reset-generator")
                 yield Button("Back", id="back-generator")
         yield Footer()
 
     def on_mount(self) -> None:
         self.query_one("#prompt", TextArea).focus()
+        self._update_queue_buttons()
 
     def on_select_changed(self, event: Select.Changed) -> None:
         if event.select.id != "sampler" or event.value is Select.NULL:
@@ -179,9 +170,19 @@ class GeneratorScreen(Screen[None]):
         self._sampler = new
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.has_class("queue-remove"):
+            index = int(event.button.name or "-1")
+            self._show_queue(self._queue[:index] + self._queue[index + 1 :])
+            return
         button = event.button.id
         if button == "generate":
             self._generate()
+        elif button == "generate-queue":
+            self._generate(queue=True)
+        elif button == "queue-add":
+            self._add_to_queue()
+        elif button == "queue-clear":
+            self._show_queue(())
         elif button == "reset-generator":
             self._reset()
         elif button == "back-generator":
@@ -193,25 +194,49 @@ class GeneratorScreen(Screen[None]):
         elif button == "browse-output_folder":
             self._browse(self.query_one("#output_folder", Input), folder=True)
 
-    def _generate(self) -> None:
+    def _generate(self, queue: bool = False) -> None:
+        settings = self._checked_settings()
+        if settings is not None:
+            self.app.push_screen(GenerationScreen(settings, queue))
+
+    def _checked_settings(self) -> GeneratorSettings | None:
         settings = settings_from_fields(self._values())
         if isinstance(settings, tuple):
             self._show_errors(settings)
-            return
+            return None
         self._show_errors(())
         self._settings = settings
-        self.app.push_screen(GenerationScreen(settings))
+        return settings
+
+    def _add_to_queue(self) -> None:
+        settings = self._checked_settings()
+        if settings is not None and len(self._queue) < MAX_QUEUE:
+            self._show_queue((*self._queue, settings.entry()))
+
+    def _show_queue(self, queue: tuple[GenerationEntry, ...]) -> None:
+        self._queue = queue
+        rows = self.query_one("#queue", Vertical)
+        rows.remove_children()
+        rows.mount_all(_queue_rows(queue))
+        self._update_queue_buttons()
+
+    def _update_queue_buttons(self) -> None:
+        self.query_one("#queue-add", Button).disabled = len(self._queue) >= MAX_QUEUE
+        self.query_one("#queue-clear", Button).disabled = not self._queue
 
     def _values(self) -> dict[str, object]:
         values: dict[str, object] = self._settings.model_dump()  # keeps what is not shown here
         for spec in GRID_FIELDS:
             widget = self.query_one(f"#{spec.name}")
-            values[spec.name] = widget.value if isinstance(widget, Select) else _text(widget)
+            values[spec.name] = (
+                widget.value if isinstance(widget, (Select, Checkbox)) else _text(widget)
+            )
         for name in ("pre_prompt", "negative_prompt", *PATH_FIELDS):
             values[name] = self.query_one(f"#{name}", Input).value
         values["base_model"] = self.query_one("#base_model", Select).value
         values["prompt"] = self.query_one("#prompt", TextArea).text
         values["loras"] = [row.values() for row in self.query(LoraRow)]
+        values["queue"] = self._queue
         return values
 
     def _reset(self) -> None:
@@ -221,6 +246,8 @@ class GeneratorScreen(Screen[None]):
             if isinstance(widget, Select):
                 self._sampler = str(value)
                 widget.value = value
+            elif isinstance(widget, Checkbox):
+                widget.value = bool(value)
             elif isinstance(widget, Input):
                 widget.value = str(value)
 
@@ -258,15 +285,18 @@ class GenerationScreen(Screen[None]):
     DEFAULT_CSS = GENERATOR_CSS
     BINDINGS: ClassVar[list[BindingType]] = [Binding("s", "stop", "Stop the generation")]
 
-    def __init__(self, settings: GeneratorSettings) -> None:
+    def __init__(self, settings: GeneratorSettings, queue: bool = False) -> None:
         super().__init__()
         self._settings = settings
+        self._queue = queue  # the queue's entries instead of the form
+        self._started: ImageProgress | None = None
 
     def compose(self) -> ComposeResult:
         yield Header()
         with Vertical():
-            yield Static("Starting...", id="status", markup=False)
-            yield ProgressBar(id="bar", show_eta=False)
+            with Horizontal(classes="progress-row"):
+                yield Static("Starting...", id="status", markup=False)
+                yield ProgressBar(id="bar", show_eta=False)
             yield RichLog(id="log", max_lines=MAX_LOG_LINES, wrap=True, markup=False)
             with Horizontal(classes="buttons"):
                 yield Button("Stop", variant="error", id="stop")
@@ -274,13 +304,20 @@ class GenerationScreen(Screen[None]):
         yield Footer()
 
     def on_mount(self) -> None:
-        cast("TrainerApp", self.app).start_generation(self._settings, self)
+        cast("TrainerApp", self.app).start_generation(self._settings, self, self._queue)
 
     def add_line(self, line: str) -> None:
         self.query_one("#log", RichLog).write(line)
 
+    def show_started(self, progress: ImageProgress) -> None:
+        self._started = progress
+        self.query_one("#status", Static).update(progress_line(progress, 0, 0))
+
     def show_step(self, done: int, total: int) -> None:
-        self.query_one("#status", Static).update(f"Step {done}/{total}")
+        line = (
+            progress_line(self._started, done, total) if self._started else f"step {done}/{total}"
+        )
+        self.query_one("#status", Static).update(line)
         self.query_one("#bar", ProgressBar).update(total=total, progress=done)
 
     def add_image(self, path: Path) -> None:
@@ -314,11 +351,19 @@ class GenerationScreen(Screen[None]):
         self.query_one("#back", Button).disabled = False
 
 
-def _setting_widget(name: str, value: object, choices: tuple[str, ...]) -> Input | Select[str]:
+def _setting_widget(
+    name: str, value: object, kind: str, choices: tuple[str, ...]
+) -> Input | Select[str] | Checkbox:
+    if kind == "bool":
+        return Checkbox(value=bool(value), id=name, compact=True)
     if choices:
         options = [(Text(choice), choice) for choice in choices]
         return Select(options, value=str(value), allow_blank=False, id=name, compact=True)
     return Input(str(value), id=name, compact=True)
+
+
+def _queue_rows(queue: tuple[GenerationEntry, ...]) -> list[QueueRow]:
+    return [QueueRow(index, entry) for index, entry in enumerate(queue)]
 
 
 def _path_field(label: str, value: str, name: str) -> ComposeResult:

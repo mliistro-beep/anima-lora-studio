@@ -5,8 +5,8 @@ from datetime import datetime
 import pytest
 
 from anima_trainer.preview.checkpoints import Checkpoint
-from anima_trainer.preview.generation_plan import GenerationTarget, plan_generation
-from anima_trainer.preview.generator_settings import GeneratorSettings, LoraEntry
+from anima_trainer.preview.generation_plan import GenerationTarget, plan_generation, plan_queue
+from anima_trainer.preview.generator_settings import GenerationEntry, GeneratorSettings, LoraEntry
 from anima_trainer.preview.inference_command import LoraUse
 from anima_trainer.runtime.paths import RuntimePaths
 from tests.safetensors_helpers import checkpoint_keys, kohya_blocks, write_safetensors
@@ -181,3 +181,108 @@ def test_the_request_carries_the_final_prompt(paths, tmp_path):
     (request,) = plan_generation(settings, paths, _target(), NOW)
 
     assert request.prompt == "score_9, @x, a cat"
+
+
+def _seeds(*values):
+    pending = list(values)
+    return lambda: pending.pop(0)
+
+
+def test_a_fixed_seed_gives_one_image_whatever_the_count(paths):
+    settings = GeneratorSettings(prompt="a cat", seed=7, count=5)
+    (request,) = plan_generation(settings, paths, _target(), NOW, _seeds())
+    assert request.seed == 7
+
+
+def test_a_random_seed_gives_count_images_each_with_its_own_seed(paths):
+    settings = GeneratorSettings(prompt="a cat", random_seed=True, count=3)
+    requests = plan_generation(settings, paths, _target(), NOW, _seeds(11, 22, 33))
+    assert [request.seed for request in requests] == [11, 22, 33]
+    assert len({request.output for request in requests}) == 3
+    assert all(str(request.seed) in request.output.name for request in requests)
+
+
+def test_compare_epochs_uses_one_random_seed_for_all_checkpoints(paths, tmp_path):
+    checkpoints = tuple(Checkpoint(tmp_path / f"{n}.safetensors", f"Epoch {n}") for n in (1, 2))
+    settings = GeneratorSettings(prompt="a cat", random_seed=True, count=4)
+    requests = plan_generation(settings, paths, _target(checkpoints, "p"), NOW, _seeds(5))
+    assert [request.seed for request in requests] == [5, 5]
+
+
+def test_the_queue_gives_the_images_of_every_entry_in_order(paths):
+    queue = (
+        GenerationEntry(prompt="a cat", seed=1),
+        GenerationEntry(prompt="a dog", random_seed=True, count=2, sampler="euler"),
+    )
+    settings = GeneratorSettings(prompt="not used", queue=queue)
+    requests = plan_queue(settings, paths, NOW, _seeds(8, 9))
+    assert [(r.prompt, r.seed, r.sampler) for r in requests] == [
+        ("a cat", 1, "er_sde"),
+        ("a dog", 8, "euler"),
+        ("a dog", 9, "euler"),
+    ]
+
+
+def test_entries_of_the_queue_with_the_same_name_get_different_files(paths):
+    queue = (GenerationEntry(prompt="a cat"), GenerationEntry(prompt="a dog"))
+    requests = plan_queue(GeneratorSettings(queue=queue), paths, NOW, _seeds())
+    assert requests[0].output != requests[1].output
+
+
+def test_the_queue_uses_the_folder_but_not_the_project_checkpoint(paths, tmp_path):
+    settings = GeneratorSettings(
+        output_folder=str(tmp_path / "pictures"), queue=(GenerationEntry(prompt="a cat"),)
+    )
+    (request,) = plan_queue(settings, paths, NOW, _seeds())
+    assert request.output.parent == tmp_path / "pictures"
+    assert request.loras == ()
+
+
+def test_an_error_in_the_queue_names_its_entry_and_nothing_is_planned(paths, tmp_path):
+    queue = (
+        GenerationEntry(prompt="a cat"),
+        GenerationEntry(),
+        GenerationEntry(prompt="x", loras=(LoraEntry(path=str(tmp_path / "gone.safetensors")),)),
+    )
+    lines = plan_queue(GeneratorSettings(queue=queue), paths, NOW, _seeds())
+    assert lines[0] == "ERROR: Queue 2: Write a prompt first."
+    assert lines[1].startswith("ERROR: Queue 3: ")
+    assert len(lines) == 2
+
+
+def test_an_empty_queue_is_an_error(paths):
+    assert plan_queue(GeneratorSettings(), paths, NOW, _seeds()) == (
+        "ERROR: The queue is empty: add the form to it first.",
+    )
+
+
+def test_every_image_carries_its_metadata_with_its_own_seed(paths):
+    settings = GeneratorSettings(prompt="a cat", random_seed=True, count=2)
+    requests = plan_generation(settings, paths, _target(), NOW, _seeds(3, 4))
+    assert ["Seed: 3," in r.metadata.parameters for r in requests] == [True, False]
+    assert "Seed: 4," in requests[1].metadata.parameters
+
+
+def test_the_images_of_a_group_are_numbered_and_a_single_image_is_not(paths):
+    group = GeneratorSettings(prompt="a cat", random_seed=True, count=3)
+    names = [r.output.name for r in plan_generation(group, paths, _target(), NOW, _seeds(7, 8, 9))]
+    assert [name.rsplit("_", 2)[1] for name in names] == ["01", "02", "03"]
+    (single,) = plan_generation(GeneratorSettings(prompt="a cat"), paths, _target(), NOW)
+    assert single.output.name.endswith("_42.png")
+    assert single.output.name.count("_") == 3
+
+
+def test_the_queue_numbers_its_images_across_entries_and_knows_their_batch(paths):
+    queue = (
+        GenerationEntry(prompt="a cat"),
+        GenerationEntry(prompt="a dog", random_seed=True, count=2),
+    )
+    requests = plan_queue(GeneratorSettings(queue=queue), paths, NOW, _seeds(8, 9))
+    assert [r.output.name.rsplit("_", 2)[1] for r in requests] == ["01", "02", "03"]
+    assert [(r.batch, r.batches) for r in requests] == [(1, 2), (2, 2), (2, 2)]
+
+
+def test_the_form_is_one_batch(paths):
+    settings = GeneratorSettings(prompt="a cat", random_seed=True, count=2)
+    requests = plan_generation(settings, paths, _target(), NOW, _seeds(1, 2))
+    assert {(r.batch, r.batches) for r in requests} == {(1, 1)}

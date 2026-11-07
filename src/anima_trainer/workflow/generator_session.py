@@ -13,6 +13,7 @@ from pathlib import Path
 from PySide6.QtCore import QObject, Signal
 
 from anima_trainer.preview.inference_command import GenerationRequest, build_generation_launch
+from anima_trainer.preview.progress_text import ImageProgress
 from anima_trainer.preview.vram_profile import PROFILES
 from anima_trainer.runtime.paths import RuntimePaths
 from anima_trainer.system.gpu_lock import GENERATOR_JOB, GpuLock
@@ -30,6 +31,7 @@ class GeneratorSession(QObject):
     running_changed = Signal(bool)
     log_line = Signal(str)
     step_progress = Signal(int, int)  # done, total
+    image_started = Signal(object)  # ImageProgress
     image_ready = Signal(object)  # Path
     finished = Signal(bool, str)  # success, message
 
@@ -106,6 +108,7 @@ class GeneratorSession(QObject):
         position = self._done + 1
         total = self._done + len(self._queue)
         self.log_line.emit(f"INFO: Generating image {position}/{total}: {request.output.name}")
+        self.image_started.emit(ImageProgress(position, total, request.batch, request.batches))
         self._image_seen = False
         try:
             self._runner.start(spec, log_path)

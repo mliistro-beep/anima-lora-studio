@@ -10,6 +10,7 @@ from anima_trainer.cli.tui.generator_screens import (
     GenerationScreen,
     GeneratorScreen,
     LoraRow,
+    QueueRow,
 )
 from anima_trainer.cli.tui.menu import MenuScreen
 from anima_trainer.cli.tui.screens import FormScreen, QuitDialog
@@ -22,6 +23,7 @@ from tests.safetensors_helpers import checkpoint_keys, kohya_blocks, write_safet
 
 pytestmark = pytest.mark.integration
 GENERATOR = "#menu-generator"
+COLUMNS = (".lora-on", ".lora-name", ".lora-trigger")
 
 
 @pytest.fixture
@@ -213,3 +215,114 @@ def test_quitting_during_a_generation_asks_and_yes_stops_it(paths, runner):
 
     _play(app, scenario, GENERATOR)
     assert not app.run_active
+
+
+def _queue_texts(app):
+    return [str(row.query_one(".queue-text", Static).content) for row in app.screen.query(QueueRow)]
+
+
+def test_a_random_seed_makes_the_chosen_number_of_images(paths, runner):
+    app = _app(paths, generation_runner=runner)
+
+    async def scenario(pilot):
+        _prompt(app).text = "a cat"
+        app.screen.query_one("#random_seed", Checkbox).value = True
+        _input(app, "count").value = "2"
+        await pilot.click("#generate")
+        await _until(pilot, lambda: runner.started)
+        runner.line_received.emit("IMAGE: /x.png")
+        runner.finished.emit(RunOutcome(0, crashed=False, stopped=False, log_path=None))
+        await _until(pilot, lambda: len(runner.started) == 2)
+
+    _play(app, scenario, GENERATOR)
+    seeds = [spec.arguments[spec.arguments.index("--seed") + 1] for spec, _ in runner.started]
+    assert len(set(seeds)) == 2
+
+
+def test_the_queue_takes_the_form_shows_it_numbered_and_removes_an_entry(paths):
+    app = _app(paths)
+
+    async def scenario(pilot):
+        for prompt in ("a cat", "a dog", "a bird"):
+            _prompt(app).text = prompt
+            app.screen.query_one("#queue-add", Button).press()  # a click would miss: rows move it
+            await pilot.pause()
+        assert [text[:8] for text in _queue_texts(app)] == ["1. a cat", "2. a dog", "3. a bir"]
+        list(app.screen.query(QueueRow))[0].query_one(".queue-remove", Button).press()
+        await pilot.pause()
+        assert [text[:8] for text in _queue_texts(app)] == ["1. a dog", "2. a bir"]
+        app.screen.query_one("#queue-clear", Button).press()
+        await pilot.pause()
+        assert _queue_texts(app) == []
+
+    _play(app, scenario, GENERATOR)
+
+
+def test_generate_queue_runs_the_entries_and_saves_the_queue(paths, runner):
+    app = _app(paths, generation_runner=runner)
+
+    async def scenario(pilot):
+        _prompt(app).text = "a cat"
+        await pilot.click("#queue-add")
+        _prompt(app).text = "not queued"
+        await pilot.click("#generate-queue")
+        await _until(pilot, lambda: runner.started)
+        assert "INFO: Queue: 1 entries, 1 images." in _log(app)
+
+    _play(app, scenario, GENERATOR)
+    assert "a cat" in " ".join(runner.started[0][0].arguments)
+    saved = load_generator_settings(paths.generator_settings_file).settings
+    assert [entry.prompt for entry in saved.queue] == ["a cat"]
+
+
+def test_the_saved_queue_is_shown(paths):
+    _save(paths, queue=[{"prompt": "a cat", "random_seed": True, "count": 3}])
+    app = _app(paths)
+
+    async def scenario(pilot):
+        assert _queue_texts(app) == ["1. a cat | no LoRA | random seed x3"]
+
+    _play(app, scenario, GENERATOR)
+
+
+def test_reset_turns_the_random_seed_off(paths):
+    app = _app(paths)
+
+    async def scenario(pilot):
+        app.screen.query_one("#random_seed", Checkbox).value = True
+        _input(app, "count").value = "5"
+        await pilot.click("#reset-generator")
+        await pilot.pause()
+        assert not app.screen.query_one("#random_seed", Checkbox).value
+        assert _input(app, "count").value == "1"
+
+    _play(app, scenario, GENERATOR)
+
+
+def test_the_progress_line_shows_image_batch_and_steps_next_to_the_bar(paths, runner):
+    app = _app(paths, generation_runner=runner)
+
+    async def scenario(pilot):
+        _prompt(app).text = "a cat"
+        app.screen.query_one("#random_seed", Checkbox).value = True
+        _input(app, "count").value = "2"
+        await pilot.click("#generate")
+        await _until(pilot, lambda: runner.started)
+        runner.line_received.emit("STEP: 12/25")
+        await _until(pilot, lambda: _text(app, "status") == "img 01/02 | batch 1/1 | step 12/25")
+        bar = app.screen.query_one("#bar")
+        assert bar.parent is app.screen.query_one("#status").parent
+
+    _play(app, scenario, GENERATOR)
+
+
+def test_the_lora_columns_have_a_separator(paths, tmp_path):
+    _save(paths, prompt="a cat", loras=[{"path": str(_lora(tmp_path, "a.safetensors"))}])
+    app = _app(paths)
+
+    async def scenario(pilot):
+        (row,) = _rows(app)
+        sides = {name: row.query_one(name).styles.border_right[0] for name in COLUMNS}
+        assert all(sides.values()), sides
+
+    _play(app, scenario, GENERATOR)

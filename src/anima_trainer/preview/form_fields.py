@@ -1,6 +1,7 @@
 """How the preview and generator settings appear in their forms (prompts have their own
 multi-line boxes)."""
 
+from anima_trainer.preview.generator_settings import MAX_COUNT
 from anima_trainer.preview.settings import MAX_SIDE, MIN_SIDE, SIDE_STEP
 from anima_trainer.preview.vram_profile import GENERATOR_SIDE_STEP
 from anima_trainer.settings.field_specs import INT_MAX, FieldSpec
@@ -48,6 +49,14 @@ GENERATOR_FIELDS: tuple[FieldSpec, ...] = (
         tooltip="Strength of the project checkpoint, 0 to 2; 1 is the trained strength.",
     ),
     *_sampling(_IMAGE, GENERATOR_SIDE_STEP),
+    FieldSpec(
+        "random_seed", "Random seed", "bool", _IMAGE,
+        tooltip="A new seed for every image; it is in the file name and in the image's metadata.",
+    ),
+    FieldSpec(
+        "count", "Images", "int", _IMAGE, minimum=1, maximum=MAX_COUNT,
+        tooltip=f"With a random seed: images in a row with the same prompt, 1 to {MAX_COUNT}.",
+    ),
 )  # fmt: skip
 
 PREVIEW_LABELS = {spec.name: spec.label for spec in PREVIEW_FIELDS} | {"prompts": "Prompts"}

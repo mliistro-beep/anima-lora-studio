@@ -34,6 +34,7 @@ from typing import Any
 import torch
 from lora_inputs import pair_loras
 from lora_keys import kohya_names, lora_notes
+from png_text import png_texts
 from profile_choice import (
     MIB,
     MemoryBudget,
@@ -89,6 +90,9 @@ def parse_options(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--profiles", required=True, help="JSON list of memory profiles")
     parser.add_argument("--margin_mib", type=int, default=512, help="free GPU memory left aside")
     parser.add_argument("--ram_margin_mib", type=int, default=1024, help="free RAM left aside")
+    # Saved as text chunks of the PNG (png_text.py): the A1111 layout and the app's JSON.
+    parser.add_argument("--png_parameters", default="")
+    parser.add_argument("--png_settings", default="")
     options = parser.parse_args(argv)
     try:
         options.loras = pair_loras(options.lora, options.lora_multiplier)
@@ -242,12 +246,16 @@ def _sample(
     return er_sde(denoise, latents, sigmas, noise_generator).to(torch.bfloat16)
 
 
-def _save(pixels: torch.Tensor, output: Path) -> None:
+def _save(pixels: torch.Tensor, output: Path, texts: dict[str, str]) -> None:
     from PIL import Image
+    from PIL.PngImagePlugin import PngInfo
 
     image = ((torch.clamp(pixels, -1.0, 1.0) + 1.0) * 127.5).to(torch.uint8).cpu().numpy()
     output.parent.mkdir(parents=True, exist_ok=True)
-    Image.fromarray(image.transpose(1, 2, 0)).save(output)
+    info = PngInfo()
+    for key, text in texts.items():
+        info.add_itxt(key, text)  # iTXt: UTF-8, prompts may hold any character
+    Image.fromarray(image.transpose(1, 2, 0)).save(output, pnginfo=info)
 
 
 def _free(device: torch.device) -> None:
@@ -277,7 +285,8 @@ def generate(ami: Any, options: argparse.Namespace, profile: Profile, device: to
     del dit, conds
     _free(device)
     vae = _load_vae(args, profile)
-    _save(ami.decode_latent(vae, latents, device), Path(options.output))
+    texts = png_texts(options.png_parameters, options.png_settings)
+    _save(ami.decode_latent(vae, latents, device), Path(options.output), texts)
     del vae
     _free(device)
 

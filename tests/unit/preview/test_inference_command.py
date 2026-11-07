@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 
+from anima_trainer.preview.image_metadata import ImageMetadata
 from anima_trainer.preview.inference_command import (
     GenerationRequest,
     LoraUse,
@@ -165,3 +166,26 @@ def test_prompts_reach_argparse_whatever_they_start_with(text):
 def test_the_default_folder_is_in_the_data_folder_and_a_project_uses_its_output():
     assert default_generated_folder(PATHS) == ROOT / "generated"
     assert project_generated_folder(Path("/out")) == Path("/out/generated")
+
+
+def test_a_name_already_planned_gets_the_next_number(tmp_path):
+    first = output_image_path(tmp_path, "p", "LoRAs", 42, NOW)
+    second = output_image_path(tmp_path, "p", "LoRAs", 42, NOW, taken={first})
+    assert second.name == first.name.replace(".png", "_2.png")
+
+
+def test_the_png_texts_are_passed_when_the_request_has_them():
+    metadata = ImageMetadata(parameters="-a cat\nSteps: 25", settings='{"entry": {}}')
+    spec = build_generation_launch(PATHS, _request(metadata=metadata), PROFILES, "0", False)
+    assert "--png_parameters=-a cat\nSteps: 25" in spec.arguments
+    assert '--png_settings={"entry": {}}' in spec.arguments
+
+
+def test_without_metadata_no_png_texts_are_passed():
+    spec = build_generation_launch(PATHS, _request(), PROFILES, "0", False)
+    assert not any(part.startswith("--png_") for part in spec.arguments)
+
+
+def test_an_image_of_a_group_has_its_number_before_the_seed(tmp_path):
+    path = output_image_path(tmp_path, "image", "LoRAs", 1838785401, NOW, number=3)
+    assert path.name.endswith("_03_1838785401.png")

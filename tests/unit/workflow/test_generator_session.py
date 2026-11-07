@@ -1,9 +1,11 @@
+from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
 
 import pytest
 
 from anima_trainer.preview.inference_command import GenerationRequest, LoraUse
+from anima_trainer.preview.progress_text import ImageProgress
 from anima_trainer.preview.sample_prompts import SampleSize
 from anima_trainer.runtime.paths import RuntimePaths
 from anima_trainer.training.runner import RunOutcome
@@ -205,3 +207,19 @@ def test_a_log_file_that_cannot_open_ends_the_rest_of_the_queue(parts, paths, tm
 
     assert not session.is_running()
     assert events["finished"] == [(False, "ERROR: Could not start generation: disk full")]
+
+
+def test_every_image_is_announced_with_its_place_and_its_batch(parts, paths, tmp_path):
+    session, runner, _events = parts
+    started = []
+    session.image_started.connect(started.append)
+    first = replace(_request(tmp_path, "a.png"), batch=1, batches=2)
+    second = replace(_request(tmp_path, "b.png"), batch=2, batches=2)
+
+    session.generate(paths, (first, second), "0", training=False)
+    _ok(runner, tmp_path / "out" / "a.png")
+
+    assert started == [
+        ImageProgress(image=1, images=2, batch=1, batches=2),
+        ImageProgress(image=2, images=2, batch=2, batches=2),
+    ]

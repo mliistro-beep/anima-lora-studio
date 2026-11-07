@@ -2,12 +2,14 @@
 
 import json
 import re
+from collections.abc import Collection
 from dataclasses import dataclass
 from datetime import datetime
 from itertools import count
 from pathlib import Path
 from types import MappingProxyType
 
+from anima_trainer.preview.image_metadata import ImageMetadata
 from anima_trainer.preview.sample_prompts import SampleSize
 from anima_trainer.preview.vram_profile import (
     GenerationProfile,
@@ -45,6 +47,9 @@ class GenerationRequest:
     seed: int
     sampler: str
     output: Path
+    metadata: ImageMetadata | None = None  # the PNG's texts; None: a plain PNG
+    batch: int = 1  # the queue entry it comes from (the form is a batch of its own)
+    batches: int = 1
 
 
 def default_generated_folder(paths: RuntimePaths) -> Path:
@@ -57,13 +62,31 @@ def project_generated_folder(output_dir: Path) -> Path:
     return output_dir / GENERATED_DIR
 
 
-def output_image_path(folder: Path, prefix: str, label: str, seed: int, now: datetime) -> Path:
-    """<folder>/{prefix}_{label}_{time}_{seed}.png, with _2, _3, ... added when that file
-    exists (two images in the same second)."""
+def output_image_path(
+    folder: Path,
+    prefix: str,
+    label: str,
+    seed: int,
+    now: datetime,
+    taken: Collection[Path] = frozenset(),
+    number: int | None = None,
+) -> Path:
+    """<folder>/{prefix}_{label}_{time}_{seed}.png, or ..._{time}_{number}_{seed}.png for the
+    images of a group (03 for the third), so they sort in the order they were made; _2, _3, ...
+    is added when that file exists (two images in the same second) or is `taken` by an image
+    planned before it."""
     slug = re.sub(r"[^a-z0-9]+", "-", label.lower()).strip("-")
-    stem = f"{prefix}_{slug}_{now.strftime(TIME_FORMAT)}_{seed}"
+    place = "" if number is None else f"_{number:02d}"
+    stem = f"{prefix}_{slug}_{now.strftime(TIME_FORMAT)}{place}_{seed}"
     candidates = (folder / f"{stem}{'' if n == 1 else f'_{n}'}.png" for n in count(1))
-    return next(path for path in candidates if not path.exists())
+    return next(path for path in candidates if path not in taken and not path.exists())
+
+
+def _png_text_arguments(metadata: ImageMetadata | None) -> tuple[str, ...]:
+    """With `=`: a text starting with a dash must not be read as an option."""
+    if metadata is None:
+        return ()
+    return (f"--png_parameters={metadata.parameters}", f"--png_settings={metadata.settings}")
 
 
 def _profiles_json(profiles: tuple[GenerationProfile, ...], size: SampleSize) -> str:
@@ -118,6 +141,7 @@ def build_generation_launch(
         "--margin_mib", str(margin_mib(training)),
         "--ram_margin_mib", str(ram_margin_mib(training)),
         "--output", str(request.output),
+        *_png_text_arguments(request.metadata),
     )  # fmt: skip
     env = MappingProxyType(
         {

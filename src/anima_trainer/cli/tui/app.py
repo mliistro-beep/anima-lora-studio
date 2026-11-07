@@ -23,6 +23,7 @@ from anima_trainer.cli.tui.menu import MenuScreen
 from anima_trainer.cli.tui.screens import QuitDialog, TrainingScreen
 from anima_trainer.cli.tui_values import TuiValues, save_tui_values
 from anima_trainer.preview.generator_settings import GeneratorSettings
+from anima_trainer.preview.progress_text import ImageProgress
 from anima_trainer.training.progress import ProgressState
 from anima_trainer.workflow.training_session import Runner
 
@@ -101,8 +102,11 @@ class TrainerApp(App[None]):
         if self._training is not None:
             self._training.stop()
 
-    def start_generation(self, settings: GeneratorSettings, screen: GenerationScreen) -> None:
-        """Called by the generation screen once it can show lines."""
+    def start_generation(
+        self, settings: GeneratorSettings, screen: GenerationScreen, queue: bool = False
+    ) -> None:
+        """Called by the generation screen once it can show lines; `queue`: the queue's
+        entries instead of the form."""
         self._generation_screen = screen
         if self._generation is None:
             self._generation = TerminalGeneration(
@@ -112,8 +116,9 @@ class TrainerApp(App[None]):
                 self._on_generation_image,
                 self._on_generation_ended,
                 runner=self._generation_runner,
+                on_image_started=self._on_generation_started,
             )
-        if not self._generation.begin(settings):
+        if not self._generation.begin(settings, queue=queue):
             screen.show_not_started()
 
     def stop_generation(self) -> None:
@@ -198,6 +203,10 @@ class TrainerApp(App[None]):
     def _on_generation_image(self, path: Path) -> None:
         if self._generation_screen is not None:
             self._generation_screen.add_image(path)
+
+    def _on_generation_started(self, progress: ImageProgress) -> None:
+        if self._generation_screen is not None:
+            self._generation_screen.show_started(progress)
 
     def _on_generation_step(self, done: int, total: int) -> None:
         if self._generation_screen is not None:

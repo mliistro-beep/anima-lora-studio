@@ -27,6 +27,7 @@ from anima_trainer.preview.checkpoints import Checkpoint
 from anima_trainer.preview.form_fields import GENERATOR_FIELDS, GENERATOR_SETTINGS_LABELS
 from anima_trainer.preview.generator_settings import GeneratorSettings
 from anima_trainer.preview.lora_files import lora_trigger
+from anima_trainer.preview.progress_text import ImageProgress, progress_line
 from anima_trainer.settings.choices import BASE_MODELS
 from anima_trainer.settings.field_specs import describe_validation_error
 from anima_trainer.ui.sampler_cfg import link_cfg_to_sampler
@@ -34,6 +35,7 @@ from anima_trainer.ui.widgets.image_grid import ImageGrid
 from anima_trainer.ui.widgets.log_view import LogView
 from anima_trainer.ui.widgets.lora_table import LoraTable
 from anima_trainer.ui.widgets.path_picker import PathPicker
+from anima_trainer.ui.widgets.queue_list import QueueList
 from anima_trainer.ui.widgets.settings_form import SettingsForm
 
 NO_LORA = "No checkpoint"
@@ -46,6 +48,7 @@ SETTINGS_STRETCH, OUTPUT_STRETCH = 2, 3
 
 class GeneratorTab(QWidget):
     generate_requested = Signal()
+    generate_queue_requested = Signal()
     compare_requested = Signal()
     stop_requested = Signal()
     refresh_requested = Signal()
@@ -89,12 +92,20 @@ class GeneratorTab(QWidget):
         )
         self.generate_button = QPushButton("Generate")
         self.generate_button.setDefault(True)
+        self.queue = QueueList()
+        self.generate_queue_button = QPushButton("Generate queue")
+        self.generate_queue_button.setToolTip(
+            "Every entry of the queue in order, without the project checkpoint."
+        )
         self.compare_button = QPushButton("Compare Epochs")
         self.compare_button.setToolTip("Same prompt and seed on every checkpoint of the project.")
         self.stop_button = QPushButton("Stop")
         self.state_note = QLabel()
         self.state_note.setWordWrap(True)
         self.progress = QProgressBar()
+        self.progress_text = QLabel()
+        self.progress_text.setAccessibleName("Generation progress")
+        self._started: ImageProgress | None = None
         self.result = QLabel("No image yet.", alignment=Qt.AlignmentFlag.AlignCenter)
         self.result.setMinimumSize(RESULT_SIDE // 2, RESULT_SIDE // 2)
         self.open_button = QPushButton("Enlarge")
@@ -123,6 +134,7 @@ class GeneratorTab(QWidget):
             "model_file": self.model_file.path(),
             "loras": self.loras.entries(),
             "output_folder": self.output_folder.path(),
+            "queue": self.queue.entries(),
         }
         try:
             return GeneratorSettings.model_validate(values)
@@ -137,6 +149,7 @@ class GeneratorTab(QWidget):
         self.model_file.set_path(settings.model_file)
         self.loras.set_entries(settings.loras)
         self.output_folder.set_path(settings.output_folder)
+        self.queue.set_entries(settings.queue)
 
     def set_default_folder(self, folder: Path) -> None:
         """Shown while no folder is chosen."""
@@ -164,6 +177,8 @@ class GeneratorTab(QWidget):
         or, during a training, that the generator shares the GPU."""
         idle_ok = not running and can_generate
         self.generate_button.setEnabled(idle_ok)
+        self.generate_queue_button.setEnabled(idle_ok)
+        self.queue.set_editable(not running)
         self.compare_button.setEnabled(idle_ok and bool(self._checkpoints))
         self.stop_button.setEnabled(running)
         self.form.setEnabled(not running)
@@ -190,9 +205,15 @@ class GeneratorTab(QWidget):
     def hide_comparison(self) -> None:
         self.compare_grid.setVisible(False)
 
+    def show_image_started(self, progress: ImageProgress) -> None:
+        self._started = progress
+        self.progress_text.setText(progress_line(progress, 0, 0))
+
     def show_step(self, done: int, total: int) -> None:
         self.progress.setRange(0, max(total, 1))
         self.progress.setValue(done)
+        if self._started is not None:
+            self.progress_text.setText(progress_line(self._started, done, total))
 
     def show_image(self, path: Path) -> None:
         self._image = path
@@ -214,6 +235,8 @@ class GeneratorTab(QWidget):
 
     def _connect(self) -> None:
         self.generate_button.clicked.connect(self.generate_requested.emit)
+        self.generate_queue_button.clicked.connect(self.generate_queue_requested.emit)
+        self.queue.add_requested.connect(self._add_to_queue)
         self.compare_button.clicked.connect(self.compare_requested.emit)
         self.stop_button.clicked.connect(self.stop_requested.emit)
         self.refresh_button.clicked.connect(self.refresh_requested.emit)
@@ -224,6 +247,13 @@ class GeneratorTab(QWidget):
         self.compare_grid.cellClicked.connect(self._show_compared)
         self.compare_grid.image_activated.connect(self.image_activated.emit)
         self.open_button.setEnabled(False)
+
+    def _add_to_queue(self) -> None:
+        settings = self.settings()
+        if isinstance(settings, tuple):
+            self.log.set_lines(settings)
+            return
+        self.queue.add(settings.entry())
 
     def _show_compared(self, row: int, column: int) -> None:
         path = self.compare_grid.image_at(row, column)
@@ -264,8 +294,21 @@ class GeneratorTab(QWidget):
         prompt_layout = QFormLayout(prompt_box)
         prompt_layout.addRow("Pre-prompt", self.pre_prompt)
         prompt_layout.addRow(self.prompt)
+        queue_box = QGroupBox("Queue")
+        queue_layout = QVBoxLayout(queue_box)
+        queue_layout.addWidget(self.queue.list)
+        queue_buttons = QHBoxLayout()
+        for button in (self.queue.add_button, self.queue.remove_button, self.queue.clear_button):
+            queue_buttons.addWidget(button)
+        queue_buttons.addStretch(1)
+        queue_layout.addLayout(queue_buttons)
         buttons = QHBoxLayout()
-        for button in (self.generate_button, self.compare_button, self.stop_button):
+        for button in (
+            self.generate_button,
+            self.generate_queue_button,
+            self.compare_button,
+            self.stop_button,
+        ):
             buttons.addWidget(button)
         content = QWidget()
         column = QVBoxLayout(content)
@@ -273,6 +316,7 @@ class GeneratorTab(QWidget):
             column.addWidget(widget)
         column.addWidget(self.reset_button, 0, Qt.AlignmentFlag.AlignRight)
         column.addWidget(output)
+        column.addWidget(queue_box)
         column.addLayout(buttons)
         column.addWidget(self.state_note)
         scroll = QScrollArea()
@@ -284,6 +328,7 @@ class GeneratorTab(QWidget):
         column = QWidget()
         layout = QVBoxLayout(column)
         layout.setContentsMargins(0, 0, 0, 0)
+        layout.addWidget(self.progress_text)
         layout.addWidget(self.progress)
         layout.addWidget(self.result, 2)
         layout.addWidget(self.open_button, 0, Qt.AlignmentFlag.AlignRight)
