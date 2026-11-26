@@ -6,6 +6,17 @@ All notable changes to Anima LoRA Studio are listed here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Pre-prompt and Trigger fields in the window's Previews tab, the same as in the terminal
+  interface's training form (both use the same preview settings): every preview prompt becomes
+  pre-prompt, trigger, prompt. They replace the line that only named the values set in the
+  terminal, and are read-only during a training like the prompts.
+- New folder in the terminal interface's folder browser (dataset, output and Generator output
+  folders): type a name and Create (or Enter) makes the folder inside the one shown and goes
+  into it, ready for Use this folder. Names that are not a plain visible folder name, and folders
+  that already exist, are refused with an `ERROR:` line.
+
 ## [0.5.0] - 2026-11-26
 
 ### Added

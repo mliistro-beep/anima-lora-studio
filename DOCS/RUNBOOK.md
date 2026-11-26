@@ -80,6 +80,10 @@ app (they never download); after that they use only QtCore, so no display is nee
 on `anima-base-v1.0` only for now. They do not write `config.json`: the window finds its
 settings as you left them. GPU, CPU threads and cache settings come from `config.json`.
 
+In the `tui` forms, Browse opens a folder browser (Enter on a folder shows it, Up goes to the
+parent, Use this folder fills the field); New folder makes a folder inside the one shown, with
+the name you type, and goes into it.
+
 Previews follow `preview.json`, shared with the window's Previews tab. The `tui` training form has
 a Previews section (Generate previews, Pre-prompt, Trigger of the LoRA being trained, Preview
 prompt, Negative prompt), saved there when the training starts; it shows the first prompt only

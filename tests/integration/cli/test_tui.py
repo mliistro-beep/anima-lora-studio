@@ -594,6 +594,62 @@ def test_cancel_leaves_the_field_as_it_was(paths):
     _play(app, scenario)
 
 
+async def _browse_output(pilot, folder):
+    app = pilot.app
+    _input(app, "output").value = str(folder)
+    await pilot.click("#browse-output")
+    await _until(pilot, lambda: isinstance(app.screen, FolderPicker))
+
+
+def test_a_new_folder_is_created_entered_and_chosen(paths):
+    app = _app(paths)
+    home = paths.root.parent
+
+    async def scenario(pilot):
+        await _browse_output(pilot, home)
+        assert app.screen.query_one("#folder-name", Input).display is False
+        await pilot.click("#folder-new")
+        await pilot.pause()
+        app.screen.query_one("#folder-name", Input).value = "my_lora"
+        await pilot.click("#folder-create")
+        await _until(pilot, lambda: _text(app, "folder-current") == str(home / "my_lora"))
+        assert _text(app, "folder-errors") == ""
+        await pilot.click("#folder-use")
+        await _until(pilot, lambda: isinstance(app.screen, FormScreen))
+        assert _input(app, "output").value == str(home / "my_lora")
+
+    _play(app, scenario)
+    assert (home / "my_lora").is_dir()
+
+
+def test_a_wrong_new_folder_name_is_shown_and_nothing_is_created(paths):
+    app = _app(paths)
+    home = paths.root.parent
+
+    async def scenario(pilot):
+        await _browse_output(pilot, home)
+        await pilot.click("#folder-new")
+        await pilot.pause()
+        name = app.screen.query_one("#folder-name", Input)
+        name.value = "images"
+        await pilot.click("#folder-create")
+        await pilot.pause()
+        assert _text(app, "folder-errors") == "ERROR: 'images' already exists here."
+        assert _text(app, "folder-current") == str(home)
+        assert sorted(p.name for p in home.iterdir()) == ["data", "images"]
+        name.value = "new_one"
+        name.focus()
+        await pilot.pause()
+        await pilot.press("enter")
+        await _until(pilot, lambda: _text(app, "folder-current") == str(home / "new_one"))
+        tree = app.screen.query_one(FoldersOnly)
+        assert Path(tree.path) == home / "new_one"
+        assert tree.has_focus
+        assert _text(app, "folder-errors") == ""
+
+    _play(app, scenario)
+
+
 def test_browsing_starts_from_the_nearest_folder_that_exists(tmp_path):
     (tmp_path / "a").mkdir()
     assert start_folder(str(tmp_path / "a"), tmp_path / "home") == tmp_path / "a"
