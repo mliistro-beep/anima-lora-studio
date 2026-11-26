@@ -1,6 +1,7 @@
 """The screens of the TUI: the choices, the summary to approve, the training."""
 
 import re
+from dataclasses import replace
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, cast
 
@@ -11,6 +12,7 @@ from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.screen import ModalScreen, Screen
 from textual.widgets import (
     Button,
+    Checkbox,
     Footer,
     Header,
     Input,
@@ -31,8 +33,15 @@ from anima_trainer.cli.train_preparation import (
     prepare_training,
 )
 from anima_trainer.cli.tui.folder_picker import FolderPicker, start_folder
+from anima_trainer.cli.tui_previews import (
+    PreviewFields,
+    fields_of,
+    kept_prompts_note,
+    previews_from_fields,
+)
 from anima_trainer.cli.tui_values import load_tui_values
 from anima_trainer.presets.catalog import find_preset
+from anima_trainer.preview.settings import PreviewLoadResult, PreviewSettings
 from anima_trainer.system.gpu_lock import lock_refusal
 from anima_trainer.training.progress import ProgressState
 
@@ -47,7 +56,8 @@ SCREEN_CSS = """
 .folder-row Input { width: 1fr; }
 .folder-row Button { width: auto; margin-left: 2; }
 .buttons Button { margin-right: 2; }
-#errors, #preset-about { height: auto; }
+#errors, #preset-about, #previews-kept { height: auto; }
+#previews-title { margin-top: 1; text-style: bold; }
 #errors { color: $error; }
 #log { height: 1fr; border: solid $primary; }
 #bar { margin: 1 0; }
@@ -113,6 +123,7 @@ class FormScreen(Screen[None]):
                 "Resolution (768 is safe on 12 GB of VRAM)",
                 Input(str(DEFAULT_RESOLUTION), type="integer", id="resolution", compact=True),
             )
+            yield from self._preview_section()
             warnings = (*self._remembered.warnings, *presets.warnings, *gone)
             yield Static("\n".join(warnings), id="errors", markup=False)
             with Horizontal(classes="buttons"):
@@ -158,12 +169,47 @@ class FormScreen(Screen[None]):
 
         self.app.push_screen(FolderPicker(start_folder(field.value, Path.home())), fill)
 
+    def _preview_section(self) -> ComposeResult:
+        saved = self._terminal.previews.settings
+        fields = fields_of(saved)
+        yield Label("Previews (shared with the window's Previews tab)", id="previews-title")
+        yield Checkbox("Generate previews", fields.enabled, id="previews-on", compact=True)
+        yield from _field(
+            "Pre-prompt (quality tags, e.g. score_9, masterpiece)",
+            Input(fields.pre_prompt, id="preview-pre-prompt", compact=True),
+        )
+        yield from _field(
+            "Trigger of the LoRA being trained",
+            Input(fields.trigger, id="preview-trigger", compact=True),
+        )
+        yield from _field("Preview prompt", Input(fields.prompt, id="preview-prompt", compact=True))
+        yield from _field(
+            "Negative prompt (optional)",
+            Input(fields.negative_prompt, id="preview-negative", compact=True),
+        )
+        yield Static(kept_prompts_note(saved), id="previews-kept", markup=False)
+
+    def _preview_fields(self) -> PreviewFields:
+        return PreviewFields(
+            self.query_one("#previews-on", Checkbox).value,
+            self.query_one("#preview-pre-prompt", Input).value,
+            self.query_one("#preview-trigger", Input).value,
+            self.query_one("#preview-prompt", Input).value,
+            self.query_one("#preview-negative", Input).value,
+        )
+
     def _continue(self) -> None:
         options = self._options()
         if isinstance(options, tuple):
             self._show_errors(options)
             return
-        plan = prepare_training(options, self._terminal)
+        previews = previews_from_fields(self._terminal.previews.settings, self._preview_fields())
+        if isinstance(previews, tuple):
+            self._show_errors(previews)
+            return
+        loaded = PreviewLoadResult(previews, self._terminal.previews.warnings)
+        context = replace(self._terminal, previews=loaded)
+        plan = prepare_training(options, context)
         if isinstance(plan, tuple):
             self._show_errors(plan)
             return
@@ -173,7 +219,7 @@ class FormScreen(Screen[None]):
             self._show_errors((f"ERROR: {refusal}",))
             return
         self._show_errors(())
-        self.app.push_screen(SummaryScreen(plan, self._terminal))
+        self.app.push_screen(SummaryScreen(plan, context))
 
     def _options(self) -> TrainOptions | tuple[str, ...]:
         select = self.query_one("#preset", Select)
@@ -223,6 +269,7 @@ class SummaryScreen(Screen[None]):
     def __init__(self, plan: TrainPlan, context: TerminalContext) -> None:
         super().__init__()
         self._plan = plan
+        self._previews = context.previews.settings
         self._lines = plan_lines(plan, context)
 
     def compose(self) -> ComposeResult:
@@ -239,7 +286,7 @@ class SummaryScreen(Screen[None]):
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "start":
-            self.app.push_screen(TrainingScreen(self._plan))
+            self.app.push_screen(TrainingScreen(self._plan, self._previews))
         elif event.button.id == "edit":
             self.app.pop_screen()
 
@@ -248,9 +295,10 @@ class TrainingScreen(Screen[None]):
     DEFAULT_CSS = SCREEN_CSS
     BINDINGS: ClassVar[list[BindingType]] = [Binding("s", "stop", "Stop the training")]
 
-    def __init__(self, plan: TrainPlan) -> None:
+    def __init__(self, plan: TrainPlan, previews: PreviewSettings) -> None:
         super().__init__()
         self._plan = plan
+        self._previews = previews
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -264,7 +312,7 @@ class TrainingScreen(Screen[None]):
         yield Footer()
 
     def on_mount(self) -> None:
-        cast("TrainerApp", self.app).start_training(self._plan, self)
+        cast("TrainerApp", self.app).start_training(self._plan, self._previews, self)
 
     def add_line(self, line: str) -> None:
         self.query_one("#log", RichLog).write(line)

@@ -12,7 +12,7 @@ from PySide6.QtWidgets import QFileDialog, QMessageBox
 
 from anima_trainer.models.catalog import VAE_FILENAME, ExpectedFile
 from anima_trainer.models.check_worker import ModelFileChecker
-from anima_trainer.preview.settings import load_preview_settings
+from anima_trainer.preview.settings import PreviewSettings, load_preview_settings
 from anima_trainer.preview.vram_profile import IDLE_MARGIN_MIB, TRAINING_MARGIN_MIB
 from anima_trainer.runtime.data_dir import open_data_dir
 from anima_trainer.runtime.install_plan import InstallPlan
@@ -340,3 +340,30 @@ def test_the_data_folder_and_models_are_locked_while_generating(app, tmp_path):
 
     assert tab.apply_button.isEnabled()
     assert tab.install_button.isEnabled()
+
+
+def test_pre_prompt_and_trigger_from_the_terminal_are_kept_shown_and_used(app):
+    window, _, _, paths = app
+    window.previews_tab.set_settings(
+        PreviewSettings(enabled=True, prompts=("a girl",), pre_prompt="score_9", trigger="ohwx")
+    )
+    note = window.previews_tab.terminal_note
+
+    assert not note.isHidden()
+    assert note.text() == "Set in the terminal and added to every prompt: score_9, ohwx"
+    window.previews_tab.prompts.setPlainText("a cat")
+    window.training_tab.configure_button.click()
+
+    saved = load_preview_settings(paths.preview_settings_file).settings
+    assert (saved.pre_prompt, saved.trigger, saved.prompts) == ("score_9", "ohwx", ("a cat",))
+    samples = sorted(paths.configs_dir.glob(f"{PROJECT}_samples_*.json"))
+    assert [entry["prompt"] for entry in json.loads(samples[0].read_text())] == [
+        "score_9, ohwx, a cat"
+    ]
+
+
+def test_the_terminal_note_is_hidden_without_pre_prompt_and_trigger(app):
+    window, _, _, _ = app
+    window.previews_tab.set_settings(PreviewSettings(prompts=("a girl",)))
+
+    assert window.previews_tab.terminal_note.isHidden()

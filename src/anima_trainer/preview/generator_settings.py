@@ -16,7 +16,13 @@ from typing import Annotated, Any, Self
 
 from pydantic import AfterValidator, BaseModel, ConfigDict, Field
 
-from anima_trainer.preview.settings import DEFAULT_CFG, MAX_SIDE, MIN_SIDE, Sampler
+from anima_trainer.preview.settings import (
+    DEFAULT_CFG,
+    MAX_SIDE,
+    MIN_SIDE,
+    PROMPT_SEPARATOR,
+    Sampler,
+)
 from anima_trainer.preview.vram_profile import GENERATOR_SIDE_STEP
 from anima_trainer.settings.choices import BaseModelName
 from anima_trainer.settings.json_store import load_model, save_model
@@ -27,7 +33,6 @@ MAX_QUEUE = 10  # entries in the queue
 MAX_COUNT = 10  # images of one entry in a row
 MIN_STRENGTH = -2.0
 MAX_STRENGTH = 2.0
-PROMPT_SEPARATOR = ", "
 
 
 def _check_side(value: int) -> int:

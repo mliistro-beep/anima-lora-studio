@@ -14,6 +14,8 @@ from anima_trainer.settings.defaults import DEFAULTS
 from anima_trainer.settings.schema import TrainingSettings
 from anima_trainer.system.gpu_memory import GpuMemory, memory_of
 
+NO_TRIGGER_WARNING = "WARN: Previews are on without a trigger: they may not show the LoRA."
+
 TERMINAL_BASE_MODEL = DEFAULTS["base_model"]
 # The user's RTX 3060 (12 GB): 768 is the size known to be safe there.
 SAFE_RESOLUTION = 768
@@ -94,8 +96,17 @@ def summary_lines(
         f"{_count(epochs, 'epoch')} = {_count(samples, 'sample')}",
         f"Total:     {_count(estimate.total_steps, 'step')}",
         f"Previews:  {shown_previews}",
+        *_preview_lines(previews),
         *(f"WARN: {warning}" for warning in report.warnings),
     )
+
+
+def _preview_lines(previews: PreviewSettings) -> tuple[str, ...]:
+    """The first preview prompt as sd-scripts gets it, and a missing trigger."""
+    if not previews.enabled or not previews.prompts:
+        return ()
+    first = (f"Preview:   {previews.final_prompts()[0]}",)
+    return first if previews.trigger else (*first, NO_TRIGGER_WARNING)
 
 
 def _count(number: int, noun: str) -> str:

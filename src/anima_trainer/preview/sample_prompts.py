@@ -40,7 +40,7 @@ def build_sample_prompts(settings: PreviewSettings, size: SampleSize) -> tuple[d
             # train_with_previews.py launcher reads it to pick ER-SDE or Euler.
             "sample_sampler": settings.sampler,
         }
-        for prompt in settings.prompts
+        for prompt in settings.final_prompts()
     )
 
 

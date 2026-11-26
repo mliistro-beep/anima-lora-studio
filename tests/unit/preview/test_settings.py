@@ -110,3 +110,47 @@ def test_a_cfg_left_at_the_old_samplers_default_follows_the_new_sampler():
 
 def test_a_cfg_chosen_by_the_user_is_kept_when_the_sampler_changes():
     assert cfg_after_sampler_change("er_sde", "euler", 5.0) == 5.0
+
+
+def test_pre_prompt_and_trigger_are_empty_by_default_and_stripped():
+    assert (PreviewSettings().pre_prompt, PreviewSettings().trigger) == ("", "")
+
+    settings = PreviewSettings(pre_prompt="  score_9 ", trigger=" ohwx\n")
+
+    assert (settings.pre_prompt, settings.trigger) == ("score_9", "ohwx")
+
+
+def test_final_prompts_put_pre_prompt_then_trigger_before_each_prompt():
+    settings = PreviewSettings(
+        prompts=("1girl, smile", "a cat"), pre_prompt="score_9, masterpiece", trigger="ohwx"
+    )
+
+    assert settings.final_prompts() == (
+        "score_9, masterpiece, ohwx, 1girl, smile",
+        "score_9, masterpiece, ohwx, a cat",
+    )
+
+
+def test_final_prompts_skip_empty_parts():
+    assert PreviewSettings(prompts=("a",)).final_prompts() == ("a",)
+    assert PreviewSettings(prompts=("a",), trigger="ohwx").final_prompts() == ("ohwx, a",)
+    assert PreviewSettings(prompts=("a",), pre_prompt="best").final_prompts() == ("best, a",)
+
+
+def test_an_old_file_without_pre_prompt_and_trigger_loads_without_warnings(tmp_path):
+    path = tmp_path / "preview.json"
+    path.write_text(json.dumps({"enabled": True, "prompts": ["a"]}))
+
+    loaded = load_preview_settings(path)
+
+    assert (loaded.settings.pre_prompt, loaded.settings.trigger) == ("", "")
+    assert loaded.warnings == ()
+
+
+def test_pre_prompt_and_trigger_round_trip(tmp_path):
+    path = tmp_path / "preview.json"
+    settings = PreviewSettings(prompts=("a",), pre_prompt="score_9", trigger="ohwx")
+
+    save_preview_settings(path, settings)
+
+    assert load_preview_settings(path).settings == settings

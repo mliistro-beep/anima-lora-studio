@@ -41,3 +41,16 @@ def test_config_keys_point_to_the_prompt_file_and_schedule():
         "sample_every_n_epochs": 2,
         "sample_at_first": True,
     }
+
+
+def test_preview_prompts_carry_the_pre_prompt_and_the_trigger():
+    settings = PreviewSettings(
+        enabled=True, prompts=("1girl", "a cat"), pre_prompt="score_9", trigger="ohwx"
+    )
+
+    prompts = build_sample_prompts(settings, SampleSize(512, 512))
+
+    assert [entry["prompt"] for entry in prompts] == [
+        "score_9, ohwx, 1girl",
+        "score_9, ohwx, a cat",
+    ]

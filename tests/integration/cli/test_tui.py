@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 from PySide6.QtCore import QCoreApplication
 from rich.text import Text
-from textual.widgets import Button, Input, RichLog, Select, Static
+from textual.widgets import Button, Checkbox, Input, RichLog, Select, Static
 
 from anima_trainer.cli.train_plan import EXIT_FAILED
 from anima_trainer.cli.train_preparation import terminal_context
@@ -602,3 +602,138 @@ def test_browsing_starts_from_the_nearest_folder_that_exists(tmp_path):
 
 def test_browsing_a_blank_field_starts_from_home(tmp_path):
     assert start_folder("  ", tmp_path) == tmp_path
+
+
+def _write_previews(paths, **values):
+    paths.preview_settings_file.write_text(json.dumps(values))
+
+
+def _set_previews(app, enabled, pre_prompt="", trigger="", prompt="", negative=""):
+    app.screen.query_one("#previews-on", Checkbox).value = enabled
+    _input(app, "preview-pre-prompt").value = pre_prompt
+    _input(app, "preview-trigger").value = trigger
+    _input(app, "preview-prompt").value = prompt
+    _input(app, "preview-negative").value = negative
+
+
+def test_the_form_shows_the_saved_previews_and_the_prompts_it_keeps(paths):
+    _write_previews(
+        paths,
+        enabled=True,
+        prompts=["first", "second"],
+        pre_prompt="score_9",
+        trigger="ohwx",
+        negative_prompt="lowres",
+    )
+    app = _app(paths)
+
+    async def scenario(pilot):
+        assert app.screen.query_one("#previews-on", Checkbox).value is True
+        assert _input(app, "preview-pre-prompt").value == "score_9"
+        assert _input(app, "preview-trigger").value == "ohwx"
+        assert _input(app, "preview-prompt").value == "first"
+        assert _input(app, "preview-negative").value == "lowres"
+        assert _text(app, "previews-kept") == "+1 more prompt from the window, kept."
+
+    _play(app, scenario)
+
+
+def test_previews_on_without_a_prompt_stay_at_the_form(paths):
+    app = _app(paths)
+
+    async def scenario(pilot):
+        epochs, repeats = _fill(app, paths)
+        await pilot.pause()
+        _input(app, "epochs").value = epochs
+        _input(app, "repeats").value = repeats
+        _set_previews(app, True, trigger="ohwx")
+        await pilot.click("#continue")
+        await pilot.pause()
+        assert isinstance(app.screen, FormScreen)
+        assert "Previews are on: write a preview prompt." in _text(app, "errors")
+
+    _play(app, scenario)
+
+
+def test_the_summary_shows_the_preview_prompt_typed_in_the_form(paths):
+    app = _app(paths)
+
+    async def scenario(pilot):
+        epochs, repeats = _fill(app, paths)
+        await pilot.pause()
+        _input(app, "epochs").value = epochs
+        _input(app, "repeats").value = repeats
+        _set_previews(app, True, pre_prompt="score_9", prompt="1girl")
+        await pilot.click("#continue")
+        await _until(pilot, lambda: isinstance(app.screen, SummaryScreen))
+        summary = _text(app, "summary")
+        assert "Previews:  on (1 prompt)" in summary
+        assert "Preview:   score_9, 1girl" in summary
+        assert "WARN: Previews are on without a trigger" in summary
+
+    _play(app, scenario)
+
+
+def test_starting_saves_the_preview_fields_and_keeps_the_window_settings(paths):
+    _write_previews(paths, prompts=["first", "second"], steps=30, sampler="euler")
+    _accelerate(paths, "train", "0")
+    app = _app(paths)
+
+    async def scenario(pilot):
+        epochs, repeats = _fill(app, paths)
+        await pilot.pause()
+        _input(app, "epochs").value = epochs
+        _input(app, "repeats").value = repeats
+        _set_previews(app, False, "score_9", "ohwx", "new", "lowres")
+        await pilot.click("#continue")
+        await _until(pilot, lambda: isinstance(app.screen, SummaryScreen))
+        await pilot.click("#start")
+        await _until(pilot, lambda: isinstance(app.screen, TrainingScreen))
+        await _until(pilot, lambda: "completed" in _text(app, "status"))
+        await pilot.click("#back")
+        await _until(pilot, lambda: isinstance(app.screen, FormScreen))
+        await pilot.click("#menu-form")
+        await pilot.pause()
+        await pilot.click("#menu-training")
+        await pilot.pause()
+        assert _input(app, "preview-prompt").value == "new"
+        await pilot.click("#quit-form")
+
+    _play(app, scenario)
+    saved = json.loads(paths.preview_settings_file.read_text())
+    assert saved["enabled"] is False
+    assert (saved["pre_prompt"], saved["trigger"]) == ("score_9", "ohwx")
+    assert (saved["prompts"], saved["negative_prompt"]) == (["new", "second"], "lowres")
+    assert (saved["steps"], saved["sampler"]) == (30, "euler")
+
+
+def test_preview_settings_that_cannot_be_saved_are_used_for_this_run_only(paths, monkeypatch):
+    def refuse(path, settings):
+        raise OSError("disk full")
+
+    monkeypatch.setattr("anima_trainer.cli.tui.app.save_preview_settings", refuse)
+    _accelerate(paths, "train", "0")
+    app = _app(paths)
+
+    async def scenario(pilot):
+        epochs, repeats = _fill(app, paths)
+        await pilot.pause()
+        _input(app, "epochs").value = epochs
+        _input(app, "repeats").value = repeats
+        _set_previews(app, False, prompt="new")
+        await pilot.click("#continue")
+        await _until(pilot, lambda: isinstance(app.screen, SummaryScreen))
+        await pilot.click("#start")
+        await _until(pilot, lambda: isinstance(app.screen, TrainingScreen))
+        await _until(pilot, lambda: "completed" in _text(app, "status"))
+        assert (
+            "WARN: The preview settings could not be saved, used for this run only: disk full"
+            in _log(app)
+        )
+        assert app.terminal.previews.settings.prompts == ()
+        await pilot.click("#back")
+        await _until(pilot, lambda: isinstance(app.screen, FormScreen))
+        await pilot.click("#quit-form")
+
+    _play(app, scenario)
+    assert app.exit_code == 0

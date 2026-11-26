@@ -15,6 +15,7 @@ from anima_trainer.settings.json_store import load_model, save_model
 from anima_trainer.settings.schema import DecimalNumber, WholeNumber
 
 MAX_PROMPTS = 8
+PROMPT_SEPARATOR = ", "  # between pre-prompt, triggers and prompt, as in the Generator
 SIDE_STEP = 16  # sd-scripts rounds sample sizes down to a multiple of 16
 MIN_SIDE = 256
 MAX_SIDE = 2048
@@ -56,6 +57,8 @@ class PreviewSettings(BaseModel):
 
     enabled: bool = False
     prompts: Annotated[tuple[str, ...], AfterValidator(_clean_prompts)] = ()
+    pre_prompt: Annotated[str, AfterValidator(str.strip)] = ""  # quality tags, before all
+    trigger: Annotated[str, AfterValidator(str.strip)] = ""  # of the LoRA being trained
     negative_prompt: str = ""
     auto_size: bool = True
     width: Side = 1024
@@ -71,6 +74,13 @@ class PreviewSettings(BaseModel):
     def with_changes(self, **changes: Any) -> Self:
         """Return a new, re-validated copy with the given fields replaced."""
         return type(self).model_validate({**self.model_dump(), **changes})
+
+    def final_prompts(self) -> tuple[str, ...]:
+        """Each prompt with the pre-prompt and the trigger before it; empty parts skipped."""
+        return tuple(
+            PROMPT_SEPARATOR.join(part for part in (self.pre_prompt, self.trigger, prompt) if part)
+            for prompt in self.prompts
+        )
 
     def problems(self) -> tuple[str, ...]:
         if self.enabled and not self.prompts:

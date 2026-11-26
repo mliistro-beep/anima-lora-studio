@@ -23,6 +23,7 @@ from anima_trainer.ui.sampler_cfg import link_cfg_to_sampler
 from anima_trainer.ui.widgets.image_grid import ImageGrid
 from anima_trainer.ui.widgets.settings_form import SettingsForm
 
+TERMINAL_NOTE = "Set in the terminal and added to every prompt: "
 PROMPTS_HINT = f"One prompt per line, at most {MAX_PROMPTS}. Used by the next Configure Training."
 EMPTY_GALLERY = "No previews yet. Turn previews on, Configure and Start the training."
 SETTINGS_STRETCH, GALLERY_STRETCH = 2, 3
@@ -62,6 +63,11 @@ class PreviewsTab(QWidget):
         self.gallery.image_activated.connect(self.image_activated.emit)
         self.refresh_button.clicked.connect(self.refresh_requested.emit)
         self._prompts: tuple[str, ...] = ()
+        # Set in the terminal interface (no fields here yet): kept and named, never dropped.
+        self._terminal_parts = PreviewSettings()
+        self.terminal_note = QLabel()
+        self.terminal_note.setWordWrap(True)
+        self.terminal_note.hide()
         splitter = QSplitter(Qt.Orientation.Horizontal)
         splitter.addWidget(self._settings_column())
         splitter.addWidget(self._gallery_column())
@@ -74,7 +80,14 @@ class PreviewsTab(QWidget):
         """The settings in the form, or the error lines explaining what is wrong."""
         lines = tuple(self.prompts.toPlainText().splitlines())
         try:
-            return PreviewSettings.model_validate({**self.form.values(), "prompts": lines})
+            return PreviewSettings.model_validate(
+                {
+                    **self.form.values(),
+                    "prompts": lines,
+                    "pre_prompt": self._terminal_parts.pre_prompt,
+                    "trigger": self._terminal_parts.trigger,
+                }
+            )
         except ValidationError as error:
             return describe_validation_error(error, PREVIEW_LABELS)
 
@@ -86,6 +99,10 @@ class PreviewsTab(QWidget):
         self.form.set_values(settings)
         self.prompts.setPlainText("\n".join(settings.prompts))
         self._prompts = settings.prompts
+        self._terminal_parts = settings
+        parts = ", ".join(part for part in (settings.pre_prompt, settings.trigger) if part)
+        self.terminal_note.setText(f"{TERMINAL_NOTE}{parts}")
+        self.terminal_note.setVisible(bool(parts))
 
     def set_prompt_labels(self, prompts: tuple[str, ...]) -> None:
         """Name the gallery columns after the prompts of the configured run."""
@@ -108,6 +125,7 @@ class PreviewsTab(QWidget):
         hint = QLabel(PROMPTS_HINT)
         hint.setWordWrap(True)
         prompts_layout.addWidget(hint)
+        prompts_layout.addWidget(self.terminal_note)
         prompts_layout.addWidget(self.prompts)
         content = QWidget()
         column = QVBoxLayout(content)

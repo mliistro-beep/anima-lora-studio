@@ -8,6 +8,7 @@ the widgets directly.
 import os
 import threading
 from collections.abc import Callable
+from dataclasses import replace
 from pathlib import Path
 
 from PySide6.QtCore import QCoreApplication
@@ -24,6 +25,11 @@ from anima_trainer.cli.tui.screens import QuitDialog, TrainingScreen
 from anima_trainer.cli.tui_values import TuiValues, save_tui_values
 from anima_trainer.preview.generator_settings import GeneratorSettings
 from anima_trainer.preview.progress_text import ImageProgress
+from anima_trainer.preview.settings import (
+    PreviewLoadResult,
+    PreviewSettings,
+    save_preview_settings,
+)
 from anima_trainer.training.progress import ProgressState
 from anima_trainer.workflow.training_session import Runner
 
@@ -81,16 +87,19 @@ class TrainerApp(App[None]):
         """From a signal handler (a lost terminal, SIGTERM): recorded, see _process_qt_events."""
         self._quit_requested = True
 
-    def start_training(self, plan: TrainPlan, screen: TrainingScreen) -> None:
-        """Called by the training screen once it can show lines."""
+    def start_training(
+        self, plan: TrainPlan, previews: PreviewSettings, screen: TrainingScreen
+    ) -> None:
+        """Called by the training screen once it can show lines; `previews`: the form's."""
         self._training_screen = screen
         self._end_shown = False
         self.exit_code = EXIT_OK
         self._remember(plan, screen)
+        self._save_previews(previews, screen)
         self._training = TerminalRun(
             self.terminal.paths,
             plan.settings,
-            self.terminal.previews.settings,
+            previews,
             self._on_line,
             self._on_progress,
             self._on_ended,
@@ -169,6 +178,19 @@ class TrainerApp(App[None]):
             save_tui_values(self.terminal.paths.tui_values_file, values)
         except OSError as error:
             screen.add_line(f"WARN: The chosen values could not be saved: {error}")
+
+    def _save_previews(self, previews: PreviewSettings, screen: TrainingScreen) -> None:
+        """Into the preview.json the window shares; the next forms start from it."""
+        if previews == self.terminal.previews.settings:
+            return
+        try:
+            save_preview_settings(self.terminal.paths.preview_settings_file, previews)
+        except OSError as error:
+            screen.add_line(
+                f"WARN: The preview settings could not be saved, used for this run only: {error}"
+            )
+        else:
+            self.terminal = replace(self.terminal, previews=PreviewLoadResult(previews, ()))
 
     def _on_line(self, line: str) -> None:
         if self._training_screen is not None and not is_progress_line(line):

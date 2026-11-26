@@ -177,3 +177,25 @@ def test_a_link_to_a_folder_stays_as_the_user_wrote_it(tmp_path, monkeypatch):
     arguments[arguments.index("--dataset") + 1] = "images"
     settings = settings_for(parse_train_options(arguments), PERSON, TrainingSettings())
     assert settings.image_directory == str(tmp_path / "images")
+
+
+def test_the_summary_shows_the_first_preview_prompt_as_it_is_used():
+    previews = PreviewSettings(
+        enabled=True, prompts=("1girl", "a cat"), pre_prompt="score_9", trigger="ohwx"
+    )
+    lines = summary_lines(PERSON, _settings(), DatasetReport(1, (), ()), previews)
+    assert "Preview:   score_9, ohwx, 1girl" in lines
+    assert not any("trigger" in line for line in lines)
+
+
+def test_the_summary_warns_when_previews_are_on_without_a_trigger():
+    previews = PreviewSettings(enabled=True, prompts=("1girl",))
+    lines = summary_lines(PERSON, _settings(), DatasetReport(1, (), ()), previews)
+    assert "WARN: Previews are on without a trigger: they may not show the LoRA." in lines
+
+
+def test_the_summary_shows_no_preview_prompt_when_previews_are_off():
+    previews = PreviewSettings(prompts=("1girl",))
+    lines = summary_lines(PERSON, _settings(), DatasetReport(1, (), ()), previews)
+    assert not any(line.startswith("Preview:") for line in lines)
+    assert not any("trigger" in line for line in lines)
