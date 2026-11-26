@@ -342,16 +342,22 @@ def test_the_data_folder_and_models_are_locked_while_generating(app, tmp_path):
     assert tab.install_button.isEnabled()
 
 
-def test_pre_prompt_and_trigger_from_the_terminal_are_kept_shown_and_used(app):
-    window, _, _, paths = app
+def test_pre_prompt_and_trigger_saved_by_the_terminal_are_shown_in_their_fields(app):
+    window, _, _, _ = app
     window.previews_tab.set_settings(
         PreviewSettings(enabled=True, prompts=("a girl",), pre_prompt="score_9", trigger="ohwx")
     )
-    note = window.previews_tab.terminal_note
 
-    assert not note.isHidden()
-    assert note.text() == "Set in the terminal and added to every prompt: score_9, ohwx"
-    window.previews_tab.prompts.setPlainText("a cat")
+    assert window.previews_tab.pre_prompt.text() == "score_9"
+    assert window.previews_tab.trigger.text() == "ohwx"
+
+
+def test_pre_prompt_and_trigger_typed_in_the_window_are_saved_and_used(app):
+    window, _, _, paths = app
+    _turn_previews_on(window, "a cat")
+    window.previews_tab.pre_prompt.setText(" score_9 ")
+    window.previews_tab.trigger.setText("ohwx")
+
     window.training_tab.configure_button.click()
 
     saved = load_preview_settings(paths.preview_settings_file).settings
@@ -362,8 +368,29 @@ def test_pre_prompt_and_trigger_from_the_terminal_are_kept_shown_and_used(app):
     ]
 
 
-def test_the_terminal_note_is_hidden_without_pre_prompt_and_trigger(app):
+def test_pre_prompt_and_trigger_are_read_only_while_training(app):
     window, _, _, _ = app
-    window.previews_tab.set_settings(PreviewSettings(prompts=("a girl",)))
 
-    assert window.previews_tab.terminal_note.isHidden()
+    window.previews_tab.set_editable(False)
+    assert window.previews_tab.pre_prompt.isReadOnly()
+    assert window.previews_tab.trigger.isReadOnly()
+    window.previews_tab.set_editable(True)
+    assert not window.previews_tab.trigger.isReadOnly()
+
+
+def test_reset_to_defaults_keeps_pre_prompt_trigger_and_prompts(app):
+    window, _, _, _ = app
+    tab = window.previews_tab
+    tab.set_settings(
+        PreviewSettings(prompts=("a girl",), pre_prompt="score_9", trigger="ohwx", steps=40)
+    )
+
+    tab.reset_button.click()
+
+    settings = tab.settings()
+    assert (settings.pre_prompt, settings.trigger, settings.prompts) == (
+        "score_9",
+        "ohwx",
+        ("a girl",),
+    )
+    assert settings.steps == 25

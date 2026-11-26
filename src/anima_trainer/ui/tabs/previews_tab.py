@@ -4,8 +4,10 @@ sd-scripts makes during training (one row per epoch, one column per prompt)."""
 from pydantic import ValidationError
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
+    QFormLayout,
     QGroupBox,
     QLabel,
+    QLineEdit,
     QPlainTextEdit,
     QPushButton,
     QScrollArea,
@@ -23,8 +25,10 @@ from anima_trainer.ui.sampler_cfg import link_cfg_to_sampler
 from anima_trainer.ui.widgets.image_grid import ImageGrid
 from anima_trainer.ui.widgets.settings_form import SettingsForm
 
-TERMINAL_NOTE = "Set in the terminal and added to every prompt: "
-PROMPTS_HINT = f"One prompt per line, at most {MAX_PROMPTS}. Used by the next Configure Training."
+PROMPTS_HINT = (
+    f"One prompt per line, at most {MAX_PROMPTS}. Each becomes: pre-prompt, trigger, prompt. "
+    "Used by the next Configure Training."
+)
 EMPTY_GALLERY = "No previews yet. Turn previews on, Configure and Start the training."
 SETTINGS_STRETCH, GALLERY_STRETCH = 2, 3
 SETTINGS_WIDTH, GALLERY_WIDTH = 440, 760  # starting split; the user can drag it
@@ -48,8 +52,8 @@ class PreviewsTab(QWidget):
         link_cfg_to_sampler(self.form)
         self.reset_button = QPushButton("Reset to defaults")
         self.reset_button.setToolTip(
-            "The image settings go back to their defaults; the prompts, the on/off switch and "
-            "the schedule stay."
+            "The image settings go back to their defaults; the prompts, pre-prompt and trigger, "
+            "the on/off switch and the schedule stay."
         )
         self.reset_button.clicked.connect(
             lambda: self.form.set_values(PreviewSettings(), only=PREVIEW_IMAGE_FIELDS)
@@ -63,11 +67,13 @@ class PreviewsTab(QWidget):
         self.gallery.image_activated.connect(self.image_activated.emit)
         self.refresh_button.clicked.connect(self.refresh_requested.emit)
         self._prompts: tuple[str, ...] = ()
-        # Set in the terminal interface (no fields here yet): kept and named, never dropped.
-        self._terminal_parts = PreviewSettings()
-        self.terminal_note = QLabel()
-        self.terminal_note.setWordWrap(True)
-        self.terminal_note.hide()
+        # The same two fields as the terminal interface's training form (shared preview.json).
+        self.pre_prompt = QLineEdit()
+        self.pre_prompt.setPlaceholderText("score_9, masterpiece, ...")
+        self.pre_prompt.setAccessibleName("Preview pre-prompt")
+        self.trigger = QLineEdit()
+        self.trigger.setPlaceholderText("the trigger word of the LoRA being trained")
+        self.trigger.setAccessibleName("Preview trigger")
         splitter = QSplitter(Qt.Orientation.Horizontal)
         splitter.addWidget(self._settings_column())
         splitter.addWidget(self._gallery_column())
@@ -84,8 +90,8 @@ class PreviewsTab(QWidget):
                 {
                     **self.form.values(),
                     "prompts": lines,
-                    "pre_prompt": self._terminal_parts.pre_prompt,
-                    "trigger": self._terminal_parts.trigger,
+                    "pre_prompt": self.pre_prompt.text(),
+                    "trigger": self.trigger.text(),
                 }
             )
         except ValidationError as error:
@@ -99,10 +105,8 @@ class PreviewsTab(QWidget):
         self.form.set_values(settings)
         self.prompts.setPlainText("\n".join(settings.prompts))
         self._prompts = settings.prompts
-        self._terminal_parts = settings
-        parts = ", ".join(part for part in (settings.pre_prompt, settings.trigger) if part)
-        self.terminal_note.setText(f"{TERMINAL_NOTE}{parts}")
-        self.terminal_note.setVisible(bool(parts))
+        self.pre_prompt.setText(settings.pre_prompt)
+        self.trigger.setText(settings.trigger)
 
     def set_prompt_labels(self, prompts: tuple[str, ...]) -> None:
         """Name the gallery columns after the prompts of the configured run."""
@@ -113,6 +117,8 @@ class PreviewsTab(QWidget):
         self.form.setEnabled(editable)
         self.reset_button.setEnabled(editable)
         self.prompts.setReadOnly(not editable)
+        self.pre_prompt.setReadOnly(not editable)
+        self.trigger.setReadOnly(not editable)
 
     def show_samples(self, samples: tuple[SampleImage, ...]) -> None:
         layout = preview_layout(samples, self._prompts)
@@ -125,7 +131,10 @@ class PreviewsTab(QWidget):
         hint = QLabel(PROMPTS_HINT)
         hint.setWordWrap(True)
         prompts_layout.addWidget(hint)
-        prompts_layout.addWidget(self.terminal_note)
+        parts = QFormLayout()
+        parts.addRow("Pre-prompt", self.pre_prompt)
+        parts.addRow("Trigger", self.trigger)
+        prompts_layout.addLayout(parts)
         prompts_layout.addWidget(self.prompts)
         content = QWidget()
         column = QVBoxLayout(content)
