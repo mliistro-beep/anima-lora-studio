@@ -6,6 +6,8 @@ All notable changes to Anima LoRA Studio are listed here. The format follows
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-11-26
+
 ### Changed
 
 - ER-SDE draws its noise the way ComfyUI does (float32 starting noise; step noise from a generator
@@ -152,7 +154,8 @@ Anima LoRA Trainer UI, independent from Citron.
 - GPL-3.0-or-later license, License and Credits dialogs, `THIRD_PARTY_NOTICES.md` and the
   development launcher `scripts/dev-run.sh` (M4c).
 
-[Unreleased]: https://github.com/mliistro-beep/anima-lora-studio/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/mliistro-beep/anima-lora-studio/compare/v0.4.1...HEAD
+[0.4.1]: https://github.com/mliistro-beep/anima-lora-studio/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/mliistro-beep/anima-lora-studio/compare/v0.3.1...v0.4.0
 [0.3.1]: https://github.com/mliistro-beep/anima-lora-studio/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/mliistro-beep/anima-lora-studio/compare/v0.2.0...v0.3.0
