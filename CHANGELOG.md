@@ -6,6 +6,23 @@ All notable changes to Anima LoRA Studio are listed here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- The terminal interface's training form has a Previews section: Generate previews on/off,
+  Pre-prompt (quality tags), Trigger of the LoRA being trained, Preview prompt and Negative
+  prompt. They are saved in the same preview settings as the window's Previews tab when the
+  training starts; the window's other prompts and image settings stay as they are. Every preview
+  prompt becomes pre-prompt, trigger, prompt; the summary shows the first one and warns when
+  previews are on without a trigger. The window keeps the pre-prompt and trigger set in the
+  terminal and names them in its Previews tab.
+
+### Changed
+
+- The terminal interface's Generator shows one line for the LoRAs ("LoRAs: 2 of 3 on") and an
+  Edit LoRAs button: the LoRAs have a screen of their own, one two-line card each (on/off and the
+  full file name, then trigger, strength and Remove), with the count of those on, Add LoRA, Done
+  and Cancel (Escape). Easier to read on a small terminal with several LoRAs.
+
 ## [0.4.1] - 2026-11-26
 
 ### Changed

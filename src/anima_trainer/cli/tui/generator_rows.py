@@ -3,30 +3,37 @@
 from pathlib import Path
 
 from textual.app import ComposeResult
-from textual.containers import Horizontal
+from textual.containers import Horizontal, Vertical
 from textual.widgets import Button, Checkbox, Input, Static
 
 from anima_trainer.preview.generator_settings import GenerationEntry, LoraEntry
 from anima_trainer.preview.queue_text import entry_summary
 
 
-class LoraRow(Horizontal):
-    """One LoRA: on/off, file name (the full path in its tooltip), trigger, strength."""
+class LoraRow(Vertical):
+    """One LoRA as a card of two lines: on/off and the file name (the full path in its tooltip),
+    then trigger, strength and Remove; readable on a small terminal."""
 
     def __init__(self, entry: LoraEntry) -> None:
         super().__init__(classes="lora-row")
         self.entry = entry
 
     def compose(self) -> ComposeResult:
-        on = Checkbox(value=self.entry.enabled, classes="lora-on", compact=True)
-        on.tooltip = "Used, and its trigger added to the prompt, while on."
-        yield on
-        name = Static(Path(self.entry.path).name, classes="lora-name", markup=False)
-        name.tooltip = self.entry.path
-        yield name
-        yield Input(self.entry.trigger, placeholder="trigger", classes="lora-trigger", compact=True)
-        yield Input(str(self.entry.strength), classes="lora-strength", compact=True)
-        yield Button("Remove", classes="lora-remove", compact=True)
+        with Horizontal(classes="lora-head"):
+            on = Checkbox(value=self.entry.enabled, classes="lora-on", compact=True)
+            on.tooltip = "Used, and its trigger added to the prompt, while on."
+            yield on
+            name = Static(Path(self.entry.path).name, classes="lora-name", markup=False)
+            name.tooltip = self.entry.path
+            yield name
+        with Horizontal(classes="lora-body"):
+            yield Static("Trigger", classes="lora-label")
+            yield Input(
+                self.entry.trigger, placeholder="trigger", classes="lora-trigger", compact=True
+            )
+            yield Static("Strength", classes="lora-label")
+            yield Input(str(self.entry.strength), classes="lora-strength", compact=True)
+            yield Button("Remove", classes="lora-remove", compact=True)
 
     def values(self) -> dict[str, object]:
         return {
@@ -35,11 +42,6 @@ class LoraRow(Horizontal):
             "trigger": self.query_one(".lora-trigger", Input).value,
             "strength": self.query_one(".lora-strength", Input).value,
         }
-
-    def on_button_pressed(self, event: Button.Pressed) -> None:
-        if event.button.has_class("lora-remove"):
-            event.stop()
-            self.remove()
 
 
 class QueueRow(Horizontal):

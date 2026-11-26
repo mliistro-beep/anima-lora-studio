@@ -6,12 +6,9 @@ import pytest
 from textual.widgets import Button, Checkbox, Input, Select, Static, TextArea
 
 from anima_trainer.cli.tui.folder_picker import FilePicker
-from anima_trainer.cli.tui.generator_screens import (
-    GenerationScreen,
-    GeneratorScreen,
-    LoraRow,
-    QueueRow,
-)
+from anima_trainer.cli.tui.generator_rows import LoraRow
+from anima_trainer.cli.tui.generator_screens import GenerationScreen, GeneratorScreen, QueueRow
+from anima_trainer.cli.tui.lora_screen import LoraScreen
 from anima_trainer.cli.tui.menu import MenuScreen
 from anima_trainer.cli.tui.screens import FormScreen, QuitDialog
 from anima_trainer.preview.generator_settings import load_generator_settings
@@ -23,7 +20,6 @@ from tests.safetensors_helpers import checkpoint_keys, kohya_blocks, write_safet
 
 pytestmark = pytest.mark.integration
 GENERATOR = "#menu-generator"
-COLUMNS = (".lora-on", ".lora-name", ".lora-trigger")
 
 
 @pytest.fixture
@@ -55,12 +51,23 @@ def _prompt(app):
     return app.screen.query_one("#prompt", TextArea)
 
 
+async def _open_loras(pilot):
+    await pilot.click("#edit-loras")
+    await _until(pilot, lambda: isinstance(pilot.app.screen, LoraScreen))
+
+
 async def _add(pilot, path):
+    """On the LoRA screen."""
     await pilot.click("#add-lora")
     await _until(pilot, lambda: isinstance(pilot.app.screen, FilePicker))
     pilot.app.screen.dismiss(str(path))
-    await _until(pilot, lambda: isinstance(pilot.app.screen, GeneratorScreen))
+    await _until(pilot, lambda: isinstance(pilot.app.screen, LoraScreen))
     await pilot.pause()
+
+
+async def _close_loras(pilot, button="#loras-done"):
+    await pilot.click(button)
+    await _until(pilot, lambda: isinstance(pilot.app.screen, GeneratorScreen))
 
 
 def test_the_menu_comes_first_and_leads_to_both_parts(paths):
@@ -95,6 +102,9 @@ def test_the_generator_shows_the_settings_saved_by_the_window(paths, tmp_path):
         assert _prompt(app).text == "a cat"
         assert _input(app, "pre_prompt").value == "score_9"
         assert _input(app, "steps").value == "30"
+        assert _text(app, "lora-count") == "LoRAs: 0 of 1 on"
+        assert not _rows(app)  # the LoRAs have a screen of their own
+        await _open_loras(pilot)
         (row,) = _rows(app)
         assert "style.safetensors" in str(row.query_one(".lora-name", Static).content)
         assert row.query_one(".lora-trigger", Input).value == "sks"
@@ -110,14 +120,73 @@ def test_an_added_lora_gets_its_trigger_and_remove_takes_it_away(paths, tmp_path
     app = _app(paths)
 
     async def scenario(pilot):
+        assert _text(app, "lora-count") == "LoRAs: none"
+        await _open_loras(pilot)
         await _add(pilot, first)
         await _add(pilot, second)
         rows = _rows(app)
         assert [row.query_one(".lora-trigger", Input).value for row in rows] == ["aaa", ""]
+        assert _text(app, "lora-screen-count") == "LoRAs: 2 of 2 on"
         rows[0].query_one(".lora-remove", Button).press()
         await pilot.pause()
         (left,) = _rows(app)
         assert "b.safetensors" in str(left.query_one(".lora-name", Static).content)
+        assert _text(app, "lora-screen-count") == "LoRAs: 1 of 1 on"
+        left.query_one(".lora-on", Checkbox).value = False
+        await pilot.pause()
+        assert _text(app, "lora-screen-count") == "LoRAs: 0 of 1 on"
+        await _close_loras(pilot)
+        assert _text(app, "lora-count") == "LoRAs: 0 of 1 on"
+
+    _play(app, scenario, GENERATOR)
+
+
+def test_cancel_and_escape_leave_the_loras_as_they_were(paths, tmp_path):
+    lora = _lora(tmp_path, "a.safetensors")
+    _save(paths, prompt="a cat", loras=[{"path": str(lora)}])
+    app = _app(paths)
+
+    async def scenario(pilot):
+        await _open_loras(pilot)
+        _rows(app)[0].query_one(".lora-remove", Button).press()
+        await pilot.pause()
+        await _close_loras(pilot, "#loras-cancel")
+        assert _text(app, "lora-count") == "LoRAs: 1 of 1 on"
+        await _open_loras(pilot)
+        _rows(app)[0].query_one(".lora-on", Checkbox).value = False
+        await pilot.press("escape")
+        await _until(pilot, lambda: isinstance(app.screen, GeneratorScreen))
+        assert _text(app, "lora-count") == "LoRAs: 1 of 1 on"
+
+    _play(app, scenario, GENERATOR)
+
+
+def test_done_without_loras_leaves_none(paths, tmp_path):
+    _save(paths, prompt="a cat", loras=[{"path": str(_lora(tmp_path, "a.safetensors"))}])
+    app = _app(paths)
+
+    async def scenario(pilot):
+        await _open_loras(pilot)
+        _rows(app)[0].query_one(".lora-remove", Button).press()
+        await pilot.pause()
+        await _close_loras(pilot)
+        assert _text(app, "lora-count") == "LoRAs: none"
+
+    _play(app, scenario, GENERATOR)
+
+
+def test_a_wrong_strength_is_shown_on_the_lora_screen_which_stays(paths, tmp_path):
+    lora = _lora(tmp_path, "a.safetensors")
+    _save(paths, prompt="a cat", loras=[{"path": str(lora)}])
+    app = _app(paths)
+
+    async def scenario(pilot):
+        await _open_loras(pilot)
+        _rows(app)[0].query_one(".lora-strength", Input).value = "5"
+        await pilot.click("#loras-done")
+        await pilot.pause()
+        assert isinstance(app.screen, LoraScreen)
+        assert "ERROR: a.safetensors: Strength" in _text(app, "lora-errors")
 
     _play(app, scenario, GENERATOR)
 
@@ -149,7 +218,7 @@ def test_reset_puts_back_the_image_settings_and_keeps_prompts_and_loras(paths, t
         await pilot.pause()
         assert (_input(app, "steps").value, _input(app, "seed").value) == ("25", "42")
         assert _prompt(app).text == "a cat"
-        assert len(_rows(app)) == 1
+        assert _text(app, "lora-count") == "LoRAs: 1 of 1 on"
 
     _play(app, scenario, GENERATOR)
 
@@ -176,13 +245,16 @@ def test_generate_runs_with_the_loras_and_shows_the_image(paths, runner, tmp_pat
     app = _app(paths, generation_runner=runner)
 
     async def scenario(pilot):
+        await _open_loras(pilot)
         await _add(pilot, lora)
+        _rows(app)[0].query_one(".lora-trigger", Input).value = "custom"
+        await _close_loras(pilot)
         _input(app, "pre_prompt").value = "score_9"
         _prompt(app).text = "a cat"
         await pilot.click("#generate")
         await _until(pilot, lambda: isinstance(app.screen, GenerationScreen))
         await _until(pilot, lambda: runner.started)
-        assert "INFO: Prompt: score_9, sks, a cat" in _log(app)
+        assert "INFO: Prompt: score_9, custom, a cat" in _log(app)
         runner.line_received.emit("STEP: 25/25")
         runner.line_received.emit(f"IMAGE: {image}")
         runner.finished.emit(RunOutcome(0, crashed=False, stopped=False, log_path=None))
@@ -194,7 +266,7 @@ def test_generate_runs_with_the_loras_and_shows_the_image(paths, runner, tmp_pat
 
     _play(app, scenario, GENERATOR)
     saved = load_generator_settings(paths.generator_settings_file).settings
-    assert (saved.prompt, saved.loras[0].trigger) == ("a cat", "sks")
+    assert (saved.prompt, saved.loras[0].trigger) == ("a cat", "custom")
     spec, _log_path = runner.started[0]
     assert str(lora) in spec.arguments
 
@@ -316,13 +388,18 @@ def test_the_progress_line_shows_image_batch_and_steps_next_to_the_bar(paths, ru
     _play(app, scenario, GENERATOR)
 
 
-def test_the_lora_columns_have_a_separator(paths, tmp_path):
+def test_each_lora_is_a_card_with_the_file_name_on_a_line_of_its_own(paths, tmp_path):
     _save(paths, prompt="a cat", loras=[{"path": str(_lora(tmp_path, "a.safetensors"))}])
     app = _app(paths)
 
     async def scenario(pilot):
+        await _open_loras(pilot)
         (row,) = _rows(app)
-        sides = {name: row.query_one(name).styles.border_right[0] for name in COLUMNS}
-        assert all(sides.values()), sides
+        head, body = row.query_one(".lora-head"), row.query_one(".lora-body")
+        assert head.query_one(".lora-name") and head.query_one(".lora-on")
+        assert body.query_one(".lora-trigger") and body.query_one(".lora-strength")
+        assert body.query_one(".lora-remove")
+        assert head.region.y < body.region.y
+        assert row.styles.border_bottom[0]
 
     _play(app, scenario, GENERATOR)

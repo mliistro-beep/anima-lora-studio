@@ -4,7 +4,7 @@ The settings are the window's (<data>/generator.json), so both find the same LoR
 and prompts. Nothing here writes to disk.
 """
 
-from collections.abc import Callable, Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from pathlib import Path
 
 from pydantic import ValidationError
@@ -39,6 +39,36 @@ def add_loras(
             continue
         added.append(LoraEntry(path=file, trigger=trigger_for(file)))
     return tuple(added), tuple(warnings)
+
+
+def lora_count_text(enabled: Sequence[bool]) -> str:
+    """The line the generator form shows instead of the LoRAs, e.g. "LoRAs: 2 of 3 on"."""
+    if not enabled:
+        return "LoRAs: none"
+    return f"LoRAs: {sum(enabled)} of {len(enabled)} on"
+
+
+def loras_from_rows(
+    rows: Sequence[Mapping[str, object]],
+) -> tuple[tuple[LoraEntry, ...], tuple[str, ...]]:
+    """The LoRA screen's rows as entries, and an ERROR: line per wrong value, naming the file;
+    the entries are complete only when there are no errors."""
+    entries: list[LoraEntry] = []
+    errors: list[str] = []
+    for row in rows:
+        try:
+            entries.append(LoraEntry.model_validate(dict(row)))
+        except ValidationError as error:
+            name = Path(str(row.get("path", ""))).name
+            errors.extend(
+                f"ERROR: {name}: {_field_label(detail['loc'])}: {detail['msg']}"
+                for detail in error.errors()
+            )
+    return tuple(entries), tuple(errors)
+
+
+def _field_label(location: tuple[int | str, ...]) -> str:
+    return str(location[0]).capitalize() if location else "Value"
 
 
 def image_defaults() -> dict[str, object]:

@@ -6,6 +6,8 @@ from anima_trainer.cli.generator_values import (
     add_loras,
     gpu_index_for,
     image_defaults,
+    lora_count_text,
+    loras_from_rows,
     settings_from_fields,
 )
 from anima_trainer.preview.generator_settings import MAX_LORAS, GeneratorSettings, LoraEntry
@@ -78,3 +80,34 @@ def test_a_file_already_in_the_list_is_not_added_twice():
     added, notes = add_loras(entries, ("/l/a.safetensors",), lambda _p: "")
     assert added == entries
     assert notes == ("INFO: /l/a.safetensors is already in the list.",)
+
+
+def test_the_lora_count_says_how_many_are_on():
+    assert lora_count_text(()) == "LoRAs: none"
+    assert lora_count_text((True,)) == "LoRAs: 1 of 1 on"
+    assert lora_count_text((True, False, True)) == "LoRAs: 2 of 3 on"
+
+
+def test_rows_of_the_lora_screen_become_entries():
+    rows = (
+        {"path": "/l/a.safetensors", "strength": "0.5", "enabled": True, "trigger": " aaa "},
+        {"path": "/l/b.safetensors", "strength": "1", "enabled": False, "trigger": ""},
+    )
+    assert loras_from_rows(rows) == (
+        (
+            LoraEntry(path="/l/a.safetensors", strength=0.5, trigger="aaa"),
+            LoraEntry(path="/l/b.safetensors", enabled=False),
+        ),
+        (),
+    )
+    assert loras_from_rows(()) == ((), ())
+
+
+def test_a_wrong_strength_names_the_file_of_its_row():
+    rows = (
+        {"path": "/l/a.safetensors", "strength": "3", "enabled": True, "trigger": ""},
+        {"path": "/l/b.safetensors", "strength": "x", "enabled": True, "trigger": ""},
+    )
+    _entries, errors = loras_from_rows(rows)
+    assert [line.split(":")[1].strip() for line in errors] == ["a.safetensors", "b.safetensors"]
+    assert all(line.startswith("ERROR: ") and "Strength" in line for line in errors)

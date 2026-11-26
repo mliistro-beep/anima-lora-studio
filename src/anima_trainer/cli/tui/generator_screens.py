@@ -29,19 +29,19 @@ from textual.widgets import (
     TextArea,
 )
 
-from anima_trainer.cli.generator_values import add_loras, image_defaults, settings_from_fields
+from anima_trainer.cli.generator_values import image_defaults, lora_count_text, settings_from_fields
 from anima_trainer.cli.train_preparation import TerminalContext
 from anima_trainer.cli.tui.folder_picker import FilePicker, FolderPicker, start_folder
-from anima_trainer.cli.tui.generator_rows import LoraRow, QueueRow
+from anima_trainer.cli.tui.generator_rows import QueueRow
+from anima_trainer.cli.tui.lora_screen import LoraScreen
 from anima_trainer.preview.form_fields import GENERATOR_FIELDS
 from anima_trainer.preview.generator_settings import (
-    MAX_LORAS,
     MAX_QUEUE,
     GenerationEntry,
     GeneratorSettings,
+    LoraEntry,
     load_generator_settings,
 )
-from anima_trainer.preview.lora_files import lora_trigger
 from anima_trainer.preview.progress_text import ImageProgress, progress_line
 from anima_trainer.preview.settings import cfg_after_sampler_change
 from anima_trainer.settings.choices import BASE_MODELS
@@ -58,23 +58,16 @@ GRID_FIELDS = tuple(
 PATH_FIELDS = ("model_file", "output_folder")
 GENERATOR_CSS = """
 .field-label { color: $text-muted; }
-.path-row, .lora-row, .queue-row, .field-row, .buttons, .progress-row { height: auto; }
-.lora-row, .queue-row { border-bottom: dashed $foreground 25%; }
-/* !important: compact checkboxes and inputs take their borders away */
-.lora-row .lora-on, .lora-row .lora-name, .lora-row .lora-trigger {
-    border-right: solid $foreground 25% !important;
-}
+.path-row, .queue-row, .field-row, .buttons, .progress-row { height: auto; }
+.queue-row { border-bottom: dashed $foreground 25%; }
 .progress-row #status { width: auto; margin-right: 2; }
 .path-row Input { width: 1fr; }
-.path-row Button, .lora-row Button, .queue-row Button { width: auto; margin-left: 2; }
+.path-row Button, .queue-row Button { width: auto; margin-left: 2; }
+#lora-count { width: 1fr; }
 .queue-text { width: 1fr; }
 #queue { height: auto; }
-.lora-name { width: 1fr; }
-.lora-trigger { width: 1fr; }
-.lora-strength { width: 8; }
 .field-cell { width: 1fr; height: auto; margin-right: 1; }
 #prompt { height: 5; }
-#loras { height: auto; }
 #errors { height: auto; color: $error; }
 .buttons { margin-top: 1; }
 .buttons Button { margin-right: 2; }
@@ -94,6 +87,7 @@ class GeneratorScreen(Screen[None]):
         self._warnings = loaded.warnings
         self._sampler: str = loaded.settings.sampler
         self._queue: tuple[GenerationEntry, ...] = loaded.settings.queue
+        self._loras: tuple[LoraEntry, ...] = loaded.settings.loras  # edited on their own screen
 
     def compose(self) -> ComposeResult:
         settings = self._settings
@@ -110,11 +104,9 @@ class GeneratorScreen(Screen[None]):
             yield from _path_field(
                 "Model file (blank: the base model)", settings.model_file, "model_file"
             )
-            yield Label(
-                f"LoRAs (at most {MAX_LORAS}): on, file, trigger, strength", classes="field-label"
-            )
-            yield Vertical(*(LoraRow(entry) for entry in settings.loras), id="loras")
-            yield Button("Add LoRA", id="add-lora", compact=True)
+            with Horizontal(classes="path-row"):
+                yield Static(self._lora_count(), id="lora-count", markup=False)
+                yield Button("Edit LoRAs", id="edit-loras", compact=True)
             yield Label("Pre-prompt (e.g. score_9, masterpiece)", classes="field-label")
             yield Input(settings.pre_prompt, id="pre_prompt", compact=True)
             yield Label("Prompt (after the pre-prompt and the triggers)", classes="field-label")
@@ -187,8 +179,9 @@ class GeneratorScreen(Screen[None]):
             self._reset()
         elif button == "back-generator":
             self.app.pop_screen()
-        elif button == "add-lora":
-            self.app.push_screen(FilePicker(self._lora_folder()), self._add_lora)
+        elif button == "edit-loras":
+            start = start_folder(self.query_one("#model_file", Input).value, Path.home())
+            self.app.push_screen(LoraScreen(self._loras, start), self._loras_edited)
         elif button == "browse-model_file":
             self._browse(self.query_one("#model_file", Input), folder=False)
         elif button == "browse-output_folder":
@@ -235,7 +228,7 @@ class GeneratorScreen(Screen[None]):
             values[name] = self.query_one(f"#{name}", Input).value
         values["base_model"] = self.query_one("#base_model", Select).value
         values["prompt"] = self.query_one("#prompt", TextArea).text
-        values["loras"] = [row.values() for row in self.query(LoraRow)]
+        values["loras"] = [entry.model_dump() for entry in self._loras]
         values["queue"] = self._queue
         return values
 
@@ -251,22 +244,14 @@ class GeneratorScreen(Screen[None]):
             elif isinstance(widget, Input):
                 widget.value = str(value)
 
-    def _add_lora(self, file: str | None) -> None:
-        if file is None:
-            return
-        rows = list(self.query(LoraRow))
-        current = tuple(row.entry for row in rows)
-        entries, warnings = add_loras(current, (file,), lambda path: lora_trigger(Path(path)))
-        self.query_one("#loras", Vertical).mount_all(
-            LoraRow(entry) for entry in entries[len(current) :]
-        )
-        self._show_errors(warnings)
+    def _lora_count(self) -> str:
+        return lora_count_text(tuple(entry.enabled for entry in self._loras))
 
-    def _lora_folder(self) -> Path:
-        rows = list(self.query(LoraRow))
-        if rows:
-            return start_folder(rows[-1].entry.path, Path.home())
-        return start_folder(self.query_one("#model_file", Input).value, Path.home())
+    def _loras_edited(self, loras: tuple[LoraEntry, ...] | None) -> None:
+        """None: Cancel or Escape on the LoRA screen, nothing changes."""
+        if loras is not None:
+            self._loras = loras
+            self.query_one("#lora-count", Static).update(self._lora_count())
 
     def _browse(self, field: Input, folder: bool) -> None:
         def fill(chosen: str | None) -> None:
