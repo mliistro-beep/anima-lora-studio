@@ -6,6 +6,15 @@ All notable changes to Anima LoRA Studio are listed here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- ER-SDE draws its noise the way ComfyUI does (float32 starting noise; step noise from a generator
+  on the GPU seeded with the seed; ComfyUI's first sigma), so the same seed now gives the same
+  image as ComfyUI and Krita, in the Generator and in the training previews. Images made with a
+  seed before this change come out different with that seed now; with Euler the Generator's
+  images change slightly too (float32 starting noise), while Euler training previews keep
+  sd-scripts' own sampler.
+
 ## [0.4.0] - 2026-11-08
 
 ### Added

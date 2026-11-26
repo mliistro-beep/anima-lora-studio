@@ -4,6 +4,10 @@ ER-SDE is the VP ER-SDE-Solver-3 of Cui et al. (arXiv:2309.06169, reference code
 ported from ComfyUI's comfy/k_diffusion/sampling.py `sample_er_sde` (GPL-3.0). For a flow
 model x_t = (1 - sigma) x0 + sigma noise, the network predicts the velocity v and the
 denoised latent is x0 = x_t - sigma v; ComfyUI's CONST model sampling does the same.
+
+Noise follows ComfyUI too, so a seed gives the image ComfyUI (and Krita) give: the step noise
+comes from a generator on the sampling device seeded like ComfyUI's `default_noise_sampler`
+(`comfy_noise_generator`), and the first sigma is ComfyUI's `percent_to_sigma` offset.
 """
 
 from collections.abc import Callable
@@ -14,8 +18,13 @@ Denoiser = Callable[[torch.Tensor, torch.Tensor], torch.Tensor]  # (x, sigma) ->
 Velocity = Callable[[torch.Tensor, torch.Tensor], torch.Tensor]  # (x, sigma) -> v
 
 NUM_INTEGRATION_POINTS = 200
-FIRST_SIGMA_OFFSET = 1e-4  # ComfyUI starts flow models at sigma = 1 - 1e-4, where logSNR is finite
+FIRST_SIGMA_OFFSET = 1e-4  # ComfyUI's percent offset: the first sigma is below 1, logSNR finite
 MAX_STAGE = 3
+
+
+def _shifted(t: float, flow_shift: float) -> float:
+    """ComfyUI's time_snr_shift."""
+    return t if flow_shift == 1.0 else flow_shift * t / (1 + (flow_shift - 1) * t)
 
 
 def flow_sigmas(steps: int, flow_shift: float, device: torch.device) -> torch.Tensor:
@@ -24,6 +33,23 @@ def flow_sigmas(steps: int, flow_shift: float, device: torch.device) -> torch.Te
     if flow_shift != 1.0:
         sigmas = (sigmas * flow_shift) / (1 + (flow_shift - 1) * sigmas)
     return sigmas
+
+
+def offset_first_sigma(sigmas: torch.Tensor, flow_shift: float) -> torch.Tensor:
+    """A new schedule whose first sigma, when it is 1 or more, is ComfyUI's
+    percent_to_sigma(FIRST_SIGMA_OFFSET) for this flow shift."""
+    if len(sigmas) <= 1 or sigmas[0] < 1:
+        return sigmas
+    offset = sigmas.clone()
+    offset[0] = _shifted(1.0 - FIRST_SIGMA_OFFSET, flow_shift)
+    return offset
+
+
+def comfy_noise_generator(seed: int, device: torch.device) -> torch.Generator:
+    """ComfyUI's default_noise_sampler generator: on the sampling device, seeded with `seed`,
+    or `seed + 1` when that device is the CPU."""
+    generator = torch.Generator(device=device)
+    return generator.manual_seed(seed + 1 if device.type == "cpu" else seed)
 
 
 def denoiser_from_velocity(velocity: Velocity) -> Denoiser:
@@ -51,13 +77,12 @@ def er_sde(
     sigmas: torch.Tensor,
     generator: torch.Generator,
     s_noise: float = 1.0,
+    flow_shift: float = 1.0,
 ) -> torch.Tensor:
-    """ER-SDE-Solver-3; the injected noise is drawn on the CPU from `generator`, so a seed
-    gives the same image on any device."""
+    """ER-SDE-Solver-3; the injected noise is drawn on `generator`'s device (ComfyUI's
+    `comfy_noise_generator` gives ComfyUI's image for a seed) and moved to x's device."""
     x = x.float()
-    sigmas = sigmas.float().clone()
-    if sigmas[0] >= 1:
-        sigmas[0] = 1.0 - FIRST_SIGMA_OFFSET
+    sigmas = offset_first_sigma(sigmas.float(), flow_shift)
     er_lambdas = sigmas / (1.0 - sigmas)  # sigma_t / alpha_t, alpha_t = 1 - sigma_t
     points = torch.arange(0, NUM_INTEGRATION_POINTS, dtype=torch.float32, device=x.device)
     old_denoised: torch.Tensor | None = None
@@ -88,7 +113,9 @@ def er_sde(
                     x = x + alpha_t * ((dt**2) / 2 + s_u * _noise_scaler(lambda_t)) * denoised_u
                 old_denoised_d = denoised_d
             if s_noise > 0:
-                noise = torch.randn(x.shape, generator=generator, dtype=torch.float32)
+                noise = torch.randn(
+                    x.shape, generator=generator, dtype=torch.float32, device=generator.device
+                )
                 spread = (lambda_t**2 - lambda_s**2 * r**2).sqrt().nan_to_num(nan=0.0)
                 x = x + alpha_t * noise.to(x.device) * s_noise * spread
         old_denoised = denoised

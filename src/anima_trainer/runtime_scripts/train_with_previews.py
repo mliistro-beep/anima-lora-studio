@@ -24,7 +24,7 @@ from types import ModuleType
 from typing import Any
 
 import torch
-from samplers import denoiser_from_velocity, er_sde, flow_sigmas
+from samplers import comfy_noise_generator, denoiser_from_velocity, er_sde, flow_sigmas
 
 SD_SCRIPTS_ENV = "ANIMA_TRAINER_SD_SCRIPTS"
 TRAIN_SCRIPT = "anima_train_network.py"
@@ -59,7 +59,7 @@ def er_sde_do_sample(
     generator = torch.manual_seed(seed) if seed is not None else None
     shape = (1, LATENT_CHANNELS, 1, latent_h, latent_w)
     noise = torch.randn(shape, dtype=torch.float32, generator=generator, device="cpu")
-    x = noise.to(dtype).to(device)
+    x = noise.to(device)  # float32, as ComfyUI: the same seed, the generator's image
     padding_mask = torch.zeros(1, 1, latent_h, latent_w, dtype=dtype, device=device)
     use_cfg = guidance_scale > 1.0 and neg_crossattn_emb is not None
 
@@ -72,13 +72,14 @@ def er_sde_do_sample(
         negative = dit(model_input, t, neg_crossattn_emb, padding_mask=padding_mask).float()
         return negative + guidance_scale * (positive - negative)
 
-    noise_generator = torch.Generator()
     if seed is None:
+        noise_generator = torch.Generator(device=device)
         noise_generator.seed()
     else:
-        noise_generator.manual_seed(seed + 1)
+        noise_generator = comfy_noise_generator(seed, device)
     sigmas = flow_sigmas(steps, float(flow_shift), device)
-    return er_sde(denoiser_from_velocity(velocity), x, sigmas, noise_generator).to(dtype)
+    denoise = denoiser_from_velocity(velocity)
+    return er_sde(denoise, x, sigmas, noise_generator, flow_shift=float(flow_shift)).to(dtype)
 
 
 @contextmanager

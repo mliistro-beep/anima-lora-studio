@@ -48,7 +48,7 @@ from profile_choice import (
     usable_profiles,
 )
 from safetensors import SafetensorError, safe_open
-from samplers import denoiser_from_velocity, er_sde, euler, flow_sigmas
+from samplers import comfy_noise_generator, denoiser_from_velocity, er_sde, euler, flow_sigmas
 
 SD_SCRIPTS_ENV = "ANIMA_TRAINER_SD_SCRIPTS"
 EXIT_FAILED = 1
@@ -221,7 +221,8 @@ def _sample(
         profile.width // LATENT_SCALE,
     )
     seed_generator = torch.Generator(device="cpu").manual_seed(options.seed)
-    latents = ami.randn_tensor(shape, generator=seed_generator, device=device, dtype=torch.bfloat16)
+    # float32 starting noise drawn on the CPU, as ComfyUI does: the same seed, the same image
+    latents = ami.randn_tensor(shape, generator=seed_generator, device=device, dtype=torch.float32)
     padding_mask = torch.zeros(1, 1, shape[-2], shape[-1], dtype=torch.bfloat16, device=device)
     use_cfg = options.cfg != 1.0
     done = [0]
@@ -241,9 +242,10 @@ def _sample(
     sigmas = flow_sigmas(options.steps, options.flow_shift, device)
     if options.sampler == "euler":
         return euler(velocity, latents, sigmas).to(torch.bfloat16)
-    noise_generator = torch.Generator().manual_seed(options.seed + 1)
+    noise_generator = comfy_noise_generator(options.seed, device)
     denoise = denoiser_from_velocity(velocity)
-    return er_sde(denoise, latents, sigmas, noise_generator).to(torch.bfloat16)
+    sample = er_sde(denoise, latents, sigmas, noise_generator, flow_shift=options.flow_shift)
+    return sample.to(torch.bfloat16)
 
 
 def _save(pixels: torch.Tensor, output: Path, texts: dict[str, str]) -> None:
