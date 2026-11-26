@@ -77,9 +77,15 @@ model already present in the data folder.
 
 `anima-trainer tui` and `anima-trainer train` need the runtime and the models set up in the graphical
 app (they never download); after that they use only QtCore, so no display is needed. Both train
-on `anima-base-v1.0` only for now. They do not write `config.json` or `preview.json`: the window
-finds its settings as you left them. Previews follow what is saved in `preview.json`, and the
-summary says whether they are on. GPU, CPU threads and cache settings come from `config.json`.
+on `anima-base-v1.0` only for now. They do not write `config.json`: the window finds its
+settings as you left them. GPU, CPU threads and cache settings come from `config.json`.
+
+Previews follow `preview.json`, shared with the window's Previews tab. The `tui` training form has
+a Previews section (Generate previews, Pre-prompt, Trigger of the LoRA being trained, Preview
+prompt, Negative prompt), saved there when the training starts; it shows the first prompt only
+and keeps the window's other prompts and its image settings (sampler, steps, size, CFG). Every
+preview prompt becomes pre-prompt, trigger, prompt. The summary shows the first one and warns
+when previews are on without a trigger; `train` uses what is saved.
 
 ### Remote use: tmux
 
@@ -146,7 +152,8 @@ as the training does.
   (`.safetensors`); its header is checked first, so a LoRA, a text encoder, a VAE or a model of
   another family is refused with an `ERROR:` line.
 - **LoRAs**: up to 8, each with on/off, a trigger and a strength from -2 to 2 (Add... in the
-  window, Add LoRA in the terminal). kohya and PEFT files are accepted (a PEFT file is renamed
+  window; in the terminal the form shows `LoRAs: 2 of 3 on` and Edit LoRAs opens a screen with
+  one card per LoRA, Add LoRA, Done and Cancel/Escape). kohya and PEFT files are accepted (a PEFT file is renamed
   while loading, with an `INFO:` line); LoHa, LoKr, DoRA, LoCon, OFT and LoRAs of other models
   are refused. The trigger is filled from the file (`modelspec.trigger_phrase`) when it has one.
   A file already in the list is skipped with an `INFO:` line.
