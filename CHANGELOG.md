@@ -6,6 +6,8 @@ All notable changes to Anima LoRA Studio are listed here. The format follows
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-11-27
+
 ### Added
 
 - Train a LoRA on an Anima finetune or merge of yours: Model File in the Training tab (it wins
@@ -196,7 +198,8 @@ Anima LoRA Trainer UI, independent from Citron.
 - GPL-3.0-or-later license, License and Credits dialogs, `THIRD_PARTY_NOTICES.md` and the
   development launcher `scripts/dev-run.sh` (M4c).
 
-[Unreleased]: https://github.com/mliistro-beep/anima-lora-studio/compare/v0.5.1...HEAD
+[Unreleased]: https://github.com/mliistro-beep/anima-lora-studio/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/mliistro-beep/anima-lora-studio/compare/v0.5.1...v0.6.0
 [0.5.1]: https://github.com/mliistro-beep/anima-lora-studio/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/mliistro-beep/anima-lora-studio/compare/v0.4.1...v0.5.0
 [0.4.1]: https://github.com/mliistro-beep/anima-lora-studio/compare/v0.4.0...v0.4.1
