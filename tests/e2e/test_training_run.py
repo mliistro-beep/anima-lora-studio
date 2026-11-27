@@ -2,11 +2,13 @@
 accelerate that reads the training TOML the app wrote, prints sd-scripts' progress lines and
 writes the checkpoints and preview images where sd-scripts would."""
 
+import json
 import shlex
 import sys
 from pathlib import Path
 
 import pytest
+import toml
 from PySide6.QtCore import QSettings
 
 from anima_trainer.runtime.data_dir import open_data_dir
@@ -145,3 +147,35 @@ def test_a_failed_run_reports_the_exit_code_and_no_success(qtbot, make_app):
     assert "ERROR: Training failed (exit code: 1)" in log
     assert "OK: Training completed successfully!" not in log
     assert window.training_tab.start_button.isEnabled()
+
+
+def test_a_run_on_a_model_file_of_the_user_trains_it_without_downloading(qtbot, make_app, tmp_path):
+    from tests.safetensors_helpers import write_anima_dit
+
+    window, paths = make_app()
+    paths.dit_model("anima-base-v1.0").unlink()  # a download would hold the run back
+    own = write_anima_dit(tmp_path / "finetune.safetensors", blocks=28)
+    window.training_tab.form.set_value("model_file", str(own))
+
+    _train(qtbot, window)
+
+    tab = window.training_tab
+    assert f"OK: DiT (your file): {own}" in tab.status.text()
+    assert "OK: Training completed successfully!" in tab.log.text()
+    trained = toml.load(window.session.settings.last_train_config)
+    assert trained["pretrained_model_name_or_path"] == str(own)
+    assert json.loads(paths.config_file.read_text())["model_file"] == str(own)
+
+
+def test_a_model_file_that_cannot_be_trained_is_refused_at_configure(qtbot, make_app, tmp_path):
+    from tests.safetensors_helpers import write_anima_dit
+
+    window, _paths = make_app()
+    big = write_anima_dit(tmp_path / "Anima-3.8B.safetensors", blocks=52)
+    window.training_tab.form.set_value("model_file", str(big))
+
+    window.training_tab.configure_button.click()
+
+    status = window.training_tab.status.text()
+    assert "ERROR: Anima-3.8B.safetensors has 52 blocks" in status
+    assert "Configuration complete" not in status

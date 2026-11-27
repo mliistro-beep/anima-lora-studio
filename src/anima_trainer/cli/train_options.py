@@ -24,6 +24,7 @@ class TrainOptions:
     repeats: int | None
     resolution: int
     yes: bool
+    model_file: str | None = None  # an Anima finetune of the user's, instead of the base model
 
 
 def parse_train_options(arguments: Sequence[str]) -> TrainOptions:
@@ -45,6 +46,11 @@ def parse_train_options(arguments: Sequence[str]) -> TrainOptions:
         help=f"training resolution (default {DEFAULT_RESOLUTION})",
     )
     parser.add_argument("--yes", action="store_true", help="start without asking for confirmation")
+    parser.add_argument(
+        "--model-file",
+        help="train on this Anima finetune or merge (.safetensors, 28 blocks) instead of "
+        "the base model",
+    )
     return TrainOptions(**vars(parser.parse_args(arguments)))
 
 

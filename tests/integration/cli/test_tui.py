@@ -793,3 +793,62 @@ def test_preview_settings_that_cannot_be_saved_are_used_for_this_run_only(paths,
 
     _play(app, scenario)
     assert app.exit_code == 0
+
+
+def _finetune(tmp_path, blocks=28, name="finetune.safetensors"):
+    from tests.safetensors_helpers import write_anima_dit  # noqa: PLC0415
+
+    return write_anima_dit(tmp_path / name, blocks=blocks)
+
+
+def test_a_training_on_a_model_file_of_the_user_uses_it_and_remembers_it(paths, tmp_path):
+    _accelerate(paths, "train", "0")
+    paths.dit_model("anima-base-v1.0").unlink()
+    own = _finetune(tmp_path)
+    app = _app(paths)
+
+    async def scenario(pilot):
+        _input(app, "model_file").value = str(own)
+        await _to_summary(pilot, paths)
+        assert f"Model:     {own} (your file)" in _text(app, "summary")
+        await pilot.click("#start")
+        await _until(pilot, lambda: isinstance(app.screen, TrainingScreen))
+        await _until(pilot, lambda: "completed" in _text(app, "status"))
+        assert "OK: Training completed successfully!" in _log(app)
+
+    _play(app, scenario)
+    trained = next(paths.configs_dir.glob("*_training_*.toml")).read_text()
+    assert f'pretrained_model_name_or_path = "{own}"' in trained
+    assert json.loads(paths.tui_values_file.read_text())["model_file"] == str(own)
+
+
+def test_a_model_file_that_cannot_be_trained_stays_at_the_form(paths, tmp_path):
+    big = _finetune(tmp_path, blocks=52, name="Anima-3.8B.safetensors")
+    app = _app(paths)
+
+    async def scenario(pilot):
+        _input(app, "model_file").value = str(big)
+        epochs, repeats = _fill(app, paths)
+        await pilot.pause()
+        _input(app, "epochs").value = epochs
+        _input(app, "repeats").value = repeats
+        await pilot.click("#continue")
+        await _until(pilot, lambda: "52 blocks" in _text(app, "errors"))
+        assert isinstance(app.screen, FormScreen)
+
+    _play(app, scenario)
+
+
+def test_the_remembered_model_file_is_proposed_and_browse_opens_a_file_picker(paths, tmp_path):
+    from anima_trainer.cli.tui.folder_picker import FilePicker  # noqa: PLC0415
+
+    own = _finetune(tmp_path)
+    paths.tui_values_file.write_text(json.dumps({"model_file": str(own)}))
+    app = _app(paths)
+
+    async def scenario(pilot):
+        assert _input(app, "model_file").value == str(own)
+        app.screen.query_one("#browse-model_file", Button).press()
+        await _until(pilot, lambda: isinstance(app.screen, FilePicker))
+
+    _play(app, scenario)

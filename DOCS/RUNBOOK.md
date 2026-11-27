@@ -73,11 +73,27 @@ The choice is saved in `~/.config/anima-trainer/anima-trainer.conf` (group
 `linked_models`) and is kept when the data folder changes. "Use file..." is disabled for a
 model already present in the data folder.
 
+## Train on an Anima finetune
+
+The training tab's **Model File** takes a DiT file of yours based on Anima 2B (a finetune, or a
+merge made with Anima Merger Studio); when set it wins over **Base Model**, and the base model is
+not downloaded. Without a known SHA-256 the file is checked from its header at Configure and
+again at Start: it must have the 28 blocks sd-scripts trains (Anima 2B; Anima 2.9B and 3.8B are
+refused), exactly the 685 tensors of the Anima 2B DiT with their shapes, as sd-scripts refuses a
+missing or extra one (a file that also holds the text encoder or the VAE is refused), and BF16,
+F16 or F32 weights (FP8 files are refused). The `net.` and
+`model.diffusion_model.` key prefixes are both fine. Previews during training use the same file.
+
+A LoRA works best on the model it was trained on: for a LoRA to share, the base model is still
+the safest choice.
+
 ## Train from the terminal
 
 `anima-trainer tui` and `anima-trainer train` need the runtime and the models set up in the graphical
 app (they never download); after that they use only QtCore, so no display is needed. Both train
-on `anima-base-v1.0` only for now. They do not write `config.json`: the window finds its
+on `anima-base-v1.0`, or on a finetune of yours: `train --model-file FILE`, or the Model file
+field of the `tui` form (Browse opens a file browser; the form remembers it). The window's Model
+File is not used by the terminal. They do not write `config.json`: the window finds its
 settings as you left them. GPU, CPU threads and cache settings come from `config.json`.
 
 In the `tui` forms, Browse opens a folder browser (Enter on a folder shows it, Up goes to the

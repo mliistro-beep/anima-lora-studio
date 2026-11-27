@@ -458,3 +458,40 @@ def test_preview_settings_save_failure_is_reported_when_configure_fails(qtbot, c
 
     assert not result.success
     assert result.messages[-1].startswith("WARN: Preview settings could not be saved")
+
+
+def _own_model(tmp_path, blocks=28):
+    from tests.safetensors_helpers import write_anima_dit  # noqa: PLC0415
+
+    return write_anima_dit(tmp_path / "finetune.safetensors", blocks=blocks)
+
+
+def _configured_with(parts, dataset, tmp_path, own):
+    result = parts["session"].configure(
+        _settings(dataset, tmp_path).with_changes(model_file=str(own))
+    )
+    assert result.success
+
+
+def test_start_with_a_model_file_launches_without_downloading_the_base_model(
+    parts, dataset, tmp_path
+):
+    _configured_with(parts, dataset, tmp_path, _own_model(tmp_path))
+
+    parts["session"].start(REQUEST)
+
+    assert parts["downloader"].started == []
+    assert len(parts["runner"].started) == 1
+    assert parts["session"].state is SessionState.TRAINING
+
+
+def test_start_refuses_a_model_file_that_changed_since_configure(parts, dataset, tmp_path):
+    _configured_with(parts, dataset, tmp_path, _own_model(tmp_path))
+    _own_model(tmp_path, blocks=40)  # replaced by a file sd-scripts cannot train
+
+    parts["session"].start(REQUEST)
+
+    assert parts["runner"].started == []
+    assert parts["downloader"].started == []
+    assert parts["session"].state is SessionState.IDLE
+    assert parts["log"][-1].startswith("ERROR: finetune.safetensors has 40 blocks")

@@ -44,6 +44,16 @@ def test_training_config_uses_selected_base_model(citron_fixtures):
     assert config["pretrained_model_name_or_path"].endswith("dit/anima-preview.safetensors")
 
 
+def test_training_config_uses_the_model_file_instead_of_the_base_model(citron_fixtures):
+    settings = _golden_settings(citron_fixtures).with_changes(
+        model_file="/models/anima_aestheticV11.safetensors"
+    )
+
+    config = build_training_config(settings, RuntimePaths(CITRON_ROOT), GOLDEN_TIME.date())
+
+    assert config["pretrained_model_name_or_path"] == "/models/anima_aestheticV11.safetensors"
+
+
 def test_build_returns_independent_dicts(citron_fixtures):
     settings = _golden_settings(citron_fixtures)
     paths = RuntimePaths(CITRON_ROOT)

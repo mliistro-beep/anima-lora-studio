@@ -6,6 +6,16 @@ All notable changes to Anima LoRA Studio are listed here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Train a LoRA on an Anima finetune or merge of yours: Model File in the Training tab (it wins
+  over Base Model, and nothing is downloaded), `anima-trainer train --model-file FILE` and a Model
+  file field in the terminal interface's training form (with a file browser, remembered). With no
+  known SHA-256, the file is checked from its header at Configure and at Start: 28 blocks as
+  sd-scripts trains (Anima 2.9B and 3.8B are refused), exactly the tensors and shapes of the
+  Anima 2B DiT (sd-scripts refuses a missing or extra one, but only after starting), BF16/F16/F32. The
+  setting is saved in `config.json` only when set, after Citron's keys, and presets cannot hold it.
+
 ## [0.5.1] - 2026-11-26
 
 ### Added

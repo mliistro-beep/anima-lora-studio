@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from anima_trainer.settings.json_store import load_model, save_model
-from anima_trainer.settings.schema import TrainingSettings
+from anima_trainer.settings.schema import APP_ONLY_FIELDS, TrainingSettings
 
 
 @dataclass(frozen=True)
@@ -23,5 +23,6 @@ def load_settings(path: Path) -> LoadResult:
 
 
 def save_settings(path: Path, settings: TrainingSettings) -> None:
-    """Write config.json atomically, formatted exactly like Citron's json.dump(indent=2)."""
-    save_model(path, settings)
+    """Write config.json atomically, formatted exactly like Citron's json.dump(indent=2);
+    the app's own fields follow Citron's, and only when set."""
+    save_model(path, settings, APP_ONLY_FIELDS)

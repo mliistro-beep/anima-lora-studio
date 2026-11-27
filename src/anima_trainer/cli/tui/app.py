@@ -173,6 +173,7 @@ class TrainerApp(App[None]):
             dataset=plan.settings.image_directory,
             output=plan.settings.output_directory,
             preset=plan.preset.name,
+            model_file=plan.settings.model_file,
         )
         try:
             save_tui_values(self.terminal.paths.tui_values_file, values)

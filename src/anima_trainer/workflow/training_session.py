@@ -156,7 +156,12 @@ class TrainingSession(QObject):
         if refusal is not None:
             self._log(f"ERROR: {refusal}")
             return
-        download = dit_model_download(self._paths, request.base_model)
+        # The configured model file of the user's is never downloaded; plan_start checks it again.
+        download = (
+            None
+            if self._settings.model_file
+            else dit_model_download(self._paths, request.base_model)
+        )
         if download is None:
             self._launch(request)
             return

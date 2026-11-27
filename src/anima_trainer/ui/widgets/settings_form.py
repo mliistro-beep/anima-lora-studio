@@ -23,6 +23,7 @@ from anima_trainer.ui.widgets.path_picker import PathPicker
 
 FRACTION_DECIMALS = 2
 DEFAULT_FRACTION_STEP = 0.05
+SAFETENSORS_FILTER = "Model files (*.safetensors);;All files (*)"
 
 # Floats stay text until the schema converts them; see field_specs.
 FieldValue = str | int | float | bool
@@ -49,6 +50,13 @@ def _float(spec: FieldSpec) -> _Field:
 
 def _folder(spec: FieldSpec) -> _Field:
     picker = PathPicker(spec.label, "folder", placeholder=spec.placeholder)
+    return _Field(picker, picker.path, lambda value: picker.set_path(str(value)))
+
+
+def _file(spec: FieldSpec) -> _Field:
+    picker = PathPicker(
+        spec.label, "file", placeholder=spec.placeholder, file_filter=SAFETENSORS_FILTER
+    )
     return _Field(picker, picker.path, lambda value: picker.set_path(str(value)))
 
 
@@ -99,6 +107,7 @@ _BUILDERS: Mapping[FieldKind, Callable[[FieldSpec], _Field]] = {
     "text": _text,
     "float": _float,
     "folder": _folder,
+    "file": _file,
     "choice": _choice,
     "gpu": _gpu,
     "int": _int,

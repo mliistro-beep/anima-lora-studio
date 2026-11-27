@@ -10,7 +10,7 @@ from anima_trainer.settings.field_specs import (
     describe_validation_error,
     field_label,
 )
-from anima_trainer.settings.schema import TrainingSettings
+from anima_trainer.settings.schema import APP_ONLY_FIELDS, TrainingSettings
 
 # Citron's basic_inputs / adv_inputs order (app.py, build_ui).
 CITRON_BASIC_ORDER = (
@@ -35,7 +35,7 @@ def test_every_user_setting_has_exactly_one_spec():
 
 
 def test_basic_fields_are_the_same_set_as_citron_training_tab():
-    assert {spec.name for spec in BASIC_FIELDS} == set(CITRON_BASIC_ORDER)
+    assert {spec.name for spec in BASIC_FIELDS} == set(CITRON_BASIC_ORDER) | APP_ONLY_FIELDS
 
 
 @pytest.mark.parametrize("spec", [s for s in (*BASIC_FIELDS, *ADVANCED_FIELDS) if s.kind == "int"])
@@ -82,3 +82,11 @@ def test_validator_messages_drop_the_pydantic_prefix():
     assert describe_validation_error(caught.value) == (
         "ERROR: Project Name: use only letters, digits, '.', '_' and '-'",
     )
+
+
+def test_the_model_file_is_a_file_field_right_after_the_base_model():
+    names = [spec.name for spec in BASIC_FIELDS]
+    spec = BASIC_FIELDS[names.index("model_file")]
+
+    assert names.index("model_file") == names.index("base_model") + 1
+    assert spec.kind == "file"

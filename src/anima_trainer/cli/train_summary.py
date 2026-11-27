@@ -37,6 +37,8 @@ def settings_for(
         max_train_epochs=options.epochs,
         repeats=options.repeats,
         resolution=options.resolution,
+        # Only what this command was given: the window's file is not used without saying so.
+        model_file=_absolute(options.model_file) if options.model_file else "",
     )
 
 
@@ -46,7 +48,7 @@ def _absolute(folder: str | None) -> str:
 
 
 def base_model_problem(settings: TrainingSettings) -> str | None:
-    if settings.base_model == TERMINAL_BASE_MODEL:
+    if settings.model_file or settings.base_model == TERMINAL_BASE_MODEL:
         return None
     return (
         f"ERROR: The terminal trains only {TERMINAL_BASE_MODEL} for now, not "
@@ -89,7 +91,7 @@ def summary_lines(
         f"Project:   {settings.project_name}",
         f"Dataset:   {settings.image_directory}",
         f"Output:    {settings.output_directory}",
-        f"Model:     {settings.base_model}",
+        f"Model:     {_model(settings)}",
         f"Network:   dim {settings.network_dim}, alpha {settings.network_alpha}",
         f"Size:      {settings.resolution}",
         f"Samples:   {_count(images, 'image')} x {_count(repeats, 'repeat')} x "
@@ -107,6 +109,10 @@ def _preview_lines(previews: PreviewSettings) -> tuple[str, ...]:
         return ()
     first = (f"Preview:   {previews.final_prompts()[0]}",)
     return first if previews.trigger else (*first, NO_TRIGGER_WARNING)
+
+
+def _model(settings: TrainingSettings) -> str:
+    return f"{settings.model_file} (your file)" if settings.model_file else settings.base_model
 
 
 def _count(number: int, noun: str) -> str:

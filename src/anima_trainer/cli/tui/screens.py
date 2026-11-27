@@ -32,7 +32,7 @@ from anima_trainer.cli.train_preparation import (
     plan_lines,
     prepare_training,
 )
-from anima_trainer.cli.tui.folder_picker import FolderPicker, start_folder
+from anima_trainer.cli.tui.folder_picker import FilePicker, FolderPicker, start_folder
 from anima_trainer.cli.tui_previews import (
     PreviewFields,
     fields_of,
@@ -66,7 +66,13 @@ QuitDialog { align: center middle; }
 """
 # An option named at the start of a word; the dashes inside a path are left alone.
 _OPTION_DASHES = re.compile(r"(?<!\S)--(?=[a-z])")
-BROWSE_BUTTONS = {"browse-dataset": "dataset", "browse-output": "output"}
+BROWSE_BUTTONS = {
+    "browse-dataset": "dataset",
+    "browse-output": "output",
+    "browse-model_file": "model_file",
+}
+FILE_FIELDS = frozenset({"model_file"})
+MODEL_FILE_LABEL = "Model file (optional: an Anima finetune or merge; blank: anima-base-v1.0)"
 NOT_STARTED_STATUS = "Training not started."
 END_STATUS = {
     EXIT_OK: "Training completed.",
@@ -99,6 +105,7 @@ class FormScreen(Screen[None]):
             yield from _field("Project name", Input(values.project, id="project", compact=True))
             yield from _folder_field("Dataset folder", values.dataset, "dataset")
             yield from _folder_field("Output folder", values.output, "output")
+            yield from _folder_field(MODEL_FILE_LABEL, values.model_file, "model_file")
             yield Label("Preset", classes="field-label")
             yield Select(
                 options,
@@ -159,15 +166,17 @@ class FormScreen(Screen[None]):
         elif event.button.id == "menu-form":
             self.app.pop_screen()
         elif event.button.id in BROWSE_BUTTONS:
-            self._browse(self.query_one(f"#{BROWSE_BUTTONS[event.button.id]}", Input))
+            name = BROWSE_BUTTONS[event.button.id]
+            self._browse(self.query_one(f"#{name}", Input), folder=name not in FILE_FIELDS)
 
-    def _browse(self, field: Input) -> None:
-        def fill(folder: str | None) -> None:
-            if folder is not None:
-                field.value = folder
+    def _browse(self, field: Input, folder: bool) -> None:
+        def fill(chosen: str | None) -> None:
+            if chosen is not None:
+                field.value = chosen
             field.focus()
 
-        self.app.push_screen(FolderPicker(start_folder(field.value, Path.home())), fill)
+        start = start_folder(field.value, Path.home())
+        self.app.push_screen(FolderPicker(start) if folder else FilePicker(start), fill)
 
     def _preview_section(self) -> ComposeResult:
         saved = self._terminal.previews.settings
@@ -246,6 +255,7 @@ class FormScreen(Screen[None]):
             repeats=numbers["repeats"],
             resolution=DEFAULT_RESOLUTION if resolution is None else resolution,
             yes=True,
+            model_file=self.query_one("#model_file", Input).value.strip() or None,
         )
 
     def _show_errors(self, lines: tuple[str, ...]) -> None:

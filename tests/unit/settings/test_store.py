@@ -114,3 +114,21 @@ def test_save_new_file_uses_umask_permissions(tmp_path):
     save_settings(path, TrainingSettings())
 
     assert path.stat().st_mode & 0o777 == 0o666 & ~umask
+
+
+def test_a_blank_model_file_is_not_written_so_config_json_stays_citron_s(tmp_path):
+    path = tmp_path / "config.json"
+
+    save_settings(path, TrainingSettings())
+
+    assert "model_file" not in json.loads(path.read_text())
+
+
+def test_a_model_file_is_written_last_and_read_back(tmp_path):
+    path = tmp_path / "config.json"
+    settings = TrainingSettings(model_file="/m/finetune.safetensors")
+
+    save_settings(path, settings)
+
+    assert list(json.loads(path.read_text()))[-1] == "model_file"
+    assert load_settings(path).settings == settings

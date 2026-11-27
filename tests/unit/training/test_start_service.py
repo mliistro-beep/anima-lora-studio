@@ -122,3 +122,26 @@ def test_a_config_without_previews_or_unreadable_runs_sd_scripts_directly(citron
 
         assert plan.spec is not None
         assert str(citron.train_script) in plan.spec.arguments
+
+
+def test_a_model_file_that_cannot_be_trained_stops_the_start(tmp_path):
+    from anima_trainer.runtime.paths import RuntimePaths as Paths
+    from anima_trainer.settings.schema import TrainingSettings as Settings
+    from anima_trainer.training.start_service import StartRequest as Request
+    from anima_trainer.training.start_service import plan_start as plan
+    from tests.safetensors_helpers import kohya_blocks, write_safetensors
+
+    lora = write_safetensors(tmp_path / "style.safetensors", kohya_blocks(28))
+    request = Request("0", 1, "anima-base-v1.0")
+
+    train, dataset = tmp_path / "train.toml", tmp_path / "dataset.toml"
+    train.write_text("")
+    dataset.write_text("")
+    saved = Settings(
+        last_train_config=str(train), last_dataset_config=str(dataset), model_file=str(lora)
+    )
+
+    result = plan(saved, Paths(tmp_path / "data"), request, datetime(2026, 11, 27))
+
+    assert not result.success
+    assert result.messages[0].startswith("ERROR: style.safetensors is a LoRA")

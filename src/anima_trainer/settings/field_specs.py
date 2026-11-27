@@ -19,7 +19,7 @@ from anima_trainer.settings.choices import (
     TIMESTEP_SAMPLINGS,
 )
 
-FieldKind = Literal["text", "folder", "choice", "gpu", "int", "float", "fraction", "bool"]
+FieldKind = Literal["text", "folder", "file", "choice", "gpu", "int", "float", "fraction", "bool"]
 
 # QSpinBox holds a C int.
 INT_MAX = 2**31 - 1
@@ -62,6 +62,17 @@ BASIC_FIELDS: tuple[FieldSpec, ...] = (
         _PATHS,
         choices=BASE_MODELS,
         tooltip="The model is downloaded when you start training, if it is missing.",
+    ),
+    FieldSpec(
+        "model_file",
+        "Model File (optional: an Anima finetune or merge)",
+        "file",
+        _PATHS,
+        placeholder="blank: the Base Model",
+        tooltip=(
+            "A DiT file of yours based on Anima 2B (28 blocks); it wins over the Base Model. "
+            "A LoRA works best on the model it was trained on."
+        ),
     ),
     FieldSpec(
         "image_directory",

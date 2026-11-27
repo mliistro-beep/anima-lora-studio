@@ -49,6 +49,11 @@ file_check.py      check_model_file(path, expected, on_progress, is_cancelled) -
                    CheckCancelled (size first, then SHA-256; read only)
 linked_store.py    load_links(store) -> Mapping[key, LinkedModel]; save_link / remove_link (OSError)
 check_worker.py    ModelFileChecker(BackgroundTask): start(path, expected); finished(LinkedModel)
+training_model.py  training_dit(settings, paths) -> Path (model_file, else the base model);
+                   check_training_model(path) -> description; TrainingModelRejected (header only:
+                   28 blocks, exactly the tensors and shapes of anima_dit_layout, one key prefix,
+                   BF16/F16/F32)
+anima_dit_layout.py ANIMA_BLOCKS, BLOCK_TENSORS, OUTSIDE_TENSORS (from anima-base-v1.0), anima_dit_tensors()
 
 ## training/
 toml_builder.py      build_training_config, build_dataset_config, render_toml, config_file_name, write_configs

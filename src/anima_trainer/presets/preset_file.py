@@ -51,6 +51,7 @@ MACHINE_FIELDS = frozenset(
         "cache_text_encoder_outputs",
         "vae_chunk_size",
         "vae_disable_cache",
+        "model_file",  # a path on this machine; the terminal chooses its own
     }
 )
 APP_FIELDS = frozenset({"last_train_config", "last_dataset_config"})

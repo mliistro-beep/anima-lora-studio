@@ -199,3 +199,34 @@ def test_the_summary_shows_no_preview_prompt_when_previews_are_off():
     lines = summary_lines(PERSON, _settings(), DatasetReport(1, (), ()), previews)
     assert not any(line.startswith("Preview:") for line in lines)
     assert not any("trigger" in line for line in lines)
+
+
+def test_the_model_file_option_becomes_an_absolute_model_file(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+
+    settings = _settings("--model-file", "finetune.safetensors")
+
+    assert settings.model_file == str(tmp_path / "finetune.safetensors")
+
+
+def test_without_the_option_the_model_file_of_the_window_is_not_used():
+    saved = TrainingSettings(model_file="/window/finetune.safetensors")
+
+    settings = settings_for(_options(), PERSON, saved)
+
+    assert settings.model_file == ""
+
+
+def test_a_model_file_is_allowed_whatever_the_base_model():
+    settings = TrainingSettings(base_model=_another_model(), model_file="/m/finetune.safetensors")
+
+    assert base_model_problem(settings) is None
+
+
+def test_the_summary_names_the_model_file_when_there_is_one():
+    settings = _settings("--model-file", "/m/finetune.safetensors")
+    report = DatasetReport(60, (), ())
+
+    text = "\n".join(summary_lines(PERSON, settings, report, PreviewSettings()))
+
+    assert "Model:     /m/finetune.safetensors (your file)" in text

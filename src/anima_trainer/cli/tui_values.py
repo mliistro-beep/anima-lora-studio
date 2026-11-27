@@ -18,6 +18,7 @@ class TuiValues(BaseModel):
     dataset: str = ""
     output: str = ""
     preset: str = ""
+    model_file: str = ""  # blank: the base model
 
 
 @dataclass(frozen=True)

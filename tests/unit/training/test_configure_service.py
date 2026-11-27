@@ -266,3 +266,48 @@ def test_previews_turned_off_for_memory_still_configure_without_samples(citron, 
     assert result.success
     assert result.configs is not None and result.configs.samples is None
     assert "WARN: Previews turned off" in _text(result)
+
+
+def _finetune(tmp_path, blocks=28):
+    from tests.safetensors_helpers import write_anima_dit
+
+    path = tmp_path / "finetune.safetensors"
+    return write_anima_dit(path, blocks=blocks, prefix="model.diffusion_model.")
+
+
+def test_a_model_file_of_the_user_is_checked_and_written_in_the_training_toml(
+    citron, dataset, tmp_path
+):
+    own = _finetune(tmp_path)
+
+    result = configure_training(_settings(dataset, tmp_path, model_file=str(own)), citron, NOW)
+
+    assert result.success
+    assert f"OK: DiT (your file): {own}" in _text(result)
+    assert "an Anima model with 28 blocks" in _text(result)
+    assert "auto-download" not in _text(result)
+    assert toml.load(result.configs.training)["pretrained_model_name_or_path"] == str(own)
+
+
+def test_a_model_file_that_cannot_be_trained_fails_configure_without_configs(
+    citron, dataset, tmp_path
+):
+    own = _finetune(tmp_path, blocks=40)
+
+    result = configure_training(_settings(dataset, tmp_path, model_file=str(own)), citron, NOW)
+
+    assert not result.success
+    assert result.configs is None
+    assert "ERROR: finetune.safetensors has 40 blocks" in _text(result)
+    assert not citron.config_file.exists()
+
+
+def test_a_model_file_with_a_tilde_is_made_absolute(citron, dataset, tmp_path, monkeypatch):
+    monkeypatch.setenv("HOME", str(tmp_path))
+    _finetune(tmp_path)
+
+    settings = _settings(dataset, tmp_path, model_file="~/finetune.safetensors")
+    result = configure_training(settings, citron, NOW)
+
+    assert result.success
+    assert result.settings.model_file == str(tmp_path / "finetune.safetensors")

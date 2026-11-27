@@ -21,6 +21,10 @@ from anima_trainer.settings.defaults import DEFAULTS
 # Becomes a file name (TOML, log) and the LoRA output name, so no path components allowed.
 PROJECT_NAME_PATTERN = re.compile(r"^[\w.-]+$")
 GPU_INDEX_PATTERN = r"^\d+(,\d+)*$"
+CONTROL_CHAR_LIMIT = 0x20
+DELETE_CHAR = 0x7F
+# Fields of this app only, saved after Citron's and only when set: config.json stays Citron's.
+APP_ONLY_FIELDS = frozenset({"model_file"})
 
 REQUIRED_TEXT_FIELDS = (
     ("project_name", "Project name"),
@@ -51,10 +55,17 @@ def _check_project_name(value: str) -> str:
     return value
 
 
+def _check_model_file(value: str) -> str:
+    if any(ord(char) < CONTROL_CHAR_LIMIT or ord(char) == DELETE_CHAR for char in value):
+        raise ValueError("control characters are not allowed in a file path")
+    return value
+
+
 WholeNumber = Annotated[int, BeforeValidator(_reject_bool)]
 DecimalNumber = Annotated[float, BeforeValidator(_reject_bool)]
 GpuIndex = Annotated[str, BeforeValidator(_gpu_index_to_str), Field(pattern=GPU_INDEX_PATTERN)]
 ProjectName = Annotated[str, AfterValidator(_check_project_name)]
+ModelFile = Annotated[str, AfterValidator(str.strip), AfterValidator(_check_model_file)]
 
 
 class TrainingSettings(BaseModel):
@@ -100,6 +111,8 @@ class TrainingSettings(BaseModel):
     # Internal
     last_train_config: str = DEFAULTS["last_train_config"]
     last_dataset_config: str = DEFAULTS["last_dataset_config"]
+    # The app's own: a DiT file of the user's (an Anima finetune), wins over base_model when set.
+    model_file: ModelFile = ""
 
     def with_changes(self, **changes: Any) -> Self:
         """Return a new, re-validated copy with the given fields replaced."""

@@ -17,7 +17,7 @@ form (window: ui/tabs/generator_tab.py, TUI: cli/tui/generator_screens.py + cli/
   -> INFO/WARN/ERROR lines, step progress, IMAGE: <path>
 
 ## Copy as they are (no import outside this list)
-preview/safetensors_header.py  read_tensor_names(path), read_metadata(path); SafetensorsHeaderError
+preview/safetensors_header.py  read_tensor_names(path), read_tensors(path) -> {name: TensorInfo(dtype, shape)}, read_metadata(path); SafetensorsHeaderError
                                (header only, 100 MB limit, no torch)
 preview/lora_files.py          read_lora(path) -> LoraFile(path, format kohya|peft, blocks, has_text_encoder, unused_keys),
                                lora_trigger(path) (modelspec.trigger_phrase), read_checkpoint_blocks(path),

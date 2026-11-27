@@ -60,14 +60,17 @@ def _validate_per_field[M: BaseModel](raw: dict[str, Any], model_type: type[M]) 
     return LoadedModel(model_type.model_validate(valid), warnings)
 
 
-def save_model(path: Path, model: BaseModel) -> None:
-    """Write the model as JSON (indent 2) atomically.
+def save_model(path: Path, model: BaseModel, omit_when_blank: frozenset[str] = frozenset()) -> None:
+    """Write the model as JSON (indent 2) atomically; fields in `omit_when_blank` are left
+    out while they hold an empty string.
 
     The temporary file is fsynced before the rename and given the permissions the old
     file had (or the umask default), since mkstemp always creates it as 0600.
     """
     path.parent.mkdir(parents=True, exist_ok=True)
-    payload = json.dumps(model.model_dump(mode="json"), indent=JSON_INDENT)
+    values = model.model_dump(mode="json")
+    kept = {key: value for key, value in values.items() if key not in omit_when_blank or value}
+    payload = json.dumps(kept, indent=JSON_INDENT)
     mode = _target_mode(path)
     fd, tmp_name = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.", suffix=".tmp")
     try:

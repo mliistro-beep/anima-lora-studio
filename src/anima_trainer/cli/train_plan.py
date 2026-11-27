@@ -1,5 +1,8 @@
 """Pure decisions of a terminal training: what blocks it and how the process exits."""
 
+from pathlib import Path
+
+from anima_trainer.models.training_model import TrainingModelRejected, check_training_model
 from anima_trainer.runtime.paths import RuntimePaths
 from anima_trainer.training.outcome_report import completed
 from anima_trainer.training.runner import RunOutcome
@@ -12,15 +15,34 @@ EXIT_STOPPED = 130  # the shell convention for a command ended by Ctrl+C
 GRAPHICAL_APP_NOTE = "run anima-trainer without arguments to open the graphical app."
 
 
-def missing_model_problems(paths: RuntimePaths, base_model: str) -> tuple[str, ...]:
-    """The terminal never downloads: models are installed or linked from the graphical app."""
+def missing_model_problems(
+    paths: RuntimePaths, base_model: str, model_file: str = ""
+) -> tuple[str, ...]:
+    """The terminal never downloads: models are installed or linked from the graphical app.
+
+    With a model file of the user's the base model is not needed (model_file_problems checks it).
+    """
     missing = list(paths.missing_required_models())
-    if not paths.dit_model(base_model).exists():
+    if not model_file and not paths.dit_model(base_model).exists():
         missing.append(base_model)
     if not missing:
         return ()
     names = ", ".join(missing)
     return (f"ERROR: Missing models: {names}. To download or link them, {GRAPHICAL_APP_NOTE}",)
+
+
+def model_file_problems(model_file: str) -> tuple[str, ...]:
+    """Why the user's model file cannot be trained on; nothing without a model file.
+
+    `model_file` is already absolute here (settings_for), as the command line meant it.
+    """
+    if not model_file:
+        return ()
+    try:
+        check_training_model(Path(model_file))
+    except TrainingModelRejected as error:
+        return (f"ERROR: {error}",)
+    return ()
 
 
 def runtime_problem_lines(problems: tuple[str, ...]) -> tuple[str, ...]:

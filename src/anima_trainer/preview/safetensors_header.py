@@ -7,7 +7,9 @@ imported, so the module can be copied as it is (Anima Merger Studio does).
 
 import json
 import struct
+from dataclasses import dataclass
 from pathlib import Path
+from typing import TypeGuard
 
 LENGTH_BYTES = 8
 # The limit of the safetensors format itself; a larger value means the file is not one.
@@ -26,6 +28,33 @@ def read_tensor_names(path: Path) -> tuple[str, ...]:
     if not all(isinstance(header[name], dict) for name in names):
         raise _not_safetensors(path, "a header entry is not a tensor")
     return names
+
+
+@dataclass(frozen=True)
+class TensorInfo:
+    dtype: str
+    shape: tuple[int, ...]
+
+
+def read_tensors(path: Path) -> dict[str, TensorInfo]:
+    """The dtype and shape of each tensor, by name; raises SafetensorsHeaderError."""
+    header = _read_header(path)
+    tensors: dict[str, TensorInfo] = {}
+    for name, entry in header.items():
+        if name == METADATA_KEY:
+            continue
+        dtype = entry.get("dtype") if isinstance(entry, dict) else None
+        shape = entry.get("shape") if isinstance(entry, dict) else None
+        if not isinstance(dtype, str) or not _is_shape(shape):
+            raise _not_safetensors(path, "a header entry is not a tensor")
+        tensors[name] = TensorInfo(dtype, tuple(shape))
+    return tensors
+
+
+def _is_shape(value: object) -> TypeGuard[list[int]]:
+    return isinstance(value, list) and all(
+        isinstance(size, int) and not isinstance(size, bool) for size in value
+    )
 
 
 def read_metadata(path: Path) -> dict[str, str]:

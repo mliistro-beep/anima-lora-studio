@@ -10,6 +10,7 @@ from pathlib import Path
 
 from anima_trainer.dataset.step_estimator import StepEstimate, estimate_steps
 from anima_trainer.dataset.validator import DatasetError, DatasetReport, validate_dataset
+from anima_trainer.models.training_model import TrainingModelRejected, check_training_model
 from anima_trainer.preview.preview_plan import PreviewPlan
 from anima_trainer.runtime.paths import RuntimePaths
 from anima_trainer.runtime.venv_info import needs_single_process_loader, read_venv_version
@@ -70,11 +71,15 @@ def configure_training(
         settings.max_train_epochs,
     )
     missing_models = paths.missing_required_models()
+    dit_lines, dit_error = _dit_lines(settings, paths)
     messages = (
         *messages,
         *_estimate_lines(settings, report, estimate),
-        *_model_lines(settings, paths, missing_models),
+        *_model_lines(dit_lines, paths, missing_models),
     )
+    if dit_error is not None:
+        failure = (*messages, "", f"ERROR: {dit_error}")
+        return ConfigureResult(False, failure, settings, dataset=report, estimate=estimate)
     if missing_models:
         failure = (*messages, "", f"ERROR: Missing models: {', '.join(missing_models)}")
         return ConfigureResult(False, failure, settings, dataset=report, estimate=estimate)
@@ -134,9 +139,11 @@ def _with_resolved_paths(settings: TrainingSettings, paths: RuntimePaths) -> Tra
     def resolved(value: str) -> str:
         return value if Path(value).is_absolute() else str(paths.resolve(value))
 
+    model_file = settings.model_file and str(paths.resolve(settings.model_file))
     return settings.with_changes(
         image_directory=resolved(settings.image_directory),
         output_directory=resolved(settings.output_directory),
+        model_file=model_file,
     )
 
 
@@ -177,15 +184,26 @@ def _estimate_lines(
     )
 
 
-def _model_lines(
-    settings: TrainingSettings, paths: RuntimePaths, missing: tuple[str, ...]
-) -> tuple[str, ...]:
+def _dit_lines(
+    settings: TrainingSettings, paths: RuntimePaths
+) -> tuple[tuple[str, ...], str | None]:
+    """The report lines of the DiT, and why it cannot be trained on (None when it can)."""
+    if settings.model_file:
+        own = Path(settings.model_file)
+        try:
+            description = check_training_model(own)
+        except TrainingModelRejected as error:
+            return (f"  ERROR: DiT (your file): {own}",), str(error)
+        return (f"  OK: DiT (your file): {own}", f"      {description}"), None
     dit = paths.dit_model(settings.base_model)
-    dit_lines = (
-        (f"  OK: DiT: {dit}",)
-        if dit.exists()
-        else (f"  INFO: DiT: {dit}", "      (will auto-download when training starts)")
-    )
+    if dit.exists():
+        return (f"  OK: DiT: {dit}",), None
+    return (f"  INFO: DiT: {dit}", "      (will auto-download when training starts)"), None
+
+
+def _model_lines(
+    dit_lines: tuple[str, ...], paths: RuntimePaths, missing: tuple[str, ...]
+) -> tuple[str, ...]:
     others = tuple(
         f"  ERROR: {label} missing: {path}" if label in missing else f"  OK: {label}: {path}"
         for label, path in paths.required_models()

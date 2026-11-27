@@ -86,3 +86,21 @@ def test_settings_warnings_become_a_blocker_that_points_to_the_graphical_app():
     assert lines[0] == "WARN: learning_rate invalid"
     assert lines[1].startswith("ERROR: ")
     assert "graphical app" in lines[1]
+
+
+def test_a_model_file_needs_no_base_model_on_disk(tmp_path):
+    paths = _paths_with_models(tmp_path, "Qwen3", "VAE")
+
+    assert missing_model_problems(paths, BASE_MODEL, "/m/finetune.safetensors") == ()
+
+
+def test_a_model_file_that_cannot_be_trained_is_an_error(tmp_path):
+    from anima_trainer.cli.train_plan import model_file_problems  # noqa: PLC0415
+    from tests.safetensors_helpers import write_anima_dit  # noqa: PLC0415
+
+    good = write_anima_dit(tmp_path / "good.safetensors", blocks=28)
+    big = write_anima_dit(tmp_path / "big.safetensors", blocks=40)
+
+    assert model_file_problems("") == ()
+    assert model_file_problems(str(good)) == ()
+    assert model_file_problems(str(big))[0].startswith("ERROR: big.safetensors has 40 blocks")

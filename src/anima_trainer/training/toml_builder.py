@@ -12,6 +12,7 @@ from typing import Any
 
 import toml
 
+from anima_trainer.models.training_model import training_dit
 from anima_trainer.preview.sample_prompts import (
     SampleRequest,
     build_sample_prompts,
@@ -43,7 +44,7 @@ def build_training_config(
     sample_keys the previews (without them the config is exactly Citron's)."""
     s = settings
     config = {
-        "pretrained_model_name_or_path": str(paths.dit_model(s.base_model)),
+        "pretrained_model_name_or_path": str(training_dit(s, paths)),
         "qwen3": str(paths.qwen3_model),
         "vae": str(paths.vae_model),
         "network_module": "networks.lora_anima",

@@ -10,6 +10,7 @@ from pathlib import Path
 
 import toml
 
+from anima_trainer.models.training_model import TrainingModelRejected, check_training_model
 from anima_trainer.runtime.paths import RuntimePaths
 from anima_trainer.settings.schema import TrainingSettings
 from anima_trainer.training.command_builder import LaunchSpec, build_training_launch
@@ -47,6 +48,12 @@ def plan_start(
     error = _config_error(paths, train_config, dataset_config)
     if error:
         return StartPlan((f"ERROR: {error}",))
+    # The model file Configure wrote into the TOML, checked again: it may have changed since.
+    if saved.model_file:
+        try:
+            check_training_model(paths.resolve(saved.model_file))
+        except TrainingModelRejected as error:
+            return StartPlan((f"ERROR: {error}",))
     if not paths.train_script.exists():
         script = paths.train_script
         return StartPlan((f"ERROR: Training script not found: {script}. Run setup first.",))

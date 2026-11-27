@@ -271,6 +271,36 @@ def test_the_training_config_has_the_preset_and_the_options(setup):
     assert "caption_dropout_rate = 0.05" in dataset
 
 
+def test_a_model_file_of_the_user_is_trained_without_the_base_model(setup, tmp_path):
+    from tests.safetensors_helpers import write_anima_dit  # noqa: PLC0415
+
+    paths, env = setup
+    _accelerate(paths, "train", "0")
+    paths.dit_model("anima-base-v1.0").unlink()
+    own = write_anima_dit(tmp_path / "finetune.safetensors", blocks=28)
+
+    result = _run(env, *_train(paths, "--model-file", str(own)))
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert f"Model:     {own} (your file)" in result.stdout
+    training = tomllib.loads(next(paths.configs_dir.glob("*_training_*.toml")).read_text())
+    assert training["pretrained_model_name_or_path"] == str(own)
+    assert "Downloading" not in result.stdout
+
+
+def test_a_model_file_that_cannot_be_trained_stops_before_writing_any_config(setup, tmp_path):
+    from tests.safetensors_helpers import write_anima_dit  # noqa: PLC0415
+
+    paths, env = setup
+    big = write_anima_dit(tmp_path / "Anima-3.8B.safetensors", blocks=52)
+
+    result = _run(env, *_train(paths, "--model-file", str(big)))
+
+    assert result.returncode == 2
+    assert "ERROR: Anima-3.8B.safetensors has 52 blocks" in result.stdout
+    assert list(paths.configs_dir.glob("*.toml")) == []
+
+
 def test_a_relative_dataset_is_found_from_where_the_command_runs(setup):
     paths, env = setup
     _accelerate(paths, "train", "0")

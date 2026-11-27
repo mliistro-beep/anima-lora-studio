@@ -77,3 +77,10 @@ def test_a_value_that_is_not_a_number_stops_with_a_usage_error():
 
 def test_the_list_of_presets_needs_no_other_option():
     assert parse_train_options(("--list-presets",)).list_presets
+
+
+def test_the_model_file_is_optional():
+    assert parse_train_options(ALL).model_file is None
+    assert parse_train_options((*ALL, "--model-file", "/m/f.safetensors")).model_file == (
+        "/m/f.safetensors"
+    )

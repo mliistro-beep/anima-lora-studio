@@ -12,6 +12,7 @@ from PySide6.QtCore import QSettings
 from anima_trainer.cli.train_options import TrainOptions, missing_option_lines
 from anima_trainer.cli.train_plan import (
     missing_model_problems,
+    model_file_problems,
     runtime_problem_lines,
     settings_problem_lines,
 )
@@ -95,7 +96,8 @@ def prepare_training(
     blockers = (
         runtime_problem_lines(context.opened.problems)  # without the runtime the rest says little
         or settings_problem_lines((*context.opened.warnings, *context.previews.warnings))
-        or missing_model_problems(context.paths, settings.base_model)
+        or missing_model_problems(context.paths, settings.base_model, settings.model_file)
+        or model_file_problems(settings.model_file)
     )
     if blockers:
         return blockers

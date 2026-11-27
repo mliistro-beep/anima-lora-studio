@@ -2,13 +2,25 @@ import pytest
 from pydantic import ValidationError
 
 from anima_trainer.settings.defaults import DEFAULTS
-from anima_trainer.settings.schema import TrainingSettings
+from anima_trainer.settings.schema import APP_ONLY_FIELDS, TrainingSettings
 
 
 def test_defaults_match_citron_values():
     settings = TrainingSettings()
 
-    assert settings.model_dump() == DEFAULTS
+    assert settings.model_dump(exclude={"model_file"}) == DEFAULTS
+
+
+def test_model_file_is_blank_by_default_and_stripped():
+    assert TrainingSettings().model_file == ""
+    assert TrainingSettings(model_file="  /m/finetune.safetensors ").model_file == (
+        "/m/finetune.safetensors"
+    )
+
+
+def test_model_file_rejects_control_characters():
+    with pytest.raises(ValidationError):
+        TrainingSettings(model_file="/m/fine\ntune.safetensors")
 
 
 def test_defaults_cover_all_citron_keys_in_order():
@@ -50,7 +62,9 @@ def test_defaults_cover_all_citron_keys_in_order():
         "last_dataset_config",
     ]
 
-    assert list(TrainingSettings().model_dump().keys()) == expected_keys
+    keys = list(TrainingSettings().model_dump().keys())
+
+    assert keys == [*expected_keys, *APP_ONLY_FIELDS]  # the app's own fields come last
 
 
 def test_settings_are_immutable():
